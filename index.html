@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Indeling Radiologen 2026</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f3; color: #2c2c2a; font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: #f5f5f3; padding-bottom: 80px; }
+  .header { position: sticky; top: 0; z-index: 10; background: rgba(245, 245, 243, 0.95); backdrop-filter: saturate(180%) blur(10px); -webkit-backdrop-filter: saturate(180%) blur(10px); padding: 0.75rem 1rem 0.5rem; border-bottom: 0.5px solid rgba(0, 0, 0, 0.1); }
+  .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+  .title { font-size: 19px; font-weight: 500; margin: 0; }
+  .user-chip { font-size: 12px; padding: 4px 10px; border-radius: 20px; background: rgba(0,0,0,0.06); color: #5f5e5a; cursor: pointer; }
+  .tabs { display: flex; gap: 6px; padding: 4px; background: rgba(0, 0, 0, 0.05); border-radius: 8px; overflow-x: auto; }
+  .tab { flex: 1; padding: 8px 4px; font-size: 12px; border: none; background: transparent; border-radius: 6px; color: #5f5e5a; cursor: pointer; font-weight: 400; font-family: inherit; white-space: nowrap; min-width: fit-content; }
+  .tab.active { background: #fff; color: #2c2c2a; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+  .view { padding: 1rem; }
+  .card { background: #fff; border-radius: 12px; border: 0.5px solid rgba(0,0,0,0.1); padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+  .card-compact { padding: 12px 14px; cursor: pointer; }
+  .card-compact:active { transform: scale(0.98); }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 13px; background: #cecbf6; color: #26215c; flex-shrink: 0; }
+  .muted { color: #5f5e5a; font-size: 12px; }
+  .nav-btn { width: 36px; height: 36px; border-radius: 8px; border: 0.5px solid rgba(0, 0, 0, 0.15); background: #fff; font-size: 16px; cursor: pointer; font-family: inherit; }
+  .nav-btn:active { background: #f0efe9; transform: scale(0.95); }
+  .nav-btn.today { font-size: 11px; width: auto; padding: 0 10px; }
+  .btn { padding: 10px 16px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; font-family: inherit; font-size: 14px; cursor: pointer; font-weight: 500; }
+  .btn-primary { background: #2c2c2a; color: #fff; border: none; }
+  .btn-primary:active { background: #000; }
+  .btn:active { transform: scale(0.97); }
+  .select, .input { padding: 8px 10px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; font-size: 14px; font-family: inherit; color: inherit; width: 100%; }
+  .input:focus, .select:focus { outline: 2px solid #378add; outline-offset: -1px; }
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: 13px; font-weight: 500; margin-right: 6px; margin-bottom: 4px; }
+  .badges { margin-top: 4px; display: flex; flex-wrap: wrap; }
+  .day-card-today { border: 2px solid #378add; }
+  .day-card-weekend { opacity: 0.6; }
+
+  .f-W { background: #eeedfe; color: #26215c; }
+  .f-B { background: #faece7; color: #4a1b0c; }
+  .f-E { background: #eaf3de; color: #173404; }
+  .f-M { background: #fbeaf0; color: #4b1528; }
+  .f-D { background: #faeeda; color: #412402; }
+  .f-O { background: #e1f5ee; color: #04342c; }
+  .f-S { background: #fcebeb; color: #501313; }
+  .f-A { background: #faeeda; color: #412402; }
+  .f-R { background: #f1efe8; color: #2c2c2a; }
+  .f-Z { background: #fcebeb; color: #501313; }
+  .f-V { background: #f1efe8; color: #2c2c2a; }
+  .f-K { background: #f1efe8; color: #2c2c2a; }
+  .f-Q { background: #fcebeb; color: #501313; }
+  .f-T { background: #f1efe8; color: #2c2c2a; }
+  .f-X { background: #e1f5ee; color: #04342c; }
+  .f-C { background: #e6f1fb; color: #042c53; }
+  .f-P { background: #f1efe8; color: #2c2c2a; }
+  .f-Y { background: #f1efe8; color: #2c2c2a; }
+
+  .note { font-size: 12px; color: #5f5e5a; margin-top: 6px; font-style: italic; }
+  .afd-item { background: #fff; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.1); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .afd-item-title { font-size: 14px; font-weight: 500; }
+  .afd-item-sub { font-size: 12px; color: #5f5e5a; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .inactive { opacity: 0.55; }
+  .info-box { background: #e6f1fb; border-radius: 8px; padding: 10px 12px; margin: 1rem 0; display: flex; gap: 8px; align-items: flex-start; }
+  .info-icon { width: 18px; height: 18px; border-radius: 50%; background: #378add; color: #fff; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .info-text { font-size: 12px; color: #042c53; line-height: 1.5; }
+  .summary { background: rgba(0,0,0,0.04); border-radius: 8px; padding: 12px 14px; margin-top: 0.75rem; }
+  .summary-label { font-size: 11px; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .summary-text { font-size: 13px; }
+
+  .grid-wrap { background: #fff; border-radius: 12px; border: 0.5px solid rgba(0,0,0,0.1); padding: 14px; overflow-x: auto; }
+  .plan-grid { display: grid; grid-template-columns: 34px repeat(8, minmax(0, 1fr)); gap: 3px; font-size: 11px; text-align: center; min-width: 330px; }
+  .grid-head { color: #5f5e5a; font-weight: 500; padding: 4px 0; font-size: 10px; }
+  .grid-day { color: #5f5e5a; padding: 6px 2px 0; font-size: 10px; text-align: left; }
+  .grid-day-active { color: #185fa5; font-weight: 500; }
+  .grid-cell { padding: 8px 0; border-radius: 4px; font-weight: 500; cursor: pointer; transition: transform 0.05s; min-height: 28px; display: flex; align-items: center; justify-content: center; }
+  .grid-cell:active { transform: scale(0.92); }
+  .grid-cell-empty { background: #fafaf8; color: #bbb; }
+  .grid-cell-readonly { cursor: default; opacity: 0.9; }
+  .grid-cell-readonly:active { transform: none; }
+
+  .legend { background: rgba(0,0,0,0.04); border-radius: 8px; padding: 10px 12px; margin-top: 0.75rem; }
+  .legend-label { font-size: 11px; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .legend-items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .legend-item { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99; display: none; animation: fadein 0.2s ease; }
+  .sheet-bg.open { display: block; }
+  .sheet { position: fixed; bottom: 0; left: 0; right: 0; max-width: 480px; margin: 0 auto; background: #fff; border-radius: 16px 16px 0 0; padding: 1rem 1.25rem 2rem; z-index: 100; transform: translateY(100%); transition: transform 0.25s ease; max-height: 80vh; overflow-y: auto; }
+  .sheet.open { transform: translateY(0); }
+  .sheet-handle { width: 40px; height: 4px; background: rgba(0,0,0,0.2); border-radius: 2px; margin: 0 auto 12px; }
+  .sheet-title { font-size: 17px; font-weight: 500; margin: 0 0 0.25rem; }
+  .sheet-sub { font-size: 13px; color: #5f5e5a; margin: 0 0 1rem; }
+  .picker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1rem; }
+  .picker-option { padding: 10px 0; border-radius: 8px; font-size: 14px; font-weight: 500; text-align: center; cursor: pointer; border: 0.5px solid rgba(0,0,0,0.1); transition: transform 0.05s; }
+  .picker-option:active { transform: scale(0.95); }
+  .picker-option.selected { outline: 2px solid #378add; outline-offset: -2px; }
+  .picker-label { font-size: 10px; margin-top: 2px; font-weight: 400; color: #5f5e5a; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+  .empty-state { text-align: center; padding: 2rem 1rem; color: #5f5e5a; font-size: 14px; }
+  .empty-state-icon { width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.05); margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+
+  /* Login scherm */
+  .login-screen { max-width: 400px; margin: 0 auto; padding: 3rem 1.5rem; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+  .login-title { font-size: 24px; font-weight: 500; margin: 0 0 0.25rem; text-align: center; }
+  .login-sub { font-size: 14px; color: #5f5e5a; text-align: center; margin: 0 0 2rem; }
+  .form-field { margin-bottom: 1rem; }
+  .form-label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 6px; color: #5f5e5a; }
+  .form-error { background: #fcebeb; color: #501313; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 1rem; }
+  .form-info { background: #e6f1fb; color: #042c53; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 1rem; }
+
+  /* Beheer gebruikers */
+  .gebruiker-item { background: #fff; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.1); padding: 12px 14px; margin-bottom: 6px; }
+  .gebruiker-hoofd { display: flex; justify-content: space-between; align-items: center; }
+  .rol-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .rol-beheerder { background: #eeedfe; color: #26215c; }
+  .rol-radioloog { background: #eaf3de; color: #173404; }
+  .rol-secretariaat { background: #faeeda; color: #412402; }
+  .rol-lezer { background: #f1efe8; color: #2c2c2a; }
+
+  .loader { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(0,0,0,0.1); border-top-color: #378add; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #e5e5e5; }
+    .app, .header { background: #1a1a1a; }
+    .header { background: rgba(26,26,26,0.95); border-color: rgba(255,255,255,0.1); }
+    .card, .grid-wrap, .afd-item, .sheet, .nav-btn, .picker-option, .select, .input, .gebruiker-item, .btn { background: #2a2a2a; border-color: rgba(255,255,255,0.08); color: #e5e5e5; }
+    .btn-primary { background: #f5f5f3; color: #2c2c2a; }
+    .tab.active { background: #2a2a2a; color: #e5e5e5; }
+    .tabs { background: rgba(255,255,255,0.05); }
+    .muted, .afd-item-sub, .grid-head, .grid-day, .note, .sheet-sub, .summary-label, .legend-label, .picker-label, .empty-state, .form-label, .login-sub { color: #999; }
+    .summary, .legend, .empty-state-icon, .user-chip { background: rgba(255,255,255,0.04); color: #aaa; }
+    .info-box { background: rgba(55,138,221,0.15); }
+    .info-text { color: #85b7eb; }
+    .nav-btn { border-color: rgba(255,255,255,0.15); }
+    .grid-cell-empty { background: rgba(255,255,255,0.03); color: #555; }
+    .form-info { background: rgba(55,138,221,0.15); color: #85b7eb; }
+    .form-error { background: rgba(220,60,60,0.15); color: #ff9090; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading" style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 200;">
+  <div class="loader"></div>
+</div>
+
+<!-- Login -->
+<div id="login" class="login-screen" style="display: none;">
+  <h1 class="login-title">Indeling Radiologen</h1>
+  <p class="login-sub">Log in met je e-mail en wachtwoord</p>
+  <div id="loginError" class="form-error" style="display: none;"></div>
+  <div class="form-field">
+    <label class="form-label">E-mail</label>
+    <input type="email" class="input" id="loginEmail" autocomplete="email" autocapitalize="off">
+  </div>
+  <div class="form-field">
+    <label class="form-label">Wachtwoord</label>
+    <input type="password" class="input" id="loginPassword" autocomplete="current-password">
+  </div>
+  <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="doLogin()">Inloggen</button>
+  <p class="muted" style="text-align: center; margin-top: 2rem;">v<span id="versieLabel"></span></p>
+</div>
+
+<!-- App -->
+<div id="app" class="app" style="display: none;">
+  <div class="header">
+    <div class="header-row">
+      <h1 class="title">Indeling radiologen</h1>
+      <span class="user-chip" id="userChip" onclick="toonGebruikerSheet()">·</span>
+    </div>
+    <div class="tabs" id="tabs"></div>
+  </div>
+
+  <div id="view-rad" class="view"></div>
+  <div id="view-afd" class="view" style="display: none;"></div>
+  <div id="view-beh" class="view" style="display: none;"></div>
+  <div id="view-geb" class="view" style="display: none;"></div>
+</div>
+
+<div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <h3 class="sheet-title" id="sheetTitle">Titel</h3>
+  <p class="sheet-sub" id="sheetSub">Subtekst</p>
+  <div id="sheetBody"></div>
+</div>
+
+<script src="config.js"></script>
+<script type="module">
+// Firebase 10 modular SDK via CDN
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+
+// Globale state
+const state = {
+  user: null,           // Firebase User
+  profiel: null,        // Document uit gebruikers/
+  radiologen: [],
+  functies: [],
+  besprekingen: [],
+  indelingMap: {},      // datum -> doc
+  huidigeRadId: null,
+  huidigeWeek: 1,
+  huidigeDatum: null,
+  huidigeView: 'rad',
+  unsubscribers: [],    // voor realtime listeners
+  gebruikers: [],
+};
+
+const VASTE_RAD_IDS = ['L', 'P', 'V', 'F', 'K', 'H', 'S', 'J'];
+const SLOTS = ['W5', 'W4', 'W3', 'W2', 'W1'];
+const DAGEN_NL = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+const DAGEN_LANG = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
+const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+
+// ==== Helpers ====
+function magWijzigen() {
+  return state.profiel?.rol === 'beheerder';
+}
+function magOpmerkingen() {
+  return ['beheerder', 'secretariaat'].includes(state.profiel?.rol);
+}
+function magGebruikersBeheren() {
+  return state.profiel?.rol === 'beheerder';
+}
+function radiologenMap() {
+  return Object.fromEntries(state.radiologen.map(r => [r.id, r]));
+}
+function vasteRads() {
+  return VASTE_RAD_IDS.map(id => state.radiologen.find(r => r.id === id)).filter(Boolean);
+}
+function functiesMap() {
+  return Object.fromEntries(state.functies.map(f => [f.id, f]));
+}
+function vandaagIso() {
+  const nu = new Date();
+  if (nu.getFullYear() === 2026) return nu.toISOString().slice(0, 10);
+  return '2026-01-05';
+}
+function isoWeekVan(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setUTCHours(0,0,0,0);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+  const ys = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d - ys) / 86400000) + 1) / 7);
+}
+function mandagVanWeek(jaar, week) {
+  const jan4 = new Date(Date.UTC(jaar, 0, 4));
+  const dag = jan4.getUTCDay() || 7;
+  const week1ma = new Date(jan4);
+  week1ma.setUTCDate(jan4.getUTCDate() - dag + 1);
+  const doel = new Date(week1ma);
+  doel.setUTCDate(week1ma.getUTCDate() + (week - 1) * 7);
+  return doel;
+}
+function datumsVanWeek(week) {
+  const ma = mandagVanWeek(2026, week);
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ma);
+    d.setUTCDate(ma.getUTCDate() + i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+function formatDatum(iso, stijl = 'kort') {
+  const d = new Date(iso + 'T00:00:00');
+  const dagNr = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  if (stijl === 'lang') return `${DAGEN_LANG[dagNr]} ${d.getDate()} ${MAANDEN[d.getMonth()]}`;
+  if (stijl === 'kort') return `${DAGEN_NL[dagNr]} ${d.getDate()} ${MAANDEN[d.getMonth()]}`;
+  return iso;
+}
+function weekRange(week) {
+  const datums = datumsVanWeek(week);
+  const a = new Date(datums[0] + 'T00:00:00');
+  const b = new Date(datums[6] + 'T00:00:00');
+  if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${MAANDEN[a.getMonth()]}`;
+  return `${a.getDate()} ${MAANDEN[a.getMonth()]} – ${b.getDate()} ${MAANDEN[b.getMonth()]}`;
+}
+function fclass(code) {
+  if (!code) return 'grid-cell-empty';
+  const c = code.replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
+  return `f-${c}`;
+}
+function functieNaam(code) {
+  const f = functiesMap()[code];
+  if (f) return f.naam;
+  const kort = (code || '').replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
+  return functiesMap()[kort]?.naam || code;
+}
+function toewijzingVoor(datum, radId) {
+  const dag = state.indelingMap[datum];
+  if (!dag) return [];
+  return dag.toewijzingen?.[radId] || [];
+}
+
+// ==== Auth ====
+window.doLogin = async function() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  if (!email || !pw) {
+    err.textContent = 'Vul e-mail en wachtwoord in';
+    err.style.display = 'block';
+    return;
+  }
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+    // onAuthStateChanged pakt het op
+  } catch (e) {
+    err.textContent = vertalFirebaseFout(e.code);
+    err.style.display = 'block';
+  }
+};
+
+window.doLogout = async function() {
+  if (!confirm('Uitloggen?')) return;
+  state.unsubscribers.forEach(fn => fn());
+  state.unsubscribers = [];
+  await signOut(auth);
+};
+
+function vertalFirebaseFout(code) {
+  const map = {
+    'auth/invalid-email': 'Ongeldig e-mailadres',
+    'auth/invalid-credential': 'E-mail of wachtwoord onjuist',
+    'auth/user-not-found': 'Gebruiker niet gevonden',
+    'auth/wrong-password': 'Wachtwoord onjuist',
+    'auth/too-many-requests': 'Te veel pogingen, probeer later opnieuw',
+    'auth/network-request-failed': 'Geen internetverbinding',
+    'auth/email-already-in-use': 'E-mailadres is al in gebruik',
+    'auth/weak-password': 'Wachtwoord te kort (min. 6 tekens)',
+  };
+  return map[code] || `Fout: ${code}`;
+}
+
+// ==== Data loading ====
+async function laadProfiel(uid) {
+  const snap = await getDoc(doc(db, 'gebruikers', uid));
+  if (!snap.exists()) {
+    throw new Error('Jouw account heeft nog geen profiel. Vraag een beheerder om je toe te voegen.');
+  }
+  return { id: uid, ...snap.data() };
+}
+
+function luisterNaarData() {
+  // Realtime listeners op alle collecties die we nodig hebben
+  state.unsubscribers.push(onSnapshot(collection(db, 'radiologen'), (snap) => {
+    state.radiologen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Eerste radioloog selecteren als nog geen selectie
+    if (!state.huidigeRadId) {
+      // Als ingelogde gebruiker gekoppeld is aan radioloog, die tonen
+      state.huidigeRadId = state.profiel?.radioloog_id && VASTE_RAD_IDS.includes(state.profiel.radioloog_id)
+        ? state.profiel.radioloog_id
+        : VASTE_RAD_IDS[0];
+    }
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'functies'), (snap) => {
+    state.functies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'besprekingen'), (snap) => {
+    state.besprekingen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'indeling'), (snap) => {
+    const map = {};
+    snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
+    state.indelingMap = map;
+    render();
+  }));
+}
+
+async function laadGebruikers() {
+  if (!magGebruikersBeheren()) return;
+  const snap = await getDocs(collection(db, 'gebruikers'));
+  state.gebruikers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// ==== Save ====
+async function slaToewijzingOp(datum, radId, code) {
+  const bestaand = state.indelingMap[datum];
+  const toewijzingen = { ...(bestaand?.toewijzingen || {}) };
+  toewijzingen[radId] = code ? [code] : [];
+
+  const dagNr = new Date(datum + 'T00:00:00').getDay();
+  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
+
+  const docData = {
+    datum,
+    weeknr: isoWeekVan(datum),
+    dag: DAGEN_NL[dagNlIdx],
+    toewijzingen,
+    dienst: bestaand?.dienst || {},
+    bespreking: bestaand?.bespreking || null,
+    interventie: bestaand?.interventie || null,
+    opmerking: bestaand?.opmerking || null,
+  };
+
+  try {
+    await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
+    // Audit log
+    await addDoc(collection(db, 'wijzigingen'), {
+      uid: state.user.uid,
+      email: state.profiel.email,
+      datum,
+      radioloog_id: radId,
+      van: bestaand?.toewijzingen?.[radId] || [],
+      naar: code ? [code] : [],
+      wanneer: serverTimestamp(),
+    });
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
+}
+
+async function slaOpmerkingOp(datum, opmerking) {
+  try {
+    await updateDoc(doc(db, 'indeling', datum), {
+      opmerking: opmerking || null,
+    });
+  } catch (e) {
+    if (e.code === 'not-found') {
+      // Document bestaat nog niet, aanmaken
+      const dagNr = new Date(datum + 'T00:00:00').getDay();
+      const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
+      await setDoc(doc(db, 'indeling', datum), {
+        datum, weeknr: isoWeekVan(datum), dag: DAGEN_NL[dagNlIdx],
+        toewijzingen: {}, dienst: {}, bespreking: null, interventie: null,
+        opmerking: opmerking || null,
+      });
+    } else {
+      alert('Opslaan mislukt: ' + e.message);
+    }
+  }
+}
+
+// ==== Render: tabs + chip ====
+function renderTabs() {
+  const tabs = [{ id: 'rad', label: 'Radioloog' }, { id: 'afd', label: 'Afdeling' }];
+  if (magWijzigen() || magOpmerkingen()) tabs.push({ id: 'beh', label: 'Beheer' });
+  if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
+
+  document.getElementById('tabs').innerHTML = tabs.map(t => `
+    <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
+  `).join('');
+
+  // Verberg niet-beschikbare views
+  ['rad', 'afd', 'beh', 'geb'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
+  });
+}
+
+function renderUserChip() {
+  const el = document.getElementById('userChip');
+  if (!el || !state.profiel) return;
+  const p = state.profiel;
+  const rad = p.radioloog_id ? radiologenMap()[p.radioloog_id] : null;
+  const naam = rad ? rad.code : (p.email?.split('@')[0] || '?');
+  el.textContent = `${naam} · ${p.rol}`;
+}
+
+// ==== View: RADIOLOOG ====
+function renderRadView() {
+  const container = document.getElementById('view-rad');
+  const rads = vasteRads();
+  if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Nog geen radiologen geladen…</div>'; return; }
+  const rad = radiologenMap()[state.huidigeRadId] || rads[0];
+  const datums = datumsVanWeek(state.huidigeWeek);
+  const vandaag = vandaagIso();
+
+  let html = `
+    <div class="card">
+      <div class="row">
+        <div class="avatar">${rad.code}</div>
+        <div style="flex: 1; min-width: 0;">
+          <select class="select" style="font-weight: 500; font-size: 15px; padding: 4px 8px;" onchange="window.zetRadId(this.value)">
+            ${rads.map(r => `<option value="${r.id}" ${r.id===rad.id?'selected':''}>${r.achternaam}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px;">
+        <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
+        <div style="flex: 1; text-align: center;">
+          <div style="font-size: 14px; font-weight: 500;">Week ${state.huidigeWeek}</div>
+          <div class="muted">${weekRange(state.huidigeWeek)}</div>
+        </div>
+        <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
+        <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
+      </div>
+    </div>
+  `;
+
+  datums.forEach(datum => {
+    const codes = toewijzingVoor(datum, rad.id);
+    const dag = state.indelingMap[datum];
+    const isVandaag = datum === vandaag;
+    const d = new Date(datum + 'T00:00:00');
+    const weekend = d.getDay() === 0 || d.getDay() === 6;
+    const dagLang = formatDatum(datum, 'lang');
+
+    const badges = codes.length === 0
+      ? (weekend ? `<span class="badge f-V">Vrij</span>` : '')
+      : codes.map(c => `<span class="badge ${fclass(c)}">${c} · ${functieNaam(c)}</span>`).join('');
+
+    const opmKort = dag?.opmerking ? (dag.opmerking.length > 30 ? dag.opmerking.slice(0, 28) + '…' : dag.opmerking) : '';
+
+    html += `
+      <div class="card card-compact ${isVandaag ? 'day-card-today' : ''} ${weekend && codes.length===0 ? 'day-card-weekend' : ''}" onclick="window.toonDagDetail('${datum}', '${rad.id}')">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+          <span class="muted" ${isVandaag?'style="color:#185fa5;font-weight:500;"':''}>${dagLang}${isVandaag ? ' · vandaag' : ''}</span>
+          ${opmKort ? `<span style="font-size: 11px; color: #888; font-style: italic; max-width: 50%; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${opmKort}</span>` : ''}
+        </div>
+        <div class="badges">${badges || '<span class="muted">—</span>'}</div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// ==== View: AFDELING ====
+function renderAfdView() {
+  const container = document.getElementById('view-afd');
+  const datum = state.huidigeDatum || vandaagIso();
+  const dag = state.indelingMap[datum];
+  const vandaag = vandaagIso();
+
+  let html = `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <p class="muted" style="margin: 0 0 2px;">${formatDatum(datum, 'lang')} 2026</p>
+          <p style="font-size: 17px; font-weight: 500; margin: 0;">Wie doet wat</p>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="nav-btn" onclick="window.navigeerDag(-1)">‹</button>
+          <button class="nav-btn" onclick="window.navigeerDag(1)">›</button>
+        </div>
+      </div>
+      ${datum !== vandaag ? `<button class="nav-btn today" onclick="window.naarVandaag()" style="margin-top: 10px;">Naar vandaag</button>` : ''}
+    </div>
+  `;
+
+  if (!dag) {
+    html += `<div class="empty-state"><div class="empty-state-icon">·</div>Geen indeling voor deze dag</div>`;
+  } else {
+    const items = [];
+    vasteRads().forEach(r => {
+      const codes = toewijzingVoor(datum, r.id);
+      if (codes.length === 0) return;
+      const hoofdCode = codes[0];
+      const f = functiesMap()[hoofdCode];
+      const naam = f?.naam || functieNaam(hoofdCode);
+      const isAfwezig = ['V', 'Z', 'A', 'K', 'Q', 'T'].includes(hoofdCode.charAt(0).toUpperCase());
+      items.push({ rad: r, code: hoofdCode, naam, isAfwezig });
+    });
+    items.sort((a, b) => { if (a.isAfwezig !== b.isAfwezig) return a.isAfwezig ? 1 : -1; return a.naam.localeCompare(b.naam); });
+
+    items.forEach(it => {
+      const kleur = functiesMap()[it.code]?.kleur || '#ccc';
+      if (it.isAfwezig) {
+        html += `<div class="afd-item inactive"><div><div class="afd-item-title">${it.rad.code} · ${it.rad.achternaam}</div><div class="afd-item-sub">${it.naam}</div></div></div>`;
+      } else {
+        html += `<div class="afd-item"><div><div class="afd-item-title">${it.naam}</div><div class="afd-item-sub">${it.rad.code} · ${it.rad.achternaam}</div></div><div class="dot" style="background: ${kleur};"></div></div>`;
+      }
+    });
+
+    const weekRads = SLOTS.map(s => ({ slot: s, codes: toewijzingVoor(datum, s) })).filter(x => x.codes.length > 0);
+    if (weekRads.length > 0) {
+      html += `<div class="summary"><div class="summary-label">Weekradiologen</div><div class="summary-text">${weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' · ')}</div></div>`;
+    }
+    if (dag.bespreking) html += `<div class="summary"><div class="summary-label">Bespreking</div><div class="summary-text">${dag.bespreking}</div></div>`;
+    if (dag.interventie) html += `<div class="summary"><div class="summary-label">Interventie</div><div class="summary-text">${dag.interventie}</div></div>`;
+    if (dag.opmerking) html += `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text">${dag.opmerking}</div></div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+// ==== View: BEHEER (rooster wijzigen) ====
+function renderBehView() {
+  const container = document.getElementById('view-beh');
+  const rads = vasteRads();
+  if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
+  const datums = datumsVanWeek(state.huidigeWeek);
+  const vandaag = vandaagIso();
+
+  const alleenOpmerkingen = !magWijzigen() && magOpmerkingen();
+
+  let html = `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+        <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
+        <div style="flex: 1; text-align: center;">
+          <div style="font-size: 15px; font-weight: 500;">Week ${state.huidigeWeek}</div>
+          <div class="muted">${weekRange(state.huidigeWeek)}</div>
+        </div>
+        <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
+        <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
+      </div>
+      <p class="muted" style="margin: 10px 0 0;">${alleenOpmerkingen ? 'Tik op een dag om opmerking toe te voegen' : 'Tik op een cel om te wijzigen, tik op een dagregel voor opmerking'}</p>
+    </div>
+
+    <div class="grid-wrap">
+      <div class="plan-grid">
+        <div class="grid-head"></div>
+        ${rads.map(r => `<div class="grid-head">${r.code}</div>`).join('')}
+        ${datums.map(datum => {
+          const d = new Date(datum + 'T00:00:00');
+          const isVandaag = datum === vandaag;
+          const dagLabel = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
+          return `
+            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" onclick="window.opmerkingBewerken('${datum}')" style="cursor: pointer;">${dagLabel}</div>
+            ${rads.map(r => {
+              const codes = toewijzingVoor(datum, r.id);
+              const code = codes[0] || '';
+              const cls = code ? fclass(code) : 'grid-cell-empty';
+              const readonly = alleenOpmerkingen ? 'grid-cell-readonly' : '';
+              const onclick = alleenOpmerkingen ? '' : `onclick="window.openCell('${datum}', '${r.id}')"`;
+              return `<div class="grid-cell ${cls} ${readonly}" ${onclick}>${code || '·'}</div>`;
+            }).join('')}
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-label">Legenda</div>
+      <div class="legend-items">
+        ${['W','B','E','M','D','O','S','A','R','Z','V','K'].map(c => {
+          const f = functiesMap()[c];
+          const naam = f ? f.naam.split('/')[0] : c;
+          return `<span class="legend-item f-${c}">${c} ${naam}</span>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  container.innerHTML = html;
+}
+
+// ==== View: GEBRUIKERS ====
+async function renderGebView() {
+  const container = document.getElementById('view-geb');
+  if (!magGebruikersBeheren()) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
+
+  await laadGebruikers();
+  const rads = radiologenMap();
+
+  let html = `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <p style="font-size: 17px; font-weight: 500; margin: 0;">Gebruikers</p>
+          <p class="muted" style="margin: 2px 0 0;">${state.gebruikers.length} gebruiker${state.gebruikers.length===1?'':'s'}</p>
+        </div>
+        <button class="btn btn-primary" onclick="window.nieuweGebruiker()">+ Nieuw</button>
+      </div>
+    </div>
+  `;
+
+  state.gebruikers.forEach(g => {
+    const rad = g.radioloog_id ? rads[g.radioloog_id] : null;
+    html += `
+      <div class="gebruiker-item">
+        <div class="gebruiker-hoofd">
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 500; overflow: hidden; text-overflow: ellipsis;">${g.email}</div>
+            ${rad ? `<div class="muted">${rad.code} · ${rad.achternaam}</div>` : ''}
+          </div>
+          <span class="rol-badge rol-${g.rol}">${g.rol}</span>
+        </div>
+        <div style="margin-top: 10px; display: flex; gap: 6px;">
+          <button class="btn" style="flex: 1; font-size: 12px; padding: 6px;" onclick="window.gebruikerBewerken('${g.id}')">Rol wijzigen</button>
+          <button class="btn" style="font-size: 12px; padding: 6px 10px;" onclick="window.gebruikerWachtwoordReset('${g.email}')">🔑</button>
+          ${g.id !== state.user.uid ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${g.email}')">🗑</button>` : ''}
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// ==== Interactie ====
+window.showView = function(v) {
+  state.huidigeView = v;
+  renderTabs();
+  render();
+};
+window.zetRadId = function(id) { state.huidigeRadId = id; renderRadView(); };
+window.navigeerWeek = function(delta) {
+  state.huidigeWeek = Math.max(1, Math.min(53, state.huidigeWeek + delta));
+  render();
+};
+window.navigeerDag = function(delta) {
+  const d = new Date((state.huidigeDatum || vandaagIso()) + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  if (d.getFullYear() !== 2026) return;
+  state.huidigeDatum = d.toISOString().slice(0, 10);
+  state.huidigeWeek = isoWeekVan(state.huidigeDatum);
+  render();
+};
+window.naarVandaag = function() {
+  state.huidigeDatum = vandaagIso();
+  state.huidigeWeek = isoWeekVan(state.huidigeDatum);
+  render();
+};
+
+window.openCell = function(datum, radId) {
+  if (!magWijzigen()) return;
+  const rad = radiologenMap()[radId];
+  const codes = toewijzingVoor(datum, radId);
+  const huidigCode = codes[0] || '';
+
+  document.getElementById('sheetTitle').textContent = `${rad.code} · ${formatDatum(datum, 'kort')}`;
+  document.getElementById('sheetSub').textContent = huidigCode ? `Huidig: ${huidigCode} · ${functieNaam(huidigCode)}` : 'Nog geen toewijzing';
+
+  const gangbaar = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
+  const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
+
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="picker-grid">
+      ${fs.map(f => `<div class="picker-option f-${f.code} ${f.code === huidigCode ? 'selected' : ''}" onclick="window.selecteerCode('${datum}', '${radId}', '${f.code}')">${f.code}<div class="picker-label">${f.naam.split('/')[0]}</div></div>`).join('')}
+      <div class="picker-option" onclick="window.selecteerCode('${datum}', '${radId}', '')" style="grid-column: span 2;">—<div class="picker-label">Leegmaken</div></div>
+    </div>
+    <button class="btn" style="width: 100%;" onclick="window.closeSheet()">Annuleren</button>
+  `;
+  openSheet();
+};
+
+window.selecteerCode = async function(datum, radId, code) {
+  closeSheet();
+  await slaToewijzingOp(datum, radId, code);
+};
+
+window.opmerkingBewerken = function(datum) {
+  if (!magOpmerkingen()) return;
+  const dag = state.indelingMap[datum];
+  const huidig = dag?.opmerking || '';
+
+  document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
+  document.getElementById('sheetSub').textContent = 'Opmerking voor deze dag';
+  document.getElementById('sheetBody').innerHTML = `
+    <textarea class="input" id="opmInput" rows="4" style="font-family: inherit;">${huidig.replace(/</g, '&lt;')}</textarea>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanOpmerking('${datum}')">Opslaan</button>
+    </div>
+  `;
+  openSheet();
+};
+
+window.opslaanOpmerking = async function(datum) {
+  const nieuw = document.getElementById('opmInput').value.trim();
+  closeSheet();
+  await slaOpmerkingOp(datum, nieuw);
+};
+
+window.toonDagDetail = function(datum, radId) {
+  const rad = radiologenMap()[radId];
+  const dag = state.indelingMap[datum];
+  const codes = toewijzingVoor(datum, radId);
+
+  document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
+  document.getElementById('sheetSub').textContent = `${rad.code} · ${rad.achternaam}`;
+
+  let body = `<div style="padding: 0 0 1rem;">`;
+  if (codes.length > 0) {
+    body += `<div style="margin-bottom: 12px;"><span class="muted">Functie</span><br>`;
+    codes.forEach(c => { body += `<span class="badge ${fclass(c)}" style="margin-top: 4px;">${c} · ${functieNaam(c)}</span>`; });
+    body += `</div>`;
+  }
+  if (dag?.bespreking) body += `<div style="margin-bottom: 10px;"><span class="muted">Bespreking</span><br>${dag.bespreking}</div>`;
+  if (dag?.interventie) body += `<div style="margin-bottom: 10px;"><span class="muted">Interventie</span><br>${dag.interventie}</div>`;
+  if (dag?.opmerking) body += `<div style="margin-bottom: 10px;"><span class="muted">Opmerking</span><br>${dag.opmerking}</div>`;
+  body += `</div>`;
+
+  if (magOpmerkingen()) {
+    body += `<button class="btn" style="width: 100%;" onclick="window.opmerkingBewerken('${datum}')">Opmerking bewerken</button>`;
+  }
+
+  document.getElementById('sheetBody').innerHTML = body;
+  openSheet();
+};
+
+window.nieuweGebruiker = function() {
+  document.getElementById('sheetTitle').textContent = 'Nieuwe gebruiker';
+  document.getElementById('sheetSub').textContent = 'Vul de gegevens in';
+  const rads = vasteRads();
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-field"><label class="form-label">E-mail</label><input type="email" class="input" id="nuEmail" autocapitalize="off"></div>
+    <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${genereerWachtwoord()}"></div>
+    <div class="form-field"><label class="form-label">Rol</label>
+      <select class="select" id="nuRol">
+        <option value="radioloog">Radioloog</option>
+        <option value="beheerder">Beheerder</option>
+        <option value="secretariaat">Secretariaat</option>
+        <option value="lezer">Lezer</option>
+      </select>
+    </div>
+    <div class="form-field"><label class="form-label">Gekoppeld aan radioloog (optioneel)</label>
+      <select class="select" id="nuRadId">
+        <option value="">— geen —</option>
+        ${rads.map(r => `<option value="${r.id}">${r.code} · ${r.achternaam}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-info" style="font-size: 12px;">De gebruiker kan direct inloggen met dit wachtwoord en moet het zelf veranderen via 'Wachtwoord vergeten' of je reset-functie.</div>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanNieuweGebruiker()">Aanmaken</button>
+    </div>
+  `;
+  openSheet();
+};
+
+function genereerWachtwoord() {
+  const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  return Array.from({length: 10}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+window.opslaanNieuweGebruiker = async function() {
+  const email = document.getElementById('nuEmail').value.trim();
+  const pw = document.getElementById('nuPw').value;
+  const rol = document.getElementById('nuRol').value;
+  const radId = document.getElementById('nuRadId').value;
+
+  if (!email || !pw) { alert('Vul e-mail en wachtwoord in'); return; }
+  if (pw.length < 6) { alert('Wachtwoord min. 6 tekens'); return; }
+
+  try {
+    // LET OP: dit maakt de nieuwe user aan én logt automatisch in als die user.
+    // Na afloop loggen we weer in als jij, zodat je beheerder blijft.
+    const huidigEmail = state.user.email;
+    const huidigWw = prompt('Voor het aanmaken van een gebruiker moet ik jouw wachtwoord opnieuw vragen, omdat Firebase je anders uitlogt. Typ je wachtwoord:');
+    if (!huidigWw) return;
+
+    const cred = await createUserWithEmailAndPassword(auth, email, pw);
+    const nieuweUid = cred.user.uid;
+
+    // Nieuwe gebruiker profiel aanmaken
+    await setDoc(doc(db, 'gebruikers', nieuweUid), {
+      email, rol,
+      radioloog_id: radId || null,
+      aangemaakt_op: serverTimestamp(),
+      aangemaakt_door: state.user.uid,
+    });
+
+    // Log jezelf weer in
+    await signInWithEmailAndPassword(auth, huidigEmail, huidigWw);
+
+    closeSheet();
+    alert(`Gebruiker aangemaakt.\nE-mail: ${email}\nWachtwoord: ${pw}\n\nNoteer dit; het wachtwoord is nu niet meer op te vragen.`);
+    await laadGebruikers();
+    renderGebView();
+  } catch (e) {
+    alert('Aanmaken mislukt: ' + vertalFirebaseFout(e.code || '') + '\n' + e.message);
+  }
+};
+
+window.gebruikerBewerken = function(uid) {
+  const g = state.gebruikers.find(x => x.id === uid);
+  if (!g) return;
+  const rads = vasteRads();
+
+  document.getElementById('sheetTitle').textContent = g.email;
+  document.getElementById('sheetSub').textContent = 'Rol en koppeling wijzigen';
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-field"><label class="form-label">Rol</label>
+      <select class="select" id="wzRol">
+        <option value="radioloog" ${g.rol==='radioloog'?'selected':''}>Radioloog</option>
+        <option value="beheerder" ${g.rol==='beheerder'?'selected':''}>Beheerder</option>
+        <option value="secretariaat" ${g.rol==='secretariaat'?'selected':''}>Secretariaat</option>
+        <option value="lezer" ${g.rol==='lezer'?'selected':''}>Lezer</option>
+      </select>
+    </div>
+    <div class="form-field"><label class="form-label">Gekoppeld aan radioloog</label>
+      <select class="select" id="wzRadId">
+        <option value="">— geen —</option>
+        ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${r.achternaam}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanGebruikerUpdate('${uid}')">Opslaan</button>
+    </div>
+  `;
+  openSheet();
+};
+
+window.opslaanGebruikerUpdate = async function(uid) {
+  const rol = document.getElementById('wzRol').value;
+  const radId = document.getElementById('wzRadId').value;
+  try {
+    await updateDoc(doc(db, 'gebruikers', uid), { rol, radioloog_id: radId || null });
+    closeSheet();
+    await laadGebruikers();
+    renderGebView();
+  } catch (e) {
+    alert('Wijzigen mislukt: ' + e.message);
+  }
+};
+
+window.gebruikerWachtwoordReset = async function(email) {
+  if (!confirm(`E-mail met wachtwoord-reset sturen naar ${email}?`)) return;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    alert('Reset-e-mail verstuurd.');
+  } catch (e) {
+    alert('Versturen mislukt: ' + e.message);
+  }
+};
+
+window.gebruikerVerwijderen = async function(uid, email) {
+  if (!confirm(`Gebruiker ${email} verwijderen?\n\nLet op: dit verwijdert alleen het profiel uit Firestore. Het auth-account moet apart verwijderd worden via de Firebase Console → Authentication.`)) return;
+  try {
+    await deleteDoc(doc(db, 'gebruikers', uid));
+    await laadGebruikers();
+    renderGebView();
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + e.message);
+  }
+};
+
+window.toonGebruikerSheet = function() {
+  const p = state.profiel;
+  document.getElementById('sheetTitle').textContent = p.email;
+  document.getElementById('sheetSub').textContent = `Ingelogd als ${p.rol}`;
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="summary">
+      <div class="summary-label">Account</div>
+      <div class="summary-text">${p.email}</div>
+    </div>
+    <div class="summary">
+      <div class="summary-label">Rol</div>
+      <div class="summary-text">${p.rol}</div>
+    </div>
+    ${p.radioloog_id ? `<div class="summary"><div class="summary-label">Gekoppeld als radioloog</div><div class="summary-text">${p.radioloog_id}</div></div>` : ''}
+    <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.doLogout()">Uitloggen</button>
+  `;
+  openSheet();
+};
+
+window.openSheet = function() { openSheet(); };
+function openSheet() {
+  document.getElementById('sheetBg').classList.add('open');
+  setTimeout(() => document.getElementById('sheet').classList.add('open'), 10);
+}
+window.closeSheet = function() { closeSheet(); };
+function closeSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  setTimeout(() => document.getElementById('sheetBg').classList.remove('open'), 200);
+}
+
+function render() {
+  renderUserChip();
+  if (state.huidigeView === 'rad') renderRadView();
+  else if (state.huidigeView === 'afd') renderAfdView();
+  else if (state.huidigeView === 'beh') renderBehView();
+  else if (state.huidigeView === 'geb') renderGebView();
+}
+
+// ==== Boot ====
+document.getElementById('versieLabel').textContent = window.APP_VERSIE;
+
+onAuthStateChanged(auth, async (user) => {
+  document.getElementById('loading').style.display = 'none';
+  if (!user) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login').style.display = 'flex';
+    return;
+  }
+
+  // Ingelogd: profiel laden
+  try {
+    const profiel = await laadProfiel(user.uid);
+    state.user = user;
+    state.profiel = profiel;
+
+    state.huidigeWeek = isoWeekVan(vandaagIso());
+    state.huidigeDatum = vandaagIso();
+
+    // Niet-beheerders starten op radioloog-view
+    state.huidigeView = 'rad';
+
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+
+    renderTabs();
+    luisterNaarData();
+  } catch (e) {
+    document.getElementById('login').style.display = 'flex';
+    const err = document.getElementById('loginError');
+    err.textContent = e.message;
+    err.style.display = 'block';
+    await signOut(auth);
+  }
+});
+</script>
+
+</body>
+</html>
