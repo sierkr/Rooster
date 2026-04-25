@@ -142,6 +142,10 @@
   .grid-cell-conflict-warn { box-shadow: inset 0 0 0 2px #ef9f27; }
   .grid-cell-conflict-error { box-shadow: inset 0 0 0 2px #c0392b; }
   .cel-marker { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; }
+  .wens-marker { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; }
+  .wens-marker-vakantie { background: #5dcaa5; }
+  .wens-marker-niet_beschikbaar { background: #c0392b; }
+  .wens-marker-voorkeur { background: #378add; }
   .grid-cell { position: relative; }
 
   /* Regels-view */
@@ -236,6 +240,7 @@
   <div id="view-rad" class="view"></div>
   <div id="view-afd" class="view" style="display: none;"></div>
   <div id="view-die" class="view" style="display: none;"></div>
+  <div id="view-wen" class="view" style="display: none;"></div>
   <div id="view-beh" class="view" style="display: none;"></div>
   <div id="view-reg" class="view" style="display: none;"></div>
   <div id="view-geb" class="view" style="display: none;"></div>
@@ -276,6 +281,7 @@ const state = {
   besprekingen: [],
   indelingMap: {},      // datum -> doc
   validatieRegels: [],  // array van regels
+  wensen: [],           // array van wensen-documenten
   huidigeRadId: null,
   huidigeWeek: 1,
   huidigeDatum: null,
@@ -292,15 +298,42 @@ const DAGEN_LANG = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'z
 const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
 // ==== Helpers ====
-function magWijzigen() {
-  return state.profiel?.rol === 'beheerder';
+// Permissies komen uit profiel.permissies (object met booleans).
+// Als veld ontbreekt: terugvallen op rol-default. Zo blijven bestaande
+// gebruikers zonder vinkjes gewoon werken.
+function defaultPermissies(rol) {
+  if (rol === 'beheerder') return {
+    mag_beheer: true, mag_beheer_lezen: true, mag_regels: true,
+    mag_gebruikers: true, mag_wensen_alle: true,
+  };
+  if (rol === 'secretariaat') return {
+    mag_beheer: false, mag_beheer_lezen: true, mag_regels: false,
+    mag_gebruikers: false, mag_wensen_alle: false,
+  };
+  if (rol === 'radioloog') return {
+    mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
+    mag_gebruikers: false, mag_wensen_alle: false,
+  };
+  return {
+    mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
+    mag_gebruikers: false, mag_wensen_alle: false,
+  };
 }
+function permissie(naam) {
+  const p = state.profiel;
+  if (!p) return false;
+  if (p.permissies && naam in p.permissies) return !!p.permissies[naam];
+  return !!defaultPermissies(p.rol)[naam];
+}
+function magWijzigen() { return permissie('mag_beheer'); }
+function magBeheerLezen() { return permissie('mag_beheer_lezen') || permissie('mag_beheer'); }
 function magOpmerkingen() {
-  return ['beheerder', 'secretariaat'].includes(state.profiel?.rol);
+  // Opmerkingen plaatsen vereist minimaal beheer-lezen + secretariaat-niveau
+  return state.profiel?.rol === 'beheerder' || state.profiel?.rol === 'secretariaat';
 }
-function magGebruikersBeheren() {
-  return state.profiel?.rol === 'beheerder';
-}
+function magGebruikersBeheren() { return permissie('mag_gebruikers'); }
+function magRegelsBeheren() { return permissie('mag_regels'); }
+function magAlleWensenZien() { return permissie('mag_wensen_alle'); }
 function radiologenMap() {
   return Object.fromEntries(state.radiologen.map(r => [r.id, r]));
 }
@@ -592,6 +625,11 @@ function luisterNaarData() {
     });
     render();
   }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'wensen'), (snap) => {
+    state.wensen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
 }
 
 async function laadGebruikers() {
@@ -697,16 +735,18 @@ function renderTabs() {
     { id: 'afd', label: 'Afdeling' },
     { id: 'die', label: 'Dienst' },
   ];
-  if (magWijzigen() || magOpmerkingen()) tabs.push({ id: 'beh', label: 'Beheer' });
-  if (magGebruikersBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
+  const rol = state.profiel?.rol;
+  // Wensen: voor radiologen (eigen) en wie alle wensen mag zien
+  if (rol === 'radioloog' || magAlleWensenZien()) tabs.push({ id: 'wen', label: 'Wensen' });
+  if (magBeheerLezen()) tabs.push({ id: 'beh', label: 'Beheer' });
+  if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
 
   document.getElementById('tabs').innerHTML = tabs.map(t => `
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  // Verberg niet-beschikbare views
-  ['rad', 'afd', 'die', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'afd', 'die', 'wen', 'beh', 'reg', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -990,6 +1030,190 @@ async function slaDienstOp(datum, radId) {
   }
 }
 
+// ==== View: WENSEN ====
+function renderWenView() {
+  const container = document.getElementById('view-wen');
+  const rol = state.profiel?.rol;
+  const eigenRadId = state.profiel?.radioloog_id;
+  const isBeheerder = magAlleWensenZien();
+
+  // Filter: alleen toekomstige wensen (vanaf vandaag)
+  const vandaag = vandaagIso();
+  let zichtbaar = state.wensen.filter(w => w.datum >= vandaag);
+
+  // Voor radiologen: alleen eigen wensen tonen voor het overzicht,
+  // maar ook eigen wensen kunnen aanmaken
+  let eigen = zichtbaar.filter(w => w.radioloog_id === eigenRadId);
+  let anderen = zichtbaar.filter(w => w.radioloog_id !== eigenRadId);
+
+  // Sorteer op datum
+  const sorter = (a, b) => a.datum.localeCompare(b.datum);
+  eigen.sort(sorter);
+  anderen.sort(sorter);
+
+  let html = `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <p style="font-size: 17px; font-weight: 500; margin: 0;">Wensen</p>
+          <p class="muted" style="margin: 2px 0 0;">${zichtbaar.length} open wens${zichtbaar.length===1?'':'en'} (toekomst)</p>
+        </div>
+        ${eigenRadId ? `<button class="btn btn-primary" onclick="window.nieuweWens()">+ Nieuw</button>` : ''}
+      </div>
+      ${!eigenRadId && !isBeheerder ? `<p class="muted" style="margin-top:10px;">Je account is niet aan een radioloog gekoppeld. Vraag een beheerder om dit te koppelen.</p>` : ''}
+    </div>
+  `;
+
+  if (eigenRadId) {
+    html += `<div style="margin-top: 1rem;"><div class="summary-label" style="margin-bottom: 6px;">Mijn wensen</div>`;
+    if (eigen.length === 0) {
+      html += `<div class="empty-state" style="padding: 1rem;">Nog geen wensen ingediend</div>`;
+    } else {
+      eigen.forEach(w => { html += renderWensCard(w, true); });
+    }
+    html += `</div>`;
+  }
+
+  if (isBeheerder) {
+    html += `<div style="margin-top: 1.5rem;"><div class="summary-label" style="margin-bottom: 6px;">Wensen van anderen</div>`;
+    if (anderen.length === 0) {
+      html += `<div class="empty-state" style="padding: 1rem;">Geen overige wensen</div>`;
+    } else {
+      anderen.forEach(w => { html += renderWensCard(w, false); });
+    }
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderWensCard(w, eigen) {
+  const radsMap = radiologenMap();
+  const rad = radsMap[w.radioloog_id];
+  const naam = rad ? `${rad.code} · ${rad.achternaam}` : w.radioloog_id;
+  const typeLabel = { vakantie: 'Vakantie', niet_beschikbaar: 'Niet beschikbaar', voorkeur: 'Voorkeur' }[w.type] || w.type;
+  const typeKleur = { vakantie: 'f-V', niet_beschikbaar: 'f-K', voorkeur: 'f-W' }[w.type] || 'f-V';
+  const voorkeur = w.voorkeur_code ? ` → ${w.voorkeur_code}` : '';
+
+  return `
+    <div class="card card-compact" style="cursor: ${eigen ? 'pointer' : 'default'};" ${eigen ? `onclick="window.bewerkWens('${w.id}')"` : ''}>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; color: #5f5e5a;">${formatDatum(w.datum, 'lang')}</div>
+          <div style="margin-top: 4px;">
+            <span class="badge ${typeKleur}">${typeLabel}${voorkeur}</span>
+          </div>
+          ${!eigen ? `<div class="muted" style="margin-top: 4px; font-size: 12px;">${naam}</div>` : ''}
+          ${w.opmerking ? `<div class="note" style="margin-top: 6px;">${w.opmerking}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+window.nieuweWens = function() {
+  toonWensFormulier(null);
+};
+
+window.bewerkWens = function(wensId) {
+  const w = state.wensen.find(x => x.id === wensId);
+  if (!w) return;
+  toonWensFormulier(w);
+};
+
+function toonWensFormulier(bestaand) {
+  const isNieuw = !bestaand;
+  const vandaag = vandaagIso();
+  const w = bestaand || { datum: vandaag, type: 'vakantie', voorkeur_code: '', opmerking: '' };
+
+  document.getElementById('sheetTitle').textContent = isNieuw ? 'Nieuwe wens' : 'Wens bewerken';
+  document.getElementById('sheetSub').textContent = isNieuw ? 'Vul de details in' : formatDatum(w.datum, 'lang');
+
+  const codes = ['B','E','M','D','O','S','A'];
+
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-field">
+      <label class="form-label">Datum</label>
+      <input type="date" class="input" id="wDatum" value="${w.datum}" min="${vandaag}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Type</label>
+      <select class="select" id="wType" onchange="window.wensTypeWissel()">
+        <option value="vakantie" ${w.type==='vakantie'?'selected':''}>Vakantie</option>
+        <option value="niet_beschikbaar" ${w.type==='niet_beschikbaar'?'selected':''}>Niet beschikbaar (cursus, congres)</option>
+        <option value="voorkeur" ${w.type==='voorkeur'?'selected':''}>Voorkeur voor functie</option>
+      </select>
+    </div>
+    <div class="form-field" id="wVoorkeurVeld" style="${w.type==='voorkeur'?'':'display:none;'}">
+      <label class="form-label">Voorkeursfunctie</label>
+      <select class="select" id="wVoorkeur">
+        <option value="">— kies —</option>
+        ${codes.map(c => {
+          const f = functiesMap()[c];
+          const naam = f ? f.naam.split('/')[0] : c;
+          return `<option value="${c}" ${w.voorkeur_code===c?'selected':''}>${c} · ${naam}</option>`;
+        }).join('')}
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Opmerking (optioneel)</label>
+      <textarea class="input" id="wOpmerking" rows="2">${(w.opmerking||'').replace(/</g,'&lt;')}</textarea>
+    </div>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      ${!isNieuw ? `<button class="btn" style="color: #501313;" onclick="window.verwijderWens('${bestaand.id}')">Verwijder</button>` : ''}
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanWens('${bestaand?.id || ''}')">${isNieuw?'Indienen':'Opslaan'}</button>
+    </div>
+  `;
+  openSheet();
+}
+
+window.wensTypeWissel = function() {
+  const t = document.getElementById('wType').value;
+  document.getElementById('wVoorkeurVeld').style.display = (t === 'voorkeur') ? 'block' : 'none';
+};
+
+window.opslaanWens = async function(id) {
+  const datum = document.getElementById('wDatum').value;
+  const type = document.getElementById('wType').value;
+  const voorkeur_code = document.getElementById('wVoorkeur')?.value || null;
+  const opmerking = document.getElementById('wOpmerking').value.trim() || null;
+
+  if (!datum) { alert('Datum is verplicht'); return; }
+  if (datum < vandaagIso()) { alert('Datum moet in de toekomst liggen'); return; }
+  if (type === 'voorkeur' && !voorkeur_code) { alert('Kies een voorkeursfunctie'); return; }
+
+  const data = {
+    radioloog_id: state.profiel.radioloog_id,
+    datum,
+    type,
+    voorkeur_code: type === 'voorkeur' ? voorkeur_code : null,
+    opmerking,
+  };
+
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'wensen', id), data);
+    } else {
+      data.ingediend_op = serverTimestamp();
+      await addDoc(collection(db, 'wensen'), data);
+    }
+    closeSheet();
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
+};
+
+window.verwijderWens = async function(id) {
+  if (!confirm('Wens verwijderen?')) return;
+  try {
+    await deleteDoc(doc(db, 'wensen', id));
+    closeSheet();
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + e.message);
+  }
+};
+
 // ==== View: BEHEER (rooster wijzigen) ====
 function renderBehView() {
   const container = document.getElementById('view-beh');
@@ -999,6 +1223,7 @@ function renderBehView() {
   const vandaag = vandaagIso();
 
   const alleenOpmerkingen = !magWijzigen() && magOpmerkingen();
+  const alleenLezen = !magWijzigen() && !magOpmerkingen();
 
   // Bepaal welke kolommen we tonen
   const toonW = state.toonWeekRads;
@@ -1023,6 +1248,15 @@ function renderBehView() {
       const huidig = celStatus[k];
       if (c.ernst === 'blokkeren') celStatus[k] = 'error';
       else if (!huidig) celStatus[k] = 'warn';
+    }
+  });
+
+  // Index van wensen per cel (datum|radId) voor markers
+  const wensenIndex = {};
+  state.wensen.forEach(w => {
+    if (datums.includes(w.datum)) {
+      const k = `${w.datum}|${w.radioloog_id}`;
+      wensenIndex[k] = w.type; // 'vakantie' | 'niet_beschikbaar' | 'voorkeur'
     }
   });
 
@@ -1056,7 +1290,7 @@ function renderBehView() {
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-        <p class="muted" style="margin: 0;">${alleenOpmerkingen ? 'Tik op een dag voor opmerking' : 'Tik op een cel om te wijzigen'}</p>
+        <p class="muted" style="margin: 0;">${alleenLezen ? 'Alleen-lezen weergave' : (alleenOpmerkingen ? 'Tik op een dag voor opmerking' : 'Tik op een cel om te wijzigen')}</p>
         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
           <span class="muted">W-slots</span>
           <span class="toggle-switch ${toonW ? 'aan' : ''}" onclick="window.toggleWeekRads()"></span>
@@ -1077,18 +1311,22 @@ function renderBehView() {
           const d = new Date(datum + 'T12:00:00');
           const isVandaag = datum === vandaag;
           const dagLabel = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
+          const dagOnclick = alleenLezen ? '' : `onclick="window.opmerkingBewerken('${datum}')"`;
+          const dagCursor = alleenLezen ? 'default' : 'pointer';
           return `
-            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" onclick="window.opmerkingBewerken('${datum}')" style="cursor: pointer;">${dagLabel}</div>
+            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" ${dagOnclick} style="cursor: ${dagCursor};">${dagLabel}</div>
             ${allKolommen.map((k, i) => {
               const codes = toewijzingVoor(datum, k.id);
               const code = codes[0] || '';
               const cls = code ? fclass(code) : 'grid-cell-empty';
-              const readonly = alleenOpmerkingen ? 'grid-cell-readonly' : '';
-              const onclick = alleenOpmerkingen ? '' : `onclick="window.openCell('${datum}', '${k.id}')"`;
+              const readonly = (alleenOpmerkingen || alleenLezen) ? 'grid-cell-readonly' : '';
+              const onclick = (alleenOpmerkingen || alleenLezen) ? '' : `onclick="window.openCell('${datum}', '${k.id}')"`;
               const status = celStatus[`${datum}|${k.id}`];
               const statusCls = status === 'error' ? 'grid-cell-conflict-error' : (status === 'warn' ? 'grid-cell-conflict-warn' : '');
               const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15);' : '';
-              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}</div>`;
+              const wens = wensenIndex[`${datum}|${k.id}`];
+              const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="Wens: ${wens}"></span>` : '';
+              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}${wensMarker}</div>`;
             }).join('')}
           `;
         }).join('')}
@@ -1304,9 +1542,19 @@ window.openCell = function(datum, radId) {
   if (!magWijzigen()) return;
   const radsMap = radiologenMap();
   const rad = radsMap[radId];
-  const label = rad ? rad.code : radId;  // W-slot: geen rad, gebruik gewoon "W3" enz.
+  const label = rad ? rad.code : radId;
   const codes = toewijzingVoor(datum, radId);
   const huidigCode = codes[0] || '';
+
+  // Check op wens
+  const wens = state.wensen.find(w => w.datum === datum && w.radioloog_id === radId);
+  let wensInfo = '';
+  if (wens) {
+    const typeLabel = { vakantie: 'Vakantie', niet_beschikbaar: 'Niet beschikbaar', voorkeur: 'Voorkeur' }[wens.type] || wens.type;
+    const voorkeur = wens.voorkeur_code ? ` (${wens.voorkeur_code})` : '';
+    const opm = wens.opmerking ? ` — ${wens.opmerking}` : '';
+    wensInfo = `<div class="form-info" style="margin-bottom: 1rem;">💬 Wens: <b>${typeLabel}${voorkeur}</b>${opm}</div>`;
+  }
 
   document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
   document.getElementById('sheetSub').textContent = huidigCode ? `Huidig: ${huidigCode} · ${functieNaam(huidigCode)}` : 'Nog geen toewijzing';
@@ -1315,6 +1563,7 @@ window.openCell = function(datum, radId) {
   const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
 
   document.getElementById('sheetBody').innerHTML = `
+    ${wensInfo}
     <div class="picker-grid">
       ${fs.map(f => `<div class="picker-option f-${f.code} ${f.code === huidigCode ? 'selected' : ''}" onclick="window.selecteerCode('${datum}', '${radId}', '${f.code}')">${f.code}<div class="picker-label">${f.naam.split('/')[0]}</div></div>`).join('')}
       <div class="picker-option" onclick="window.selecteerCode('${datum}', '${radId}', '')" style="grid-column: span 2;">—<div class="picker-label">Leegmaken</div></div>
@@ -1451,11 +1700,22 @@ window.gebruikerBewerken = function(uid) {
   if (!g) return;
   const rads = vasteRads();
 
+  // Effectieve permissies (uit g.permissies of rol-default)
+  const huidigePerm = g.permissies || defaultPermissies(g.rol);
+
+  const permissies = [
+    { id: 'mag_beheer', label: 'Beheer (rooster wijzigen)' },
+    { id: 'mag_beheer_lezen', label: 'Beheer (alleen-lezen)' },
+    { id: 'mag_regels', label: 'Regels' },
+    { id: 'mag_gebruikers', label: 'Gebruikers' },
+    { id: 'mag_wensen_alle', label: 'Wensen van iedereen zien' },
+  ];
+
   document.getElementById('sheetTitle').textContent = g.email;
-  document.getElementById('sheetSub').textContent = 'Rol en koppeling wijzigen';
+  document.getElementById('sheetSub').textContent = 'Rol, koppeling en permissies';
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field"><label class="form-label">Rol</label>
-      <select class="select" id="wzRol">
+      <select class="select" id="wzRol" onchange="window.wzRolWissel()">
         <option value="radioloog" ${g.rol==='radioloog'?'selected':''}>Radioloog</option>
         <option value="beheerder" ${g.rol==='beheerder'?'selected':''}>Beheerder</option>
         <option value="secretariaat" ${g.rol==='secretariaat'?'selected':''}>Secretariaat</option>
@@ -1468,6 +1728,19 @@ window.gebruikerBewerken = function(uid) {
         ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${r.achternaam}</option>`).join('')}
       </select>
     </div>
+    <div class="form-field">
+      <label class="form-label">Permissies</label>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        ${permissies.map(p => `
+          <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.03); cursor: pointer;">
+            <input type="checkbox" id="perm_${p.id}" ${huidigePerm[p.id] ? 'checked' : ''}>
+            <span style="font-size: 14px;">${p.label}</span>
+          </label>
+        `).join('')}
+      </div>
+      <p class="muted" style="margin-top: 6px; font-size: 11px;">"Knop hieronder zet permissies terug op de standaard voor de gekozen rol.</p>
+      <button class="btn" style="width: 100%; font-size: 12px; padding: 6px; margin-top: 4px;" onclick="window.wzPermissiesReset()">Permissies → standaard voor rol</button>
+    </div>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
       <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanGebruikerUpdate('${uid}')">Opslaan</button>
@@ -1476,11 +1749,29 @@ window.gebruikerBewerken = function(uid) {
   openSheet();
 };
 
+window.wzRolWissel = function() {
+  // Bij rol-wissel niets automatisch overschrijven; pas wanneer 'reset' geklikt wordt
+};
+
+window.wzPermissiesReset = function() {
+  const rol = document.getElementById('wzRol').value;
+  const def = defaultPermissies(rol);
+  ['mag_beheer','mag_beheer_lezen','mag_regels','mag_gebruikers','mag_wensen_alle'].forEach(p => {
+    const el = document.getElementById('perm_' + p);
+    if (el) el.checked = !!def[p];
+  });
+};
+
 window.opslaanGebruikerUpdate = async function(uid) {
   const rol = document.getElementById('wzRol').value;
   const radId = document.getElementById('wzRadId').value;
+  const permissies = {};
+  ['mag_beheer','mag_beheer_lezen','mag_regels','mag_gebruikers','mag_wensen_alle'].forEach(p => {
+    const el = document.getElementById('perm_' + p);
+    if (el) permissies[p] = el.checked;
+  });
   try {
-    await updateDoc(doc(db, 'gebruikers', uid), { rol, radioloog_id: radId || null });
+    await updateDoc(doc(db, 'gebruikers', uid), { rol, radioloog_id: radId || null, permissies });
     closeSheet();
     await laadGebruikers();
     renderGebView();
@@ -1565,6 +1856,7 @@ function render() {
   if (state.huidigeView === 'rad') renderRadView();
   else if (state.huidigeView === 'afd') renderAfdView();
   else if (state.huidigeView === 'die') renderDieView();
+  else if (state.huidigeView === 'wen') renderWenView();
   else if (state.huidigeView === 'beh') renderBehView();
   else if (state.huidigeView === 'reg') renderRegView();
   else if (state.huidigeView === 'geb') renderGebView();
