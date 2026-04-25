@@ -1699,6 +1699,7 @@ window.gebruikerBewerken = function(uid) {
   const g = state.gebruikers.find(x => x.id === uid);
   if (!g) return;
   const rads = vasteRads();
+  const isEigenAccount = uid === state.user.uid;
 
   // Effectieve permissies (uit g.permissies of rol-default)
   const huidigePerm = g.permissies || defaultPermissies(g.rol);
@@ -1714,6 +1715,7 @@ window.gebruikerBewerken = function(uid) {
   document.getElementById('sheetTitle').textContent = g.email;
   document.getElementById('sheetSub').textContent = 'Rol, koppeling en permissies';
   document.getElementById('sheetBody').innerHTML = `
+    ${isEigenAccount ? `<div class="form-info" style="margin-bottom: 1rem; font-size: 12px;">⚠ Eigen account. "Gebruikers" kan niet uitgezet worden om lockout te voorkomen.</div>` : ''}
     <div class="form-field"><label class="form-label">Rol</label>
       <select class="select" id="wzRol" onchange="window.wzRolWissel()">
         <option value="radioloog" ${g.rol==='radioloog'?'selected':''}>Radioloog</option>
@@ -1731,14 +1733,18 @@ window.gebruikerBewerken = function(uid) {
     <div class="form-field">
       <label class="form-label">Permissies</label>
       <div style="display: flex; flex-direction: column; gap: 6px;">
-        ${permissies.map(p => `
-          <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.03); cursor: pointer;">
-            <input type="checkbox" id="perm_${p.id}" ${huidigePerm[p.id] ? 'checked' : ''}>
-            <span style="font-size: 14px;">${p.label}</span>
-          </label>
-        `).join('')}
+        ${permissies.map(p => {
+          const vergrendeld = isEigenAccount && p.id === 'mag_gebruikers';
+          const checked = vergrendeld ? true : huidigePerm[p.id];
+          return `
+            <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.03); cursor: ${vergrendeld?'not-allowed':'pointer'}; ${vergrendeld?'opacity:0.7;':''}">
+              <input type="checkbox" id="perm_${p.id}" ${checked ? 'checked' : ''} ${vergrendeld?'disabled':''}>
+              <span style="font-size: 14px;">${p.label}${vergrendeld?' 🔒':''}</span>
+            </label>
+          `;
+        }).join('')}
       </div>
-      <p class="muted" style="margin-top: 6px; font-size: 11px;">"Knop hieronder zet permissies terug op de standaard voor de gekozen rol.</p>
+      <p class="muted" style="margin-top: 6px; font-size: 11px;">Knop hieronder zet permissies terug op de standaard voor de gekozen rol.</p>
       <button class="btn" style="width: 100%; font-size: 12px; padding: 6px; margin-top: 4px;" onclick="window.wzPermissiesReset()">Permissies → standaard voor rol</button>
     </div>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
@@ -1758,7 +1764,7 @@ window.wzPermissiesReset = function() {
   const def = defaultPermissies(rol);
   ['mag_beheer','mag_beheer_lezen','mag_regels','mag_gebruikers','mag_wensen_alle'].forEach(p => {
     const el = document.getElementById('perm_' + p);
-    if (el) el.checked = !!def[p];
+    if (el && !el.disabled) el.checked = !!def[p];
   });
 };
 
@@ -1770,6 +1776,21 @@ window.opslaanGebruikerUpdate = async function(uid) {
     const el = document.getElementById('perm_' + p);
     if (el) permissies[p] = el.checked;
   });
+
+  // Klep B: zou er nog minstens één gebruiker met mag_gebruikers overblijven?
+  const heeftMagGebruikers = (g, nieuw) => {
+    if (g.id === uid) return !!nieuw.permissies.mag_gebruikers;
+    const eff = g.permissies || defaultPermissies(g.rol);
+    return !!eff.mag_gebruikers;
+  };
+  const aantalMet = state.gebruikers.filter(g =>
+    heeftMagGebruikers(g, { permissies })
+  ).length;
+  if (aantalMet === 0) {
+    alert('Kan niet opslaan: er moet minstens één gebruiker zijn met "Gebruikers"-permissie.');
+    return;
+  }
+
   try {
     await updateDoc(doc(db, 'gebruikers', uid), { rol, radioloog_id: radId || null, permissies });
     closeSheet();
@@ -1811,6 +1832,16 @@ window.kopieerLink = async function(link) {
 };
 
 window.gebruikerVerwijderen = async function(uid, email) {
+  // Lockout-check: blijft er minstens één met mag_gebruikers over?
+  const overigen = state.gebruikers.filter(g => g.id !== uid);
+  const aantalMet = overigen.filter(g => {
+    const eff = g.permissies || defaultPermissies(g.rol);
+    return !!eff.mag_gebruikers;
+  }).length;
+  if (aantalMet === 0) {
+    alert('Kan niet verwijderen: er moet minstens één gebruiker met "Gebruikers"-permissie overblijven.');
+    return;
+  }
   if (!confirm(`Gebruiker ${email} verwijderen?\n\nDit verwijdert zowel het account als het profiel.`)) return;
   try {
     await fnGebruikerVerwijderen({ uid });
