@@ -160,6 +160,26 @@
   .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: transform 0.15s; }
   .toggle-switch.aan::after { transform: translateX(16px); }
 
+  /* Dienst-view */
+  .dienst-dag { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: transform 0.05s; }
+  .dienst-dag:active { transform: scale(0.99); }
+  .dienst-dag-vandaag { border: 2px solid #378add; }
+  .dienst-dag-weekend { background: #fafaf6; }
+  .dienst-rij { display: flex; align-items: center; gap: 10px; }
+  .dienst-datum { min-width: 64px; font-size: 13px; color: #5f5e5a; }
+  .dienst-dect-btn { flex-shrink: 0; padding: 4px 10px; background: #e6f1fb; color: #042c53; border-radius: 8px; font-size: 12px; font-weight: 500; text-decoration: none; cursor: pointer; }
+  .dienst-dect-btn:active { background: #cee0f3; }
+  .dienst-rad { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dienst-meta { font-size: 11px; color: #5f5e5a; margin-top: 4px; }
+  .dect-tabel { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 4px 0; margin-top: 0.75rem; }
+  .dect-rij { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 0.5px solid rgba(0,0,0,0.06); }
+  .dect-rij:last-child { border-bottom: none; }
+  .dect-rij-prom { background: rgba(55, 138, 221, 0.05); }
+  .dect-naam { font-size: 14px; font-weight: 500; }
+  .dect-naam-prom { color: #042c53; }
+  .dect-num { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 14px; padding: 4px 10px; background: rgba(0,0,0,0.04); border-radius: 6px; cursor: pointer; }
+  .dect-num:active { background: rgba(0,0,0,0.08); }
+
   @media (prefers-color-scheme: dark) {
     body { background: #1a1a1a; color: #e5e5e5; }
     .app, .header { background: #1a1a1a; }
@@ -215,6 +235,7 @@
 
   <div id="view-rad" class="view"></div>
   <div id="view-afd" class="view" style="display: none;"></div>
+  <div id="view-die" class="view" style="display: none;"></div>
   <div id="view-beh" class="view" style="display: none;"></div>
   <div id="view-reg" class="view" style="display: none;"></div>
   <div id="view-geb" class="view" style="display: none;"></div>
@@ -556,6 +577,16 @@ function luisterNaarData() {
     state.validatieRegels = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
   }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'instellingen'), (snap) => {
+    snap.docs.forEach(d => {
+      const data = d.data();
+      if (data.dect_speciaal) {
+        window.DECT_SPECIAAL = data.dect_speciaal;
+      }
+    });
+    render();
+  }));
 }
 
 async function laadGebruikers() {
@@ -656,7 +687,11 @@ async function slaOpmerkingOp(datum, opmerking) {
 
 // ==== Render: tabs + chip ====
 function renderTabs() {
-  const tabs = [{ id: 'rad', label: 'Radioloog' }, { id: 'afd', label: 'Afdeling' }];
+  const tabs = [
+    { id: 'rad', label: 'Radioloog' },
+    { id: 'afd', label: 'Afdeling' },
+    { id: 'die', label: 'Dienst' },
+  ];
   if (magWijzigen() || magOpmerkingen()) tabs.push({ id: 'beh', label: 'Beheer' });
   if (magGebruikersBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
@@ -666,7 +701,7 @@ function renderTabs() {
   `).join('');
 
   // Verberg niet-beschikbare views
-  ['rad', 'afd', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'afd', 'die', 'beh', 'reg', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -797,6 +832,157 @@ function renderAfdView() {
   }
 
   container.innerHTML = html;
+}
+
+// ==== View: DIENST ====
+function renderDieView() {
+  const container = document.getElementById('view-die');
+  const rads = vasteRads();
+  if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
+
+  const radsMap = radiologenMap();
+  const vandaag = vandaagIso();
+
+  // Toon een twee-weken-blok rondom de huidige weeknavigatie
+  // Gebruik state.huidigeWeek voor consistentie met andere views
+  const week = state.huidigeWeek;
+  const datums = [...datumsVanWeek(week), ...datumsVanWeek(week + 1)].slice(0, 14);
+
+  // Speciale DECT-nummers uit instellingen (bv. spoed/echo, weekradioloog)
+  // Voor nu hardcoded; in v3.4 lezen we ze uit instellingen-collectie
+  const dectSpeciaal = window.DECT_SPECIAAL || { spoed_echo: '7862', weekradioloog: '7744' };
+
+  let html = `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+        <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
+        <div style="flex: 1; text-align: center;">
+          <div style="font-size: 15px; font-weight: 500;">Diensten week ${week} – ${week+1}</div>
+          <div class="muted">${weekRange(week)} · ${weekRange(week+1)}</div>
+        </div>
+        <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
+        <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
+      </div>
+    </div>
+  `;
+
+  // Per dag: dienst + interventie
+  datums.forEach(datum => {
+    const dag = state.indelingMap[datum];
+    const isVandaag = datum === vandaag;
+    const d = new Date(datum + 'T00:00:00');
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+    const dienstRadId = dag?.dienst?.dag;
+    const dienstRad = dienstRadId ? radsMap[dienstRadId] : null;
+    const interventie = dag?.interventie;
+
+    const datumKort = formatDatum(datum, 'kort');
+    const klasse = ['dienst-dag'];
+    if (isVandaag) klasse.push('dienst-dag-vandaag');
+    if (isWeekend) klasse.push('dienst-dag-weekend');
+
+    html += `
+      <div class="${klasse.join(' ')}" ${magWijzigen() ? `onclick="window.openDienstSheet('${datum}')"` : ''}>
+        <div class="dienst-rij">
+          <div class="dienst-datum">${datumKort}${isVandaag ? ' · nu' : ''}</div>
+          <div class="dienst-rad">
+            ${dienstRad ? `${dienstRad.code} · ${dienstRad.achternaam}` : '<span class="muted">— geen dienst —</span>'}
+          </div>
+          ${dienstRad?.dect ? `<a class="dienst-dect-btn" href="tel:${dienstRad.dect}" onclick="event.stopPropagation();">📞 ${dienstRad.dect}</a>` : ''}
+        </div>
+        ${interventie ? `<div class="dienst-meta">Interventie: ${interventie}</div>` : ''}
+      </div>
+    `;
+  });
+
+  // DECT-tabel onderaan
+  html += `
+    <div style="margin-top: 1.5rem;">
+      <div class="summary-label" style="margin-bottom: 8px;">DECT-nummers</div>
+      <div class="dect-tabel">
+        <div class="dect-rij dect-rij-prom">
+          <div class="dect-naam dect-naam-prom">Spoed / Echo</div>
+          <a class="dect-num" href="tel:${dectSpeciaal.spoed_echo}">${dectSpeciaal.spoed_echo}</a>
+        </div>
+        <div class="dect-rij dect-rij-prom">
+          <div class="dect-naam dect-naam-prom">Weekradioloog</div>
+          <a class="dect-num" href="tel:${dectSpeciaal.weekradioloog}">${dectSpeciaal.weekradioloog}</a>
+        </div>
+        ${[...rads].sort((a,b) => a.achternaam.localeCompare(b.achternaam)).map(r => `
+          <div class="dect-rij">
+            <div class="dect-naam">${r.code} · ${r.achternaam}</div>
+            ${r.dect ? `<a class="dect-num" href="tel:${r.dect}">${r.dect}</a>` : '<span class="muted" style="font-size: 12px;">—</span>'}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+window.openDienstSheet = function(datum) {
+  if (!magWijzigen()) return;
+  const rads = vasteRads();
+  const dag = state.indelingMap[datum];
+  const huidigDienstId = dag?.dienst?.dag || '';
+
+  document.getElementById('sheetTitle').textContent = `Dienst ${formatDatum(datum, 'lang')}`;
+  document.getElementById('sheetSub').textContent = 'Wie heeft dienst?';
+
+  document.getElementById('sheetBody').innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem; max-height: 60vh; overflow-y: auto;">
+      <div class="picker-option" style="grid-column: span 2;" onclick="window.zetDienst('${datum}', '')">— geen dienst —</div>
+      ${rads.map(r => `
+        <div class="picker-option ${r.id === huidigDienstId ? 'selected' : ''}" style="text-align: left; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;" onclick="window.zetDienst('${datum}', '${r.id}')">
+          <div>
+            <div style="font-weight: 500;">${r.code} · ${r.achternaam}</div>
+            ${r.dect ? `<div class="muted" style="font-size: 11px;">DECT ${r.dect}</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <button class="btn" style="width: 100%;" onclick="window.closeSheet()">Annuleren</button>
+  `;
+  openSheet();
+};
+
+window.zetDienst = async function(datum, radId) {
+  closeSheet();
+  await slaDienstOp(datum, radId);
+};
+
+async function slaDienstOp(datum, radId) {
+  const bestaand = state.indelingMap[datum];
+  const dagNr = new Date(datum + 'T00:00:00').getDay();
+  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
+
+  const docData = {
+    datum,
+    weeknr: isoWeekVan(datum),
+    dag: DAGEN_NL[dagNlIdx],
+    toewijzingen: bestaand?.toewijzingen || {},
+    dienst: { ...(bestaand?.dienst || {}), dag: radId || null },
+    bespreking: bestaand?.bespreking || null,
+    interventie: bestaand?.interventie || null,
+    opmerking: bestaand?.opmerking || null,
+  };
+
+  try {
+    await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
+    await addDoc(collection(db, 'wijzigingen'), {
+      uid: state.user.uid,
+      email: state.profiel.email,
+      datum,
+      veld: 'dienst.dag',
+      van: bestaand?.dienst?.dag || null,
+      naar: radId || null,
+      wanneer: serverTimestamp(),
+    });
+  } catch (e) {
+    alert('Opslaan dienst mislukt: ' + e.message);
+  }
 }
 
 // ==== View: BEHEER (rooster wijzigen) ====
@@ -1341,6 +1527,7 @@ function render() {
   renderUserChip();
   if (state.huidigeView === 'rad') renderRadView();
   else if (state.huidigeView === 'afd') renderAfdView();
+  else if (state.huidigeView === 'die') renderDieView();
   else if (state.huidigeView === 'beh') renderBehView();
   else if (state.huidigeView === 'reg') renderRegView();
   else if (state.huidigeView === 'geb') renderGebView();
