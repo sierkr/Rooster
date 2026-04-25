@@ -311,8 +311,12 @@ function functiesMap() {
 }
 function vandaagIso() {
   const nu = new Date();
-  if (nu.getFullYear() === 2026) return nu.toISOString().slice(0, 10);
-  return '2026-01-05';
+  if (nu.getFullYear() !== 2026) return '2026-01-05';
+  // Bouw lokale ISO-datum (toISOString is UTC en kan een dag eerder/later geven)
+  const jaar = nu.getFullYear();
+  const mm = String(nu.getMonth() + 1).padStart(2, '0');
+  const dd = String(nu.getDate()).padStart(2, '0');
+  return `${jaar}-${mm}-${dd}`;
 }
 function isoWeekVan(iso) {
   const d = new Date(iso + 'T00:00:00');
@@ -1252,10 +1256,16 @@ window.navigeerWeek = function(delta) {
   render();
 };
 window.navigeerDag = function(delta) {
-  const d = new Date((state.huidigeDatum || vandaagIso()) + 'T00:00:00');
+  // Gebruik 12:00 als anker zodat geen enkele timezone de datum-grens kruist
+  const huidig = state.huidigeDatum || vandaagIso();
+  const d = new Date(huidig + 'T12:00:00');
   d.setDate(d.getDate() + delta);
   if (d.getFullYear() !== 2026) return;
-  state.huidigeDatum = d.toISOString().slice(0, 10);
+  // Bouw ISO-datum uit lokale dag/maand/jaar (toISOString geeft UTC en kan een dag verschuiven)
+  const jaar = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  state.huidigeDatum = `${jaar}-${mm}-${dd}`;
   state.huidigeWeek = isoWeekVan(state.huidigeDatum);
   render();
 };

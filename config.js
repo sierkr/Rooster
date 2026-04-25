@@ -20,4 +20,5 @@ window.FIREBASE_CONFIG = {
 };
 
 // Versie van de app - laat dit staan, wordt gebruikt voor cache-busting
-window.APP_VERSIE = "3.3.0";
+window.APP_VERSIE = "3.3.1
+";
