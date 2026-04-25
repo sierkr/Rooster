@@ -280,6 +280,7 @@ const state = {
   huidigeWeek: 1,
   huidigeDatum: null,
   huidigeView: 'rad',
+  toonWeekRads: false,    // W5..W1 zichtbaar in beheer-raster?
   unsubscribers: [],    // voor realtime listeners
   gebruikers: [],
 };
@@ -992,12 +993,22 @@ async function slaDienstOp(datum, radId) {
 // ==== View: BEHEER (rooster wijzigen) ====
 function renderBehView() {
   const container = document.getElementById('view-beh');
-  const rads = vasteRads();
-  if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
+  const vasteRadsList = vasteRads();
+  if (vasteRadsList.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
   const datums = datumsVanWeek(state.huidigeWeek);
   const vandaag = vandaagIso();
 
   const alleenOpmerkingen = !magWijzigen() && magOpmerkingen();
+
+  // Bepaal welke kolommen we tonen
+  const toonW = state.toonWeekRads;
+  const slotIds = toonW ? SLOTS : [];
+  const allKolommen = [
+    ...vasteRadsList.map(r => ({ id: r.id, label: r.code, isSlot: false })),
+    ...slotIds.map(id => ({ id, label: id, isSlot: true })),
+  ];
+  const kolBreedte = toonW ? 'minmax(28px, 1fr)' : 'minmax(0, 1fr)';
+  const gridCols = `34px repeat(${allKolommen.length}, ${kolBreedte})`;
 
   // Validatie van deze week
   const conflicten = valideerWeek(state.huidigeWeek);
@@ -1044,30 +1055,40 @@ function renderBehView() {
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
       </div>
-      <p class="muted" style="margin: 10px 0 0;">${alleenOpmerkingen ? 'Tik op een dag om opmerking toe te voegen' : 'Tik op een cel om te wijzigen, tik op een dagregel voor opmerking'}</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+        <p class="muted" style="margin: 0;">${alleenOpmerkingen ? 'Tik op een dag voor opmerking' : 'Tik op een cel om te wijzigen'}</p>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+          <span class="muted">W-slots</span>
+          <span class="toggle-switch ${toonW ? 'aan' : ''}" onclick="window.toggleWeekRads()"></span>
+        </label>
+      </div>
     </div>
 
     ${bannerHtml}
 
     <div class="grid-wrap">
-      <div class="plan-grid">
+      <div class="plan-grid" style="grid-template-columns: ${gridCols}; min-width: ${toonW ? '460' : '330'}px;">
         <div class="grid-head"></div>
-        ${rads.map(r => `<div class="grid-head">${r.code}</div>`).join('')}
+        ${allKolommen.map((k, i) => {
+          const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15); padding-left: 4px;' : '';
+          return `<div class="grid-head" style="${sep}">${k.label}</div>`;
+        }).join('')}
         ${datums.map(datum => {
-          const d = new Date(datum + 'T00:00:00');
+          const d = new Date(datum + 'T12:00:00');
           const isVandaag = datum === vandaag;
           const dagLabel = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
           return `
             <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" onclick="window.opmerkingBewerken('${datum}')" style="cursor: pointer;">${dagLabel}</div>
-            ${rads.map(r => {
-              const codes = toewijzingVoor(datum, r.id);
+            ${allKolommen.map((k, i) => {
+              const codes = toewijzingVoor(datum, k.id);
               const code = codes[0] || '';
               const cls = code ? fclass(code) : 'grid-cell-empty';
               const readonly = alleenOpmerkingen ? 'grid-cell-readonly' : '';
-              const onclick = alleenOpmerkingen ? '' : `onclick="window.openCell('${datum}', '${r.id}')"`;
-              const status = celStatus[`${datum}|${r.id}`];
+              const onclick = alleenOpmerkingen ? '' : `onclick="window.openCell('${datum}', '${k.id}')"`;
+              const status = celStatus[`${datum}|${k.id}`];
               const statusCls = status === 'error' ? 'grid-cell-conflict-error' : (status === 'warn' ? 'grid-cell-conflict-warn' : '');
-              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" ${onclick}>${code || '·'}</div>`;
+              const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15);' : '';
+              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}</div>`;
             }).join('')}
           `;
         }).join('')}
@@ -1255,6 +1276,10 @@ window.navigeerWeek = function(delta) {
   state.huidigeWeek = Math.max(1, Math.min(53, state.huidigeWeek + delta));
   render();
 };
+window.toggleWeekRads = function() {
+  state.toonWeekRads = !state.toonWeekRads;
+  render();
+};
 window.navigeerDag = function(delta) {
   // Gebruik 12:00 als anker zodat geen enkele timezone de datum-grens kruist
   const huidig = state.huidigeDatum || vandaagIso();
@@ -1277,11 +1302,13 @@ window.naarVandaag = function() {
 
 window.openCell = function(datum, radId) {
   if (!magWijzigen()) return;
-  const rad = radiologenMap()[radId];
+  const radsMap = radiologenMap();
+  const rad = radsMap[radId];
+  const label = rad ? rad.code : radId;  // W-slot: geen rad, gebruik gewoon "W3" enz.
   const codes = toewijzingVoor(datum, radId);
   const huidigCode = codes[0] || '';
 
-  document.getElementById('sheetTitle').textContent = `${rad.code} · ${formatDatum(datum, 'kort')}`;
+  document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
   document.getElementById('sheetSub').textContent = huidigCode ? `Huidig: ${huidigCode} · ${functieNaam(huidigCode)}` : 'Nog geen toewijzing';
 
   const gangbaar = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
