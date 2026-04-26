@@ -353,6 +353,11 @@ function radiologenMap() {
 function vasteRads() {
   return VASTE_RAD_IDS.map(id => state.radiologen.find(r => r.id === id)).filter(Boolean);
 }
+function actieveInvallers() {
+  // W-slots waar actief !== false (default actief). Volgorde: W5..W1.
+  return SLOTS.map(id => state.radiologen.find(r => r.id === id))
+              .filter(r => r && r.actief !== false);
+}
 function functiesMap() {
   return Object.fromEntries(state.functies.map(f => [f.id, f]));
 }
@@ -634,6 +639,9 @@ function luisterNaarData() {
       const data = d.data();
       if (data.dect_speciaal) {
         window.DECT_SPECIAAL = data.dect_speciaal;
+      }
+      if (data.tellen_codes) {
+        window.TELLEN_CODES = data.tellen_codes;
       }
     });
     render();
@@ -1136,7 +1144,6 @@ function renderWenView() {
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
           <p style="font-size: 17px; font-weight: 500; margin: 0;">Wensen</p>
-          <p class="muted" style="margin: 2px 0 0;">${zichtbaar.length} wens${zichtbaar.length===1?'':'en'} (toekomst)</p>
         </div>
         ${eigenRadId ? `<button class="btn btn-primary" onclick="window.nieuweWens()">+ Nieuw</button>` : ''}
       </div>
@@ -1436,13 +1443,31 @@ function renderBehView() {
 
   // Bepaal welke kolommen we tonen
   const toonW = state.toonWeekRads;
-  const slotIds = toonW ? SLOTS : [];
+  const invallers = toonW ? actieveInvallers() : [];
   const allKolommen = [
     ...vasteRadsList.map(r => ({ id: r.id, label: r.code, isSlot: false })),
-    ...slotIds.map(id => ({ id, label: id, isSlot: true })),
+    ...invallers.map(r => ({ id: r.id, label: r.code || r.id, isSlot: true })),
   ];
   const kolBreedte = toonW ? 'minmax(28px, 1fr)' : 'minmax(0, 1fr)';
-  const gridCols = `34px repeat(${allKolommen.length}, ${kolBreedte})`;
+  // Extra teller-kolom rechts als W-slots aan
+  const totaalKolommen = allKolommen.length + (toonW ? 1 : 0);
+  const gridCols = `34px repeat(${allKolommen.length}, ${kolBreedte})${toonW ? ' 32px' : ''}`;
+
+  // Codes die meetellen (uit instellingen)
+  const tellenCodes = (window.TELLEN_CODES || ['B','E','M','D','O','S','W']);
+  function telPerDag(datum) {
+    let n = 0;
+    [...vasteRadsList, ...invallers].forEach(r => {
+      const codes = toewijzingVoor(datum, r.id);
+      if (codes.some(c => tellenCodes.includes(hoofdLetterCode(c)))) n++;
+    });
+    return n;
+  }
+  function telKleur(n) {
+    if (n <= 4) return '#c0392b';
+    if (n === 5) return '#5dcaa5';
+    return '#2e7d50';
+  }
 
   // Validatie van deze week
   const conflicten = valideerWeek(state.huidigeWeek);
@@ -1510,12 +1535,13 @@ function renderBehView() {
     ${bannerHtml}
 
     <div class="grid-wrap">
-      <div class="plan-grid" style="grid-template-columns: ${gridCols}; min-width: ${toonW ? '460' : '330'}px;">
+      <div class="plan-grid" style="grid-template-columns: ${gridCols}; min-width: ${toonW ? '500' : '330'}px;">
         <div class="grid-head"></div>
         ${allKolommen.map((k, i) => {
           const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15); padding-left: 4px;' : '';
           return `<div class="grid-head" style="${sep}">${k.label}</div>`;
         }).join('')}
+        ${toonW ? `<div class="grid-head" style="border-left: 1px solid rgba(0,0,0,0.15); padding-left: 4px;" title="Aantal radiologen actief op tellende functies">∑</div>` : ''}
         ${datums.map(datum => {
           const d = new Date(datum + 'T12:00:00');
           const isVandaag = datum === vandaag;
@@ -1537,6 +1563,10 @@ function renderBehView() {
               const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="Wens: ${wens}"></span>` : '';
               return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}${wensMarker}</div>`;
             }).join('')}
+            ${toonW ? (() => {
+              const n = telPerDag(datum);
+              return `<div class="grid-cell" style="border-left: 1px solid rgba(0,0,0,0.15); background: transparent; color: ${telKleur(n)}; font-weight: 600;">${n}</div>`;
+            })() : ''}
           `;
         }).join('')}
       </div>
@@ -1650,8 +1680,44 @@ function renderRegView() {
     html += `</div>`;
   });
 
+  // Sectie: telt mee voor dagteller
+  const alleCodes = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
+  const huidigeCodes = window.TELLEN_CODES || ['B','E','M','D','O','S','W'];
+  html += `
+    <div style="margin-top: 1.5rem;">
+      <div style="font-size: 12px; font-weight: 500; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Telt mee voor dagteller</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Welke functies tellen mee voor de teller-kolom in het beheer-raster (zichtbaar als W-slots aanstaan).</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          ${alleCodes.map(c => {
+            const aan = huidigeCodes.includes(c);
+            const f = functiesMap()[c];
+            const naam = f ? f.naam.split('/')[0] : c;
+            return `<label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: ${aan ? '#e1f5ee' : 'rgba(0,0,0,0.04)'}; cursor: pointer; font-size: 13px;">
+              <input type="checkbox" id="tel_${c}" ${aan ? 'checked' : ''}>
+              <span><b>${c}</b> ${naam}</span>
+            </label>`;
+          }).join('')}
+        </div>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 12px;" onclick="window.opslaanTellenCodes()">Opslaan</button>
+      </div>
+    </div>
+  `;
+
   container.innerHTML = html;
 }
+
+window.opslaanTellenCodes = async function() {
+  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K'].filter(c =>
+    document.getElementById('tel_' + c)?.checked
+  );
+  try {
+    await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: codes }, { merge: true });
+    alert('Opgeslagen.');
+  } catch (e) {
+    alert('Mislukt: ' + e.message);
+  }
+};
 
 window.regelToggle = async function(regelId) {
   const r = state.validatieRegels.find(x => x.id === regelId);
@@ -1711,8 +1777,47 @@ async function renderGebView() {
     `;
   });
 
+  // Invallers-sectie (W1..W5)
+  html += `
+    <div style="margin-top: 1.5rem;">
+      <div class="summary-label" style="margin-bottom: 6px;">Invallers (W-slots)</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Alleen "actief" invallers verschijnen in het beheer-raster en in tellingen. Code is de afkorting (max 4 tekens).</p>
+        ${SLOTS.map(slotId => {
+          const slot = state.radiologen.find(r => r.id === slotId) || { id: slotId, code: '', achternaam: '', actief: false };
+          const isActief = slot.actief !== false;
+          return `
+            <div style="display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+              <div style="font-weight: 500; color: #5f5e5a; min-width: 28px;">${slotId}</div>
+              <input type="text" class="input" id="inv_code_${slotId}" placeholder="Code" maxlength="4" value="${(slot.code||'').replace(/"/g,'&quot;')}" style="padding: 6px 8px; font-size: 13px;">
+              <input type="text" class="input" id="inv_naam_${slotId}" placeholder="Achternaam" value="${(slot.achternaam||'').replace(/"/g,'&quot;')}" style="padding: 6px 8px; font-size: 13px;">
+              <span class="toggle-switch ${isActief ? 'aan' : ''}" id="inv_act_${slotId}" onclick="this.classList.toggle('aan')"></span>
+            </div>
+          `;
+        }).join('')}
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanInvallers()">Invallers opslaan</button>
+      </div>
+    </div>
+  `;
+
   container.innerHTML = html;
 }
+
+window.opslaanInvallers = async function() {
+  try {
+    for (const slotId of SLOTS) {
+      const code = document.getElementById('inv_code_' + slotId).value.trim();
+      const achternaam = document.getElementById('inv_naam_' + slotId).value.trim();
+      const actief = document.getElementById('inv_act_' + slotId).classList.contains('aan');
+      await setDoc(doc(db, 'radiologen', slotId), {
+        id: slotId, code: code || slotId, achternaam: achternaam || '', actief, isSlot: true,
+      }, { merge: true });
+    }
+    alert('Invallers opgeslagen.');
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
+};
 
 // ==== Interactie ====
 window.showView = function(v) {
