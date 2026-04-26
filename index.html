@@ -727,6 +727,33 @@ async function slaToewijzingOp(datum, radId, code) {
       naar: code ? [code] : [],
       wanneer: serverTimestamp(),
     });
+
+    // Auto-verwerk: als er een open wens is voor deze cel en de nieuwe
+    // situatie matcht met de wens, zet status meteen op verwerkt
+    if (magAlleWensenZien()) {
+      const openWens = state.wensen.find(w =>
+        w.datum === datum && w.radioloog_id === radId && (w.status || 'open') === 'open'
+      );
+      if (openWens) {
+        // Simuleer met de nieuwe code de check
+        const nieuweHoofd = hoofdLetterCode(code || '');
+        let matcht = false;
+        if (openWens.type === 'vakantie') matcht = nieuweHoofd === 'V';
+        else if (openWens.type === 'niet_beschikbaar') matcht = !code || ['V','Z','K','Q'].includes(nieuweHoofd);
+        else if (openWens.type === 'voorkeur') matcht = nieuweHoofd === openWens.voorkeur_code;
+
+        if (matcht) {
+          try {
+            await updateDoc(doc(db, 'wensen', openWens.id), {
+              status: 'verwerkt',
+              verwerkt_op: serverTimestamp(),
+              verwerkt_door: state.user.uid,
+              toelichting: null,
+            });
+          } catch (e) { /* niet kritiek, beheerder kan handmatig verwerken */ }
+        }
+      }
+    }
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
@@ -1184,8 +1211,14 @@ function renderWensCard(w, eigen) {
   // Toelichting van beheerder zichtbaar voor radioloog (feedback)
   const toelichting = w.toelichting ? `<div class="note" style="margin-top: 6px;">Beheerder: ${w.toelichting}</div>` : '';
 
+  // Klik-actie: eigen → bewerken; beheerder → springen naar Beheer-tab op die datum
+  const klikActie = eigen
+    ? `onclick="window.bewerkWens('${w.id}')"`
+    : (isBeheer ? `onclick="window.springNaarBeheer('${w.datum}')"` : '');
+  const cursor = (eigen || isBeheer) ? 'pointer' : 'default';
+
   return `
-    <div class="card card-compact" style="cursor: ${eigen ? 'pointer' : 'default'};" ${eigen ? `onclick="window.bewerkWens('${w.id}')"` : ''}>
+    <div class="card card-compact" style="cursor: ${cursor};" ${klikActie}>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
         <div style="flex: 1; min-width: 0;">
           <div style="font-size: 13px; color: #5f5e5a;">${formatDatum(w.datum, 'lang')}</div>
@@ -1380,6 +1413,14 @@ window.wensHeropen = async function(id) {
   } catch (e) {
     alert('Mislukt: ' + e.message);
   }
+};
+
+window.springNaarBeheer = function(datum) {
+  if (!magBeheerLezen()) return;
+  state.huidigeDatum = datum;
+  state.huidigeWeek = isoWeekVan(datum);
+  state.huidigeView = 'beh';
+  render();
 };
 
 // ==== View: BEHEER (rooster wijzigen) ====
@@ -2054,6 +2095,7 @@ function closeSheet() {
 
 function render() {
   renderUserChip();
+  renderTabs();
   if (state.huidigeView === 'rad') renderRadView();
   else if (state.huidigeView === 'afd') renderAfdView();
   else if (state.huidigeView === 'die') renderDieView();
