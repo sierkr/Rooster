@@ -993,6 +993,9 @@ function luisterNaarData() {
       if (data.tellen_codes) {
         window.TELLEN_CODES = data.tellen_codes;
       }
+      if (data.mtsdagen_codes) {
+        window.MTSDAGEN_CODES = data.mtsdagen_codes;
+      }
     });
     render();
   }));
@@ -1607,25 +1610,27 @@ function berekenActiviteit() {
     }
   });
 
-  // Aggregaties per radioloog
+  // Aggregaties per radioloog. Mtsdagen is configureerbaar via
+  // instellingen/algemeen.mtsdagen_codes (lijst van hoofdletters).
+  const mtsCodes = (window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X']);
   const aggr = {};
   radIds.forEach(rid => {
     const c = counts[rid];
     let werkvloer = 0;
+    let mtsdagen = 0;
     Object.entries(c).forEach(([code, n]) => {
       if (functieFlags(code).werkvloer) werkvloer += n;
+      if (mtsCodes.includes(hoofdLetterCode(code))) mtsdagen += n;
     });
-    const Z = c['Z'] || 0;
-    const T = c['T'] || 0;
-    const A = c['A'] || 0;
     const Q = c['Q'] || 0;
     const K = c['K'] || 0;
     const P = c['P'] || 0;
     const R = c['R'] || 0;
     const V = c['V'] || 0;
-    const mtsdagen   = werkvloer + Z + T + A;
-    const mtsstby    = mtsdagen + Q;
-    const werkdagen  = mtsstby + K;
+    // Mts+Stby en Werkdagen blijven afgeleide stappen (voorkom dubbeltelling
+    // door alleen Q/K toe te voegen als die niet al in mtsCodes zitten).
+    const mtsstby   = mtsdagen + (mtsCodes.includes('Q') ? 0 : Q);
+    const werkdagen = mtsstby  + (mtsCodes.includes('K') ? 0 : K);
     const roostervrij = K + P + Q + R + V;
     aggr[rid] = { werkvloer, mtsdagen, mtsstby, werkdagen, roostervrij };
   });
@@ -2584,7 +2589,7 @@ function renderRegView() {
   });
 
   // Sectie: telt mee voor dagteller
-  const alleCodes = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
+  const alleCodes = ['W','B','E','M','D','O','S','A','R','V','Z','K','T','X'];
   const huidigeCodes = window.TELLEN_CODES || ['B','E','M','D','O','S','W'];
   html += `
     <div style="margin-top: 1.5rem;">
@@ -2607,16 +2612,51 @@ function renderRegView() {
     </div>
   `;
 
+  // Sectie: telt mee voor Maatschapsdagen
+  const mtsHuidig = window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X'];
+  html += `
+    <div style="margin-top: 1.5rem;">
+      <div style="font-size: 12px; font-weight: 500; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Telt mee voor maatschapsdagen</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Welke hoofdfuncties meegeteld worden in de Maatschapsdagen-rij in de Activiteit-tab. Varianten van een hoofdletter (bv. .WB, 5W) tellen automatisch mee als de hoofdletter aan staat.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          ${alleCodes.map(c => {
+            const aan = mtsHuidig.includes(c);
+            const f = functiesMap()[c];
+            const naam = f ? f.naam.split('/')[0] : c;
+            return `<label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: ${aan ? '#e1f5ee' : 'rgba(0,0,0,0.04)'}; cursor: pointer; font-size: 13px;">
+              <input type="checkbox" id="mts_${c}" ${aan ? 'checked' : ''}>
+              <span><b>${c}</b> ${naam}</span>
+            </label>`;
+          }).join('')}
+        </div>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 12px;" onclick="window.opslaanMtsdagenCodes()">Opslaan</button>
+      </div>
+    </div>
+  `;
+
   container.innerHTML = html;
 }
 
 window.opslaanTellenCodes = async function() {
-  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K'].filter(c =>
+  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K','T','X'].filter(c =>
     document.getElementById('tel_' + c)?.checked
   );
   try {
     await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: codes }, { merge: true });
     alert('Opgeslagen.');
+  } catch (e) {
+    alert('Mislukt: ' + e.message);
+  }
+};
+
+window.opslaanMtsdagenCodes = async function() {
+  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K','T','X'].filter(c =>
+    document.getElementById('mts_' + c)?.checked
+  );
+  try {
+    await setDoc(doc(db, 'instellingen', 'algemeen'), { mtsdagen_codes: codes }, { merge: true });
+    alert('Maatschapsdagen-codes opgeslagen.');
   } catch (e) {
     alert('Mislukt: ' + e.message);
   }
