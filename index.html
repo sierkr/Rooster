@@ -152,6 +152,8 @@
   .wens-marker-vakantie { background: #5dcaa5; }
   .wens-marker-niet_beschikbaar { background: #c0392b; }
   .wens-marker-voorkeur { background: #378add; }
+  /* Driehoek linksboven voor cel met opmerking */
+  .opm-marker { position: absolute; top: 0; left: 0; width: 0; height: 0; border-style: solid; border-width: 7px 7px 0 0; border-color: #c0392b transparent transparent transparent; pointer-events: none; }
 
   .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
   .status-open { background: #faeeda; color: #412402; }
@@ -758,7 +760,7 @@ async function laadGebruikers() {
 }
 
 // ==== Save ====
-async function slaToewijzingOp(datum, radId, code) {
+async function slaToewijzingOp(datum, radId, code, opmerking) {
   const bestaand = state.indelingMap[datum];
   const toewijzingen = { ...(bestaand?.toewijzingen || {}) };
   toewijzingen[radId] = code ? [code] : [];
@@ -821,6 +823,18 @@ async function slaToewijzingOp(datum, radId, code) {
     opmerking: bestaand?.opmerking || null,
   };
 
+  // Cel-opmerking meeschrijven (alleen als parameter is meegegeven, ook ''
+  // is een geldige waarde — leeg = wissen).
+  const oudeCelOpm = bestaand?.cel_opmerkingen?.[radId] || '';
+  let celOpmGewijzigd = false;
+  if (typeof opmerking === 'string') {
+    const nieuw = { ...(bestaand?.cel_opmerkingen || {}) };
+    if (opmerking) nieuw[radId] = opmerking;
+    else delete nieuw[radId];
+    docData.cel_opmerkingen = nieuw;
+    celOpmGewijzigd = (oudeCelOpm !== opmerking);
+  }
+
   try {
     await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
     // Audit log
@@ -833,6 +847,18 @@ async function slaToewijzingOp(datum, radId, code) {
       naar: code ? [code] : [],
       wanneer: serverTimestamp(),
     });
+    if (celOpmGewijzigd) {
+      await addDoc(collection(db, 'wijzigingen'), {
+        uid: state.user.uid,
+        email: state.profiel.email,
+        datum,
+        radioloog_id: radId,
+        veld: 'cel_opmerking',
+        van: oudeCelOpm || null,
+        naar: opmerking || null,
+        wanneer: serverTimestamp(),
+      });
+    }
 
     // Auto-verwerk: als er een open wens is voor deze cel en de nieuwe
     // situatie matcht met de wens, zet status meteen op verwerkt
@@ -883,6 +909,50 @@ function checkCelConflict(datum, radId, nieuweCodes) {
   });
 
   return conflicten;
+}
+
+// Alleen cel-opmerking opslaan (zonder code-wijziging). Bedoeld voor de
+// "Opmerking opslaan"-knop in het cel-edit sheet.
+async function slaCelOpmerkingOp(datum, radId, opmerking) {
+  if (!magWijzigen()) return;
+  const bestaand = state.indelingMap[datum];
+  const oude = bestaand?.cel_opmerkingen?.[radId] || '';
+  const nieuw = { ...(bestaand?.cel_opmerkingen || {}) };
+  if (opmerking) nieuw[radId] = opmerking;
+  else delete nieuw[radId];
+
+  const dagNr = new Date(datum + 'T00:00:00').getDay();
+  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
+
+  const docData = {
+    datum,
+    weeknr: isoWeekVan(datum),
+    dag: DAGEN_NL[dagNlIdx],
+    toewijzingen: bestaand?.toewijzingen || {},
+    dienst: bestaand?.dienst || {},
+    bespreking: bestaand?.bespreking || null,
+    interventie: bestaand?.interventie || null,
+    opmerking: bestaand?.opmerking || null,
+    cel_opmerkingen: nieuw,
+  };
+
+  try {
+    await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
+    if (oude !== opmerking) {
+      await addDoc(collection(db, 'wijzigingen'), {
+        uid: state.user.uid,
+        email: state.profiel.email,
+        datum,
+        radioloog_id: radId,
+        veld: 'cel_opmerking',
+        van: oude || null,
+        naar: opmerking || null,
+        wanneer: serverTimestamp(),
+      });
+    }
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
 }
 
 async function slaOpmerkingOp(datum, opmerking) {
@@ -2118,7 +2188,9 @@ function renderBehView() {
               const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15);' : '';
               const wens = wensenIndex[`${datum}|${k.id}`];
               const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="Wens: ${wens}"></span>` : '';
-              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}${wensMarker}</div>`;
+              const celOpm = state.indelingMap[datum]?.cel_opmerkingen?.[k.id];
+              const opmMarker = celOpm ? `<span class="opm-marker" title="${(celOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
+              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}${wensMarker}${opmMarker}</div>`;
             }).join('')}
             ${toonW ? (() => {
               const n = telPerDag(datum);
@@ -2458,6 +2530,8 @@ window.openCell = function(datum, radId) {
   const label = rad ? rad.code : radId;
   const codes = toewijzingVoor(datum, radId);
   const huidigCode = codes[0] || '';
+  const dag = state.indelingMap[datum];
+  const huidigOpm = dag?.cel_opmerkingen?.[radId] || '';
 
   // Check op wens
   const wens = state.wensen.find(w => w.datum === datum && w.radioloog_id === radId);
@@ -2474,21 +2548,34 @@ window.openCell = function(datum, radId) {
 
   const gangbaar = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
   const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
+  const opmEsc = huidigOpm.replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
   document.getElementById('sheetBody').innerHTML = `
     ${wensInfo}
     <div class="picker-grid">
       ${fs.map(f => `<div class="picker-option f-${f.code} ${f.code === huidigCode ? 'selected' : ''}" onclick="window.selecteerCode('${datum}', '${radId}', '${f.code}')">${f.code}<div class="picker-label">${f.naam.split('/')[0]}</div></div>`).join('')}
       <div class="picker-option" onclick="window.selecteerCode('${datum}', '${radId}', '')" style="grid-column: span 2;">—<div class="picker-label">Leegmaken</div></div>
+      <textarea class="input" id="celOpm" rows="2" placeholder="Opmerking…" style="grid-column: span 2; resize: vertical; font-size: 13px;">${opmEsc}</textarea>
     </div>
-    <button class="btn" style="width: 100%;" onclick="window.closeSheet()">Annuleren</button>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.slaCelOpmerkingAlleen('${datum}', '${radId}')">Opmerking opslaan</button>
+    </div>
   `;
   openSheet();
 };
 
 window.selecteerCode = async function(datum, radId, code) {
+  // Lees huidige opmerking-waarde uit het sheet en sla samen op
+  const opm = (document.getElementById('celOpm')?.value || '').trim();
   closeSheet();
-  await slaToewijzingOp(datum, radId, code);
+  await slaToewijzingOp(datum, radId, code, opm);
+};
+
+window.slaCelOpmerkingAlleen = async function(datum, radId) {
+  const opm = (document.getElementById('celOpm')?.value || '').trim();
+  closeSheet();
+  await slaCelOpmerkingOp(datum, radId, opm);
 };
 
 window.opmerkingBewerken = function(datum) {
@@ -2530,7 +2617,9 @@ window.toonDagDetail = function(datum, radId) {
   }
   if (dag?.bespreking) body += `<div style="margin-bottom: 10px;"><span class="muted">Bespreking</span><br>${dag.bespreking}</div>`;
   if (dag?.interventie) body += `<div style="margin-bottom: 10px;"><span class="muted">Interventie</span><br>${dag.interventie}</div>`;
-  if (dag?.opmerking) body += `<div style="margin-bottom: 10px;"><span class="muted">Opmerking</span><br>${dag.opmerking}</div>`;
+  const celOpm = dag?.cel_opmerkingen?.[radId];
+  if (celOpm) body += `<div style="margin-bottom: 10px;"><span class="muted">Mijn opmerking</span><br>${celOpm}</div>`;
+  if (dag?.opmerking) body += `<div style="margin-bottom: 10px;"><span class="muted">Dag-opmerking</span><br>${dag.opmerking}</div>`;
   body += `</div>`;
 
   if (magOpmerkingen()) {
