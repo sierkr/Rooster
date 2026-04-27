@@ -474,11 +474,17 @@ function vandaagIso() {
   return `${jaar}-${mm}-${dd}`;
 }
 function isoWeekVan(iso) {
-  const d = new Date(iso + 'T00:00:00');
-  d.setUTCHours(0,0,0,0);
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-  const ys = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-  return Math.ceil((((d - ys) / 86400000) + 1) / 7);
+  // Parse ISO-string direct als UTC om tijdzone-shifts te vermijden:
+  // 'new Date("2026-04-27T00:00:00")' werd in NL DST geïnterpreteerd als
+  // 2026-04-26 22:00 UTC, waardoor getUTCDay() de dag ervoor teruggaf
+  // en het weeknummer 1 te laag werd.
+  const [j, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(j, m - 1, d));
+  // ISO 8601: dag-van-de-week 1=ma..7=zo, donderdag bepaalt het weeknummer
+  const dagNr = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - dagNr);
+  const jaarStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  return Math.ceil(((dt - jaarStart) / 86400000 + 1) / 7);
 }
 function mandagVanWeek(jaar, week) {
   const jan4 = new Date(Date.UTC(jaar, 0, 4));
