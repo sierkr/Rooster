@@ -182,12 +182,13 @@
   .seg { display: inline-flex; background: rgba(0,0,0,0.06); border-radius: 8px; padding: 3px; }
   .seg-btn { padding: 6px 12px; font-size: 12px; border: none; background: transparent; border-radius: 6px; color: #5f5e5a; cursor: pointer; font-family: inherit; font-weight: 500; }
   .seg-btn.actief { background: #fff; color: #2c2c2a; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-  .act-grid-wrap { background: #fff; border-radius: 12px; border: 0.5px solid rgba(0,0,0,0.1); padding: 8px; overflow-x: auto; }
+  .act-grid-wrap { background: #fff; border-radius: 12px; border: 0.5px solid rgba(0,0,0,0.1); padding: 0; overflow: auto; max-height: 65vh; }
   .act-grid { display: grid; gap: 1px; font-size: 11px; min-width: 100%; }
   .act-row { display: contents; }
   .act-cell { padding: 6px 4px; text-align: center; background: #fff; min-width: 28px; }
-  .act-cell-label { text-align: left; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .act-head { font-weight: 500; color: #5f5e5a; font-size: 10px; background: rgba(0,0,0,0.03); padding: 6px 4px; }
+  .act-cell-label { text-align: left; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: sticky; left: 0; z-index: 2; }
+  .act-head { font-weight: 500; color: #5f5e5a; font-size: 10px; background: rgba(0,0,0,0.03); padding: 6px 4px; position: sticky; top: 0; z-index: 3; }
+  .act-head.act-cell-label { z-index: 4; }
   .act-row-hoofd { font-weight: 500; cursor: pointer; }
   .act-row-hoofd:hover { background: rgba(0,0,0,0.02); }
   .act-row-variant { color: #888; font-size: 10px; padding-left: 18px; background: rgba(0,0,0,0.015); }
@@ -205,6 +206,11 @@
   .act-bar-fg { position: relative; }
   .act-pct { font-variant-numeric: tabular-nums; }
   .act-period-input { padding: 6px 8px; font-size: 12px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; font-family: inherit; }
+  /* Verdeling-modus: kleur-zones rond rij-gemiddelde (parttime-gecorrigeerd) */
+  .act-cell.act-zone-laag { background: #e6f1fb; }
+  .act-cell.act-zone-hoog { background: #faeeda; }
+  .act-zone-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11px; align-items: center; }
+  .act-zone-swatch { display: inline-block; padding: 3px 10px; border-radius: 10px; font-weight: 500; font-size: 11px; }
 
   /* Dienst-view */
   .dienst-dag { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: transform 0.05s; }
@@ -248,6 +254,8 @@
     .act-head { background: rgba(255,255,255,0.04); color: #aaa; }
     .seg { background: rgba(255,255,255,0.06); }
     .seg-btn.actief { background: #3a3a3a; color: #e5e5e5; }
+    .act-cell.act-zone-laag { background: rgba(55, 138, 221, 0.18); }
+    .act-cell.act-zone-hoog { background: rgba(239, 159, 39, 0.18); }
   }
 </style>
 </head>
@@ -1340,6 +1348,7 @@ function renderActView() {
   ];
 
   const ratio = state.actModus === 'ratio';
+  const verdeling = state.actModus === 'verdeling';
 
   // Grid-template: label-kolom + N rad-kolommen + Max-kolom
   const aantalKol = kolommen.length;
@@ -1347,6 +1356,29 @@ function renderActView() {
   const cellBreedte = ratio ? 'minmax(40px, 1fr)' : 'minmax(30px, 1fr)';
   const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 36px`;
   const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 36;
+
+  // Helper voor verdeling-modus: rij-gemiddelde (parttime-gecorrigeerd, alleen vaste rads)
+  // en zone-bepaling (laag <85% / op niveau / hoog >115%).
+  function rowGemPt(rij) {
+    let som = 0, n = 0;
+    rads.forEach(r => {
+      const pf = parttimeFactor(r.id);
+      if (pf > 0) {
+        som += celWaarde(rij, { id: r.id }) / pf;
+        n++;
+      }
+    });
+    return n ? som / n : 0;
+  }
+  function zoneClass(waarde, gem, radId) {
+    if (!gem) return '';
+    const pf = parttimeFactor(radId);
+    if (pf <= 0) return '';
+    const r = (waarde / pf) / gem;
+    if (r < 0.85) return 'act-zone-laag';
+    if (r > 1.15) return 'act-zone-hoog';
+    return '';
+  }
 
   // Totalen-rijen vooraf berekenen voor ratio-deler
   const rijen = [];
@@ -1399,6 +1431,9 @@ function renderActView() {
       ? `onclick="window.actToggleHoofd('${rij.hoofd.letter}')"`
       : '';
 
+    // Voor verdeling-modus: rij-gemiddelde één keer berekenen
+    const gemPt = verdeling ? rowGemPt(rij) : 0;
+
     let html = `<div class="act-cell act-cell-label ${cls}" ${onclick} style="grid-column: 1;">${arrow}${rij.label}</div>`;
 
     kolommen.forEach((k, i) => {
@@ -1426,10 +1461,11 @@ function renderActView() {
       const klikAttr = (waarde > 0 && rij.kind !== 'aggr')
         ? `onclick="window.actToonDrilldown('${k.id}','${rij.kind}','${(rij.code||rij.dagNl||'')}')"`
         : '';
-      html += `<div class="act-cell ${cls} ${sep} ${klikbaar}" ${klikAttr}>${inhoud}</div>`;
+      const zone = verdeling ? zoneClass(waarde, gemPt, k.id) : '';
+      html += `<div class="act-cell ${cls} ${sep} ${klikbaar} ${zone}" ${klikAttr}>${inhoud}</div>`;
     });
 
-    // Max-kolom rechts
+    // Max-kolom rechts (geen zone-kleur)
     const maxCelInhoud = ratio
       ? (max ? `<span class="act-cell-max">${max}</span>` : '<span class="act-cell-zero">0</span>')
       : `<span class="act-cell-max">${max}</span>`;
@@ -1451,8 +1487,9 @@ function renderActView() {
           <p class="muted" style="margin: 2px 0 0;">${formatDatum(vanaf,'kort')} – ${formatDatum(tot,'kort')}</p>
         </div>
         <div class="seg">
-          <button class="seg-btn ${!ratio ? 'actief' : ''}" onclick="window.actZetModus('aantal')">Aantallen</button>
-          <button class="seg-btn ${ratio ? 'actief' : ''}" onclick="window.actZetModus('ratio')">Ratio's</button>
+          <button class="seg-btn ${state.actModus==='aantal' ? 'actief' : ''}" onclick="window.actZetModus('aantal')">Aantallen</button>
+          <button class="seg-btn ${state.actModus==='ratio' ? 'actief' : ''}" onclick="window.actZetModus('ratio')">Ratio's</button>
+          <button class="seg-btn ${state.actModus==='verdeling' ? 'actief' : ''}" onclick="window.actZetModus('verdeling')">Verdeling</button>
         </div>
       </div>
       <div class="act-controls">
@@ -1460,7 +1497,7 @@ function renderActView() {
           <button class="seg-btn ${state.actPeriode===p.id?'actief':''}" style="background: ${state.actPeriode===p.id?'#fff':'rgba(0,0,0,0.05)'}; box-shadow: ${state.actPeriode===p.id?'0 1px 2px rgba(0,0,0,0.04)':'none'};" onclick="window.actZetPeriode('${p.id}')">${p.label}</button>
         `).join('')}
         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; margin-left: auto;">
-          <span class="muted">Invallers</span>
+          <span class="muted">Waarnemers</span>
           <span class="toggle-switch ${toonInv ? 'aan' : ''}" onclick="window.actToggleInvallers()"></span>
         </label>
       </div>
@@ -1471,12 +1508,26 @@ function renderActView() {
           <input type="date" class="act-period-input" id="actTot" value="${state.actTot}" onchange="window.actZetVanafTot()" min="2026-01-01" max="2026-12-31">
         </div>
       ` : ''}
-      <p class="muted" style="margin: 10px 0 0; font-size: 11px;">${ratio ? 'Ratio = aantal / max-kolom / parttime-factor (zoals Excel "vdgn")' : 'Tik een hoofdfunctie om varianten in/uit te klappen. Tik een cel voor de datums.'}</p>
+      <p class="muted" style="margin: 10px 0 0; font-size: 11px;">${
+        ratio
+          ? 'Ratio = aantal / max-kolom / parttime-factor (zoals Excel "vdgn")'
+          : verdeling
+            ? 'Kleur = afwijking t.o.v. rij-gemiddelde (parttime-gecorrigeerd, vaste 8 als basis).'
+            : 'Tik een hoofdfunctie om varianten in/uit te klappen. Tik een cel voor de datums.'
+      }</p>
+      ${verdeling ? `
+        <div class="act-zone-legend">
+          <span class="act-zone-swatch act-zone-laag">&lt; 85%</span>
+          <span class="act-zone-swatch" style="background: rgba(0,0,0,0.04);">85 – 115%</span>
+          <span class="act-zone-swatch act-zone-hoog">&gt; 115%</span>
+          <span class="muted" style="margin-left: auto; font-size: 11px;">100% = rij-gemiddelde</span>
+        </div>
+      ` : ''}
     </div>
 
     <div class="act-grid-wrap">
       <div class="act-grid" style="grid-template-columns: ${gridCols}; min-width: ${minWidth}px;">
-        <div class="act-head" style="text-align: left; padding-left: 8px;">Functie</div>
+        <div class="act-head act-cell-label">Functie</div>
         ${kolommen.map((k, i) => {
           const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
           return `<div class="act-head ${sep}">${k.label}</div>`;
@@ -2297,12 +2348,12 @@ async function renderGebView() {
     </div>
   `;
 
-  // Invallers-sectie (W1..W5)
+  // Waarnemers-sectie (W1..W5)
   html += `
     <div style="margin-top: 1.5rem;">
-      <div class="summary-label" style="margin-bottom: 6px;">Invallers (W-slots)</div>
+      <div class="summary-label" style="margin-bottom: 6px;">Waarnemers (W-slots)</div>
       <div class="card">
-        <p class="muted" style="margin: 0 0 10px;">Alleen "actief" invallers verschijnen in het beheer-raster en in tellingen. Code is de afkorting (max 4 tekens).</p>
+        <p class="muted" style="margin: 0 0 10px;">Alleen "actief" waarnemers verschijnen in het beheer-raster en in tellingen. Code is de afkorting (max 4 tekens).</p>
         ${SLOTS.map(slotId => {
           const slot = state.radiologen.find(r => r.id === slotId) || { id: slotId, code: '', achternaam: '', actief: false };
           const isActief = slot.actief !== false;
@@ -2315,7 +2366,7 @@ async function renderGebView() {
             </div>
           `;
         }).join('')}
-        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanInvallers()">Invallers opslaan</button>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanInvallers()">Waarnemers opslaan</button>
       </div>
     </div>
   `;
@@ -2348,7 +2399,7 @@ window.opslaanInvallers = async function() {
         id: slotId, code: code || slotId, achternaam: achternaam || '', actief, isSlot: true,
       }, { merge: true });
     }
-    alert('Invallers opgeslagen.');
+    alert('Waarnemers opgeslagen.');
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
