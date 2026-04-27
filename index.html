@@ -177,6 +177,35 @@
   .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: transform 0.15s; }
   .toggle-switch.aan::after { transform: translateX(16px); }
 
+  /* Activiteit-view */
+  .act-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .seg { display: inline-flex; background: rgba(0,0,0,0.06); border-radius: 8px; padding: 3px; }
+  .seg-btn { padding: 6px 12px; font-size: 12px; border: none; background: transparent; border-radius: 6px; color: #5f5e5a; cursor: pointer; font-family: inherit; font-weight: 500; }
+  .seg-btn.actief { background: #fff; color: #2c2c2a; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .act-grid-wrap { background: #fff; border-radius: 12px; border: 0.5px solid rgba(0,0,0,0.1); padding: 8px; overflow-x: auto; }
+  .act-grid { display: grid; gap: 1px; font-size: 11px; min-width: 100%; }
+  .act-row { display: contents; }
+  .act-cell { padding: 6px 4px; text-align: center; background: #fff; min-width: 28px; }
+  .act-cell-label { text-align: left; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .act-head { font-weight: 500; color: #5f5e5a; font-size: 10px; background: rgba(0,0,0,0.03); padding: 6px 4px; }
+  .act-row-hoofd { font-weight: 500; cursor: pointer; }
+  .act-row-hoofd:hover { background: rgba(0,0,0,0.02); }
+  .act-row-variant { color: #888; font-size: 10px; padding-left: 18px; background: rgba(0,0,0,0.015); }
+  .act-row-variant .act-cell { background: rgba(0,0,0,0.015); }
+  .act-row-aggregaat { font-weight: 600; background: rgba(0,0,0,0.04); border-top: 1px solid rgba(0,0,0,0.1); }
+  .act-row-aggregaat .act-cell { background: rgba(0,0,0,0.04); }
+  .act-row-sectie { color: #5f5e5a; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 0 4px 8px; background: transparent; }
+  .act-cell-max { color: #5f5e5a; font-style: italic; }
+  .act-cell-zero { color: #ccc; }
+  .act-cell-clickable { cursor: pointer; }
+  .act-cell-clickable:hover { background: rgba(55,138,221,0.08); }
+  .act-sep { border-left: 1px solid rgba(0,0,0,0.1); padding-left: 4px; }
+  .act-bar-wrap { position: relative; padding: 6px 4px; }
+  .act-bar-bg { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; background: rgba(55,138,221,0.10); border-radius: 2px; transform-origin: left; }
+  .act-bar-fg { position: relative; }
+  .act-pct { font-variant-numeric: tabular-nums; }
+  .act-period-input { padding: 6px 8px; font-size: 12px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; font-family: inherit; }
+
   /* Dienst-view */
   .dienst-dag { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: transform 0.05s; }
   .dienst-dag:active { transform: scale(0.99); }
@@ -213,6 +242,12 @@
     .grid-cell-empty { background: rgba(255,255,255,0.03); color: #555; }
     .form-info { background: rgba(55,138,221,0.15); color: #85b7eb; }
     .form-error { background: rgba(220,60,60,0.15); color: #ff9090; }
+    .act-grid-wrap, .act-cell, .act-period-input { background: #2a2a2a; }
+    .act-row-variant, .act-row-variant .act-cell { background: rgba(255,255,255,0.03); }
+    .act-row-aggregaat, .act-row-aggregaat .act-cell { background: rgba(255,255,255,0.06); }
+    .act-head { background: rgba(255,255,255,0.04); color: #aaa; }
+    .seg { background: rgba(255,255,255,0.06); }
+    .seg-btn.actief { background: #3a3a3a; color: #e5e5e5; }
   }
 </style>
 </head>
@@ -253,6 +288,7 @@
   <div id="view-rad" class="view"></div>
   <div id="view-afd" class="view" style="display: none;"></div>
   <div id="view-die" class="view" style="display: none;"></div>
+  <div id="view-act" class="view" style="display: none;"></div>
   <div id="view-wen" class="view" style="display: none;"></div>
   <div id="view-beh" class="view" style="display: none;"></div>
   <div id="view-reg" class="view" style="display: none;"></div>
@@ -302,6 +338,13 @@ const state = {
   toonWeekRads: false,    // W5..W1 zichtbaar in beheer-raster?
   unsubscribers: [],    // voor realtime listeners
   gebruikers: [],
+  // Activiteit-tab
+  actModus: 'aantal',     // 'aantal' | 'ratio'
+  actPeriode: 'jaar',     // 'jaar' | 'q1'..'q4' | 'maand' | 'custom'
+  actVanaf: '2026-01-01',
+  actTot: '2026-12-31',
+  actInvallers: false,    // W-slots zichtbaar in matrix
+  actUitgeklapt: {},      // { 'W': true } - hoofdfuncties die uitgeklapt staan
 };
 
 const VASTE_RAD_IDS = ['L', 'P', 'V', 'F', 'K', 'H', 'S', 'J'];
@@ -309,6 +352,54 @@ const SLOTS = ['W5', 'W4', 'W3', 'W2', 'W1'];
 const DAGEN_NL = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
 const DAGEN_LANG = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
 const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+
+// Activiteit-tab — hoofdfuncties met varianten en aggregatiegroepen
+// Volgorde komt uit Excel-Inzet sheet
+const HOOFD_FUNCTIES = [
+  { letter: 'K', label: 'Cursus',           varianten: [] },
+  { letter: 'P', label: 'Parttime',         varianten: ['4P'] },
+  { letter: 'Q', label: 'Quarantaine',      varianten: [] },
+  { letter: 'R', label: 'Reserve',          varianten: [] },
+  { letter: 'V', label: 'Vakantie',         varianten: [] },
+  { letter: 'Z', label: 'Ziek',             varianten: [] },
+  { letter: 'T', label: 'Reserve Transfer', varianten: [] },
+  { letter: 'A', label: 'Administratie',    varianten: ['5A'] },
+  { letter: 'W', label: 'Weekradioloog',    varianten: ['.WB','.WE','.WM','3W','4W','5W'] },
+  { letter: 'B', label: 'Bucky/Echo',       varianten: ['.BW','3B','4B','5B'] },
+  { letter: 'E', label: 'Echo/Bucky',       varianten: ['.EW','3E','4E','5E'] },
+  { letter: 'M', label: 'Mammo',            varianten: ['.MW','3M','4M','5M'] },
+  { letter: 'D', label: 'DSI',              varianten: ['.DW','4D','5D'] },
+  { letter: 'S', label: 'Saendelft',        varianten: ['3S','4S','5S'] },
+  { letter: 'O', label: 'Omloop',           varianten: ['.O','3O','4O','5O'] },
+  { letter: 'X', label: 'Werkdag',          varianten: [] },
+];
+
+// Default werkvloer/werkdag flags (uit Excel Tabellen!Functie X/Y kolommen)
+// werkvloer: telt mee voor productie (Werkvloer-totaal)
+// werkdag: telt als werkdag (sluit P/V/Q/R uit)
+function defaultFunctieFlags(code) {
+  if (!code) return { werkvloer: false, werkdag: false };
+  // Roostervrij: niet werkvloer, niet werkdag
+  if (['P','4P','Q','R','V'].includes(code)) return { werkvloer: false, werkdag: false };
+  // Wel werkdag, niet werkvloer (cursus/ziek/transfer/admin)
+  if (['K','Z','T','A'].includes(code)) return { werkvloer: false, werkdag: true };
+  // Alle overige: werkvloer + werkdag (5A, W-varianten, B/E/M/D/S/O-varianten, X)
+  return { werkvloer: true, werkdag: true };
+}
+function functieFlags(code) {
+  const f = functiesMap()[code];
+  const def = defaultFunctieFlags(code);
+  return {
+    werkvloer: typeof f?.werkvloer === 'boolean' ? f.werkvloer : def.werkvloer,
+    werkdag:   typeof f?.werkdag === 'boolean'   ? f.werkdag   : def.werkdag,
+  };
+}
+function parttimeFactor(radId) {
+  const r = state.radiologen.find(x => x.id === radId);
+  if (!r) return 1;
+  const f = Number(r.parttime_factor);
+  return (Number.isFinite(f) && f > 0 && f <= 1) ? f : 1;
+}
 
 // ==== Helpers ====
 // Permissies komen uit profiel.permissies (object met booleans).
@@ -826,6 +917,8 @@ function renderTabs() {
     }
     tabs.push({ id: 'wen', label });
   }
+  // Activiteit: zichtbaar voor wie het rooster mag zien (beheer-lezen) en voor radiologen (eigen verdeling)
+  if (magBeheerLezen() || rol === 'radioloog') tabs.push({ id: 'act', label: 'Activiteit' });
   if (magBeheerLezen()) tabs.push({ id: 'beh', label: 'Beheer' });
   if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
@@ -834,7 +927,7 @@ function renderTabs() {
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  ['rad', 'afd', 'die', 'wen', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'afd', 'die', 'act', 'wen', 'beh', 'reg', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -1117,6 +1210,408 @@ async function slaDienstOp(datum, radId) {
     alert('Opslaan dienst mislukt: ' + e.message);
   }
 }
+
+// ==== View: ACTIVITEIT ====
+// Tellen per (radioloog, code) over een periode, plus aggregaties
+// (Werkvloer / Mtsdagen / Mts+Stby / Werkdagen / Roostervrij / Dienst)
+// en aanwezigheid per weekdag (ma..vr).
+function periodeRange() {
+  const jaar = 2026;
+  const p = state.actPeriode;
+  if (p === 'q1')   return { vanaf: `${jaar}-01-01`, tot: `${jaar}-03-31` };
+  if (p === 'q2')   return { vanaf: `${jaar}-04-01`, tot: `${jaar}-06-30` };
+  if (p === 'q3')   return { vanaf: `${jaar}-07-01`, tot: `${jaar}-09-30` };
+  if (p === 'q4')   return { vanaf: `${jaar}-10-01`, tot: `${jaar}-12-31` };
+  if (p === 'maand') {
+    const v = vandaagIso();
+    const m = v.slice(0, 7);
+    const eindDag = new Date(parseInt(m.slice(0,4)), parseInt(m.slice(5,7)), 0).getDate();
+    return { vanaf: `${m}-01`, tot: `${m}-${String(eindDag).padStart(2,'0')}` };
+  }
+  if (p === 'custom') return { vanaf: state.actVanaf, tot: state.actTot };
+  return { vanaf: `${jaar}-01-01`, tot: `${jaar}-12-31` };
+}
+
+function berekenActiviteit() {
+  const { vanaf, tot } = periodeRange();
+  const radIds = [...VASTE_RAD_IDS, ...actieveInvallers().map(r => r.id)];
+
+  const counts = {};        // counts[rid][code] = N
+  const datums = {};        // datums[rid][code] = [iso,...]
+  const dienst = {};        // dienst[rid] = N
+  const dienstDatums = {};  // dienstDatums[rid] = [iso,...]
+  const perWeekdag = {};    // perWeekdag[rid][dagNl] = N (ma..vr werkvloer-aanwezig)
+  radIds.forEach(rid => {
+    counts[rid] = {};
+    datums[rid] = {};
+    dienst[rid] = 0;
+    dienstDatums[rid] = [];
+    perWeekdag[rid] = { ma:0, di:0, wo:0, do:0, vr:0 };
+  });
+
+  Object.values(state.indelingMap).forEach(dag => {
+    const dat = dag?.datum;
+    if (!dat) return;
+    if (dat < vanaf || dat > tot) return;
+
+    const d = new Date(dat + 'T00:00:00');
+    const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+    const dagNl = DAGEN_NL[dagNlIdx];
+
+    const toew = dag.toewijzingen || {};
+    radIds.forEach(rid => {
+      const codes = toew[rid] || [];
+      let werkvloerOpDag = false;
+      codes.forEach(c => {
+        counts[rid][c] = (counts[rid][c] || 0) + 1;
+        if (!datums[rid][c]) datums[rid][c] = [];
+        datums[rid][c].push(dat);
+        if (functieFlags(c).werkvloer) werkvloerOpDag = true;
+      });
+      if (werkvloerOpDag && perWeekdag[rid][dagNl] !== undefined) {
+        perWeekdag[rid][dagNl] += 1;
+      }
+    });
+
+    const dId = dag.dienst?.dag;
+    if (dId && dienst[dId] !== undefined) {
+      dienst[dId] += 1;
+      dienstDatums[dId].push(dat);
+    }
+  });
+
+  // Aggregaties per radioloog
+  const aggr = {};
+  radIds.forEach(rid => {
+    const c = counts[rid];
+    let werkvloer = 0;
+    Object.entries(c).forEach(([code, n]) => {
+      if (functieFlags(code).werkvloer) werkvloer += n;
+    });
+    const Z = c['Z'] || 0;
+    const T = c['T'] || 0;
+    const A = c['A'] || 0;
+    const Q = c['Q'] || 0;
+    const K = c['K'] || 0;
+    const P = c['P'] || 0;
+    const R = c['R'] || 0;
+    const V = c['V'] || 0;
+    const mtsdagen   = werkvloer + Z + T + A;
+    const mtsstby    = mtsdagen + Q;
+    const werkdagen  = mtsstby + K;
+    const roostervrij = K + P + Q + R + V;
+    aggr[rid] = { werkvloer, mtsdagen, mtsstby, werkdagen, roostervrij };
+  });
+
+  return { vanaf, tot, radIds, counts, datums, dienst, dienstDatums, perWeekdag, aggr };
+}
+
+// Som over hoofdletter + varianten
+function somHoofdGroep(counts, hoofd) {
+  let n = counts[hoofd.letter] || 0;
+  hoofd.varianten.forEach(v => { n += counts[v] || 0; });
+  return n;
+}
+
+function renderActView() {
+  const container = document.getElementById('view-act');
+  const rads = vasteRads();
+  if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
+
+  const data = berekenActiviteit();
+  const { counts, dienst, perWeekdag, aggr, vanaf, tot } = data;
+
+  const toonInv = state.actInvallers;
+  const invallers = toonInv ? actieveInvallers() : [];
+  const kolommen = [
+    ...rads.map(r => ({ id: r.id, label: (r.code || r.id).slice(0, 4), isSlot: false })),
+    ...invallers.map(r => ({ id: r.id, label: (r.code || r.id).slice(0, 4), isSlot: true })),
+  ];
+
+  // Periode-knoppen
+  const periodes = [
+    { id: 'jaar',   label: 'Heel jaar' },
+    { id: 'q1',     label: 'Q1' },
+    { id: 'q2',     label: 'Q2' },
+    { id: 'q3',     label: 'Q3' },
+    { id: 'q4',     label: 'Q4' },
+    { id: 'maand',  label: 'Maand' },
+    { id: 'custom', label: 'Aangepast' },
+  ];
+
+  const ratio = state.actModus === 'ratio';
+
+  // Grid-template: label-kolom + N rad-kolommen + Max-kolom
+  const aantalKol = kolommen.length;
+  const labelBreedte = '110px';
+  const cellBreedte = ratio ? 'minmax(40px, 1fr)' : 'minmax(30px, 1fr)';
+  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 36px`;
+  const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 36;
+
+  // Totalen-rijen vooraf berekenen voor ratio-deler
+  const rijen = [];
+  // Sectie: per hoofd-functie
+  HOOFD_FUNCTIES.forEach(hoofd => {
+    rijen.push({ kind: 'hoofd', code: hoofd.letter, label: `${hoofd.letter} · ${hoofd.label}`, hoofd });
+    if (state.actUitgeklapt[hoofd.letter] && hoofd.varianten.length > 0) {
+      hoofd.varianten.forEach(v => {
+        rijen.push({ kind: 'variant', code: v, label: v });
+      });
+    }
+  });
+
+  function celWaarde(rij, k) {
+    if (rij.kind === 'hoofd') return somHoofdGroep(counts[k.id] || {}, rij.hoofd);
+    if (rij.kind === 'variant') return (counts[k.id] || {})[rij.code] || 0;
+    if (rij.kind === 'aggr') return aggr[k.id]?.[rij.aggrKey] || 0;
+    if (rij.kind === 'dienst') return dienst[k.id] || 0;
+    if (rij.kind === 'weekdag') return (perWeekdag[k.id] || {})[rij.dagNl] || 0;
+    return 0;
+  }
+  function rowMax(rij) {
+    let m = 0;
+    kolommen.forEach(k => { const v = celWaarde(rij, k); if (v > m) m = v; });
+    return m;
+  }
+  function celRatio(waarde, max, radId) {
+    if (!max) return null;
+    const pf = parttimeFactor(radId);
+    if (pf <= 0) return null;
+    return waarde / max / pf;
+  }
+  function fmtPct(v) {
+    if (v === null || v === undefined) return '';
+    return Math.round(v * 100) + '%';
+  }
+
+  function rijHtml(rij) {
+    const max = rowMax(rij);
+    const cls = rij.kind === 'hoofd' ? 'act-row-hoofd'
+              : rij.kind === 'variant' ? 'act-row-variant'
+              : rij.kind === 'aggr' ? 'act-row-aggregaat'
+              : rij.kind === 'dienst' ? 'act-row-aggregaat'
+              : '';
+    const isExpandable = rij.kind === 'hoofd' && rij.hoofd.varianten.length > 0;
+    const arrow = isExpandable
+      ? (state.actUitgeklapt[rij.hoofd.letter] ? '▾ ' : '▸ ')
+      : '';
+    const onclick = isExpandable
+      ? `onclick="window.actToggleHoofd('${rij.hoofd.letter}')"`
+      : '';
+
+    let html = `<div class="act-cell act-cell-label ${cls}" ${onclick} style="grid-column: 1;">${arrow}${rij.label}</div>`;
+
+    kolommen.forEach((k, i) => {
+      const waarde = celWaarde(rij, k);
+      const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
+      const zero = waarde === 0 ? 'act-cell-zero' : '';
+      let inhoud;
+      if (ratio) {
+        const r = celRatio(waarde, max, k.id);
+        if (r === null) {
+          inhoud = `<span class="act-cell-zero">—</span>`;
+        } else {
+          const pct = fmtPct(r);
+          const w = Math.min(100, Math.round(r * 100));
+          inhoud = `
+            <div class="act-bar-wrap">
+              <div class="act-bar-bg" style="width: ${w}%;"></div>
+              <div class="act-bar-fg act-pct">${pct}</div>
+            </div>`;
+        }
+      } else {
+        inhoud = `<span class="${zero}">${waarde}</span>`;
+      }
+      const klikbaar = waarde > 0 && rij.kind !== 'aggr' ? 'act-cell-clickable' : '';
+      const klikAttr = (waarde > 0 && rij.kind !== 'aggr')
+        ? `onclick="window.actToonDrilldown('${k.id}','${rij.kind}','${(rij.code||rij.dagNl||'')}')"`
+        : '';
+      html += `<div class="act-cell ${cls} ${sep} ${klikbaar}" ${klikAttr}>${inhoud}</div>`;
+    });
+
+    // Max-kolom rechts
+    const maxCelInhoud = ratio
+      ? (max ? `<span class="act-cell-max">${max}</span>` : '<span class="act-cell-zero">0</span>')
+      : `<span class="act-cell-max">${max}</span>`;
+    html += `<div class="act-cell ${cls} act-sep">${maxCelInhoud}</div>`;
+    return html;
+  }
+
+  function sectieKopHtml(label) {
+    const totaalKol = aantalKol + 2;
+    return `<div class="act-cell act-row-sectie" style="grid-column: 1 / span ${totaalKol};">${label}</div>`;
+  }
+
+  // Kop
+  let html = `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <p style="font-size: 17px; font-weight: 500; margin: 0;">Activiteit</p>
+          <p class="muted" style="margin: 2px 0 0;">${formatDatum(vanaf,'kort')} – ${formatDatum(tot,'kort')}</p>
+        </div>
+        <div class="seg">
+          <button class="seg-btn ${!ratio ? 'actief' : ''}" onclick="window.actZetModus('aantal')">Aantallen</button>
+          <button class="seg-btn ${ratio ? 'actief' : ''}" onclick="window.actZetModus('ratio')">Ratio's</button>
+        </div>
+      </div>
+      <div class="act-controls">
+        ${periodes.map(p => `
+          <button class="seg-btn ${state.actPeriode===p.id?'actief':''}" style="background: ${state.actPeriode===p.id?'#fff':'rgba(0,0,0,0.05)'}; box-shadow: ${state.actPeriode===p.id?'0 1px 2px rgba(0,0,0,0.04)':'none'};" onclick="window.actZetPeriode('${p.id}')">${p.label}</button>
+        `).join('')}
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; margin-left: auto;">
+          <span class="muted">Invallers</span>
+          <span class="toggle-switch ${toonInv ? 'aan' : ''}" onclick="window.actToggleInvallers()"></span>
+        </label>
+      </div>
+      ${state.actPeriode === 'custom' ? `
+        <div style="display: flex; gap: 8px; margin-top: 10px;">
+          <input type="date" class="act-period-input" id="actVanaf" value="${state.actVanaf}" onchange="window.actZetVanafTot()" min="2026-01-01" max="2026-12-31">
+          <span class="muted" style="align-self: center;">tot</span>
+          <input type="date" class="act-period-input" id="actTot" value="${state.actTot}" onchange="window.actZetVanafTot()" min="2026-01-01" max="2026-12-31">
+        </div>
+      ` : ''}
+      <p class="muted" style="margin: 10px 0 0; font-size: 11px;">${ratio ? 'Ratio = aantal / max-kolom / parttime-factor (zoals Excel "vdgn")' : 'Tik een hoofdfunctie om varianten in/uit te klappen. Tik een cel voor de datums.'}</p>
+    </div>
+
+    <div class="act-grid-wrap">
+      <div class="act-grid" style="grid-template-columns: ${gridCols}; min-width: ${minWidth}px;">
+        <div class="act-head" style="text-align: left; padding-left: 8px;">Functie</div>
+        ${kolommen.map((k, i) => {
+          const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
+          return `<div class="act-head ${sep}">${k.label}</div>`;
+        }).join('')}
+        <div class="act-head act-sep">Max</div>
+
+        ${rijen.map(rijHtml).join('')}
+
+        ${sectieKopHtml('Aanwezigheid per weekdag (werkvloer)')}
+        ${[
+          { kind: 'weekdag', dagNl: 'ma', label: 'maandag' },
+          { kind: 'weekdag', dagNl: 'di', label: 'dinsdag' },
+          { kind: 'weekdag', dagNl: 'wo', label: 'woensdag' },
+          { kind: 'weekdag', dagNl: 'do', label: 'donderdag' },
+          { kind: 'weekdag', dagNl: 'vr', label: 'vrijdag' },
+        ].map(rijHtml).join('')}
+
+        ${sectieKopHtml('Samenvatting')}
+        ${[
+          { kind: 'dienst', label: 'Dienst' },
+          { kind: 'aggr', aggrKey: 'werkvloer', label: 'Werkvloer' },
+          { kind: 'aggr', aggrKey: 'mtsdagen', label: 'Maatschapsdagen' },
+          { kind: 'aggr', aggrKey: 'mtsstby', label: 'Mts + Stby' },
+          { kind: 'aggr', aggrKey: 'werkdagen', label: 'Werkdagen' },
+          { kind: 'aggr', aggrKey: 'roostervrij', label: 'Roostervrij' },
+        ].map(rijHtml).join('')}
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-label">Definities</div>
+      <div style="font-size: 11px; line-height: 1.6; color: #5f5e5a;">
+        <b>Werkvloer</b> = productie-functies (W, B, E, M, D, S, O, A varianten).<br>
+        <b>Maatschapsdagen</b> = Werkvloer + Ziek + Reserve Transfer + Administratie (A).<br>
+        <b>Mts + Stby</b> = Maatschapsdagen + Quarantaine.<br>
+        <b>Werkdagen</b> = Mts + Stby + Cursus.<br>
+        <b>Roostervrij</b> = Cursus + Parttime + Quarantaine + Reserve + Vakantie.
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+window.actZetModus = function(m) {
+  state.actModus = m;
+  renderActView();
+};
+window.actZetPeriode = function(p) {
+  state.actPeriode = p;
+  renderActView();
+};
+window.actZetVanafTot = function() {
+  const a = document.getElementById('actVanaf').value;
+  const b = document.getElementById('actTot').value;
+  if (a) state.actVanaf = a;
+  if (b) state.actTot = b;
+  renderActView();
+};
+window.actToggleInvallers = function() {
+  state.actInvallers = !state.actInvallers;
+  renderActView();
+};
+window.actToggleHoofd = function(letter) {
+  state.actUitgeklapt[letter] = !state.actUitgeklapt[letter];
+  renderActView();
+};
+
+window.actToonDrilldown = function(radId, kind, code) {
+  const rad = radiologenMap()[radId];
+  const radLabel = rad ? `${rad.code} · ${rad.achternaam}` : radId;
+  const data = berekenActiviteit();
+  const { datums, dienstDatums } = data;
+
+  let titel = '';
+  let lijst = [];
+  if (kind === 'hoofd') {
+    const hoofd = HOOFD_FUNCTIES.find(h => h.letter === code);
+    if (!hoofd) return;
+    titel = `${hoofd.letter} · ${hoofd.label}`;
+    const set = new Set();
+    (datums[radId]?.[hoofd.letter] || []).forEach(d => set.add(d + '|' + hoofd.letter));
+    hoofd.varianten.forEach(v => {
+      (datums[radId]?.[v] || []).forEach(d => set.add(d + '|' + v));
+    });
+    lijst = [...set].map(x => { const [d, c] = x.split('|'); return { datum: d, code: c }; });
+  } else if (kind === 'variant') {
+    titel = code;
+    lijst = (datums[radId]?.[code] || []).map(d => ({ datum: d, code }));
+  } else if (kind === 'dienst') {
+    titel = 'Dienst';
+    lijst = (dienstDatums[radId] || []).map(d => ({ datum: d, code: 'D' }));
+  } else if (kind === 'weekdag') {
+    // Toon werkvloer-aanwezigheid op die dag-van-de-week
+    titel = `Aanwezig op ${ {ma:'maandag',di:'dinsdag',wo:'woensdag',do:'donderdag',vr:'vrijdag'}[code] || code }`;
+    const out = [];
+    Object.keys(datums[radId] || {}).forEach(c => {
+      if (!functieFlags(c).werkvloer) return;
+      (datums[radId][c] || []).forEach(d => {
+        const dt = new Date(d + 'T00:00:00');
+        const dnIdx = dt.getDay() === 0 ? 6 : dt.getDay() - 1;
+        if (DAGEN_NL[dnIdx] === code) out.push({ datum: d, code: c });
+      });
+    });
+    lijst = out;
+  }
+  // Sorteer op datum
+  lijst.sort((a, b) => a.datum.localeCompare(b.datum));
+
+  document.getElementById('sheetTitle').textContent = titel;
+  document.getElementById('sheetSub').textContent = `${radLabel} · ${lijst.length} dag${lijst.length===1?'':'en'}`;
+
+  let body = '';
+  if (lijst.length === 0) {
+    body = `<div class="empty-state" style="padding: 1rem;">Geen dagen in deze periode</div>`;
+  } else {
+    body = `<div style="max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">`;
+    lijst.forEach(it => {
+      const sprng = magBeheerLezen() ? `onclick="window.springNaarBeheer('${it.datum}'); window.closeSheet();"` : '';
+      const cur = magBeheerLezen() ? 'cursor: pointer;' : '';
+      body += `
+        <div class="card card-compact" style="padding: 8px 12px; ${cur} margin-bottom: 0;" ${sprng}>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${formatDatum(it.datum, 'kort')}</span>
+            <span class="badge ${fclass(it.code)}">${it.code}</span>
+          </div>
+        </div>
+      `;
+    });
+    body += `</div>`;
+  }
+  body += `<button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>`;
+  document.getElementById('sheetBody').innerHTML = body;
+  openSheet();
+};
 
 // ==== View: WENSEN ====
 function renderWenView() {
@@ -1777,6 +2272,31 @@ async function renderGebView() {
     `;
   });
 
+  // Vaste radiologen — parttime-percentage
+  html += `
+    <div style="margin-top: 1.5rem;">
+      <div class="summary-label" style="margin-bottom: 6px;">Vaste radiologen — parttime</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Percentage van fulltime (default 100%). Gebruikt voor de ratio-weergave in Activiteit-tab.</p>
+        ${vasteRads().map(r => {
+          const pf = parttimeFactor(r.id);
+          const pct = Math.round(pf * 100);
+          return `
+            <div style="display: grid; grid-template-columns: 90px 1fr 70px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+              <div style="font-weight: 500;">${r.code}</div>
+              <div class="muted" style="font-size: 13px;">${r.achternaam || ''}</div>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" style="padding: 6px 8px; font-size: 13px; text-align: right;">
+                <span class="muted" style="font-size: 13px;">%</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanParttime()">Opslaan</button>
+      </div>
+    </div>
+  `;
+
   // Invallers-sectie (W1..W5)
   html += `
     <div style="margin-top: 1.5rem;">
@@ -1802,6 +2322,21 @@ async function renderGebView() {
 
   container.innerHTML = html;
 }
+
+window.opslaanParttime = async function() {
+  try {
+    for (const r of vasteRads()) {
+      const el = document.getElementById('pf_' + r.id);
+      if (!el) continue;
+      const pct = Math.max(10, Math.min(100, parseInt(el.value, 10) || 100));
+      const factor = pct / 100;
+      await setDoc(doc(db, 'radiologen', r.id), { parttime_factor: factor }, { merge: true });
+    }
+    alert('Parttime-percentages opgeslagen.');
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
+};
 
 window.opslaanInvallers = async function() {
   try {
@@ -2204,6 +2739,7 @@ function render() {
   if (state.huidigeView === 'rad') renderRadView();
   else if (state.huidigeView === 'afd') renderAfdView();
   else if (state.huidigeView === 'die') renderDieView();
+  else if (state.huidigeView === 'act') renderActView();
   else if (state.huidigeView === 'wen') renderWenView();
   else if (state.huidigeView === 'beh') renderBehView();
   else if (state.huidigeView === 'reg') renderRegView();
