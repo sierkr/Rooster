@@ -186,16 +186,14 @@
   .act-grid { display: grid; gap: 1px; font-size: 11px; min-width: 100%; }
   .act-row { display: contents; }
   .act-cell { padding: 6px 4px; text-align: center; background: #fff; min-width: 28px; }
-  .act-cell-label { text-align: left; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: sticky; left: 0; z-index: 2; }
-  .act-head { font-weight: 500; color: #5f5e5a; font-size: 10px; background: rgba(0,0,0,0.03); padding: 6px 4px; position: sticky; top: 0; z-index: 3; }
-  .act-head.act-cell-label { z-index: 4; }
+  .act-cell-label { text-align: left; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 1px 0 0 rgba(0,0,0,0.06); }
+  .act-head { font-weight: 500; color: #5f5e5a; font-size: 10px; background: #ecebe5; padding: 6px 4px; position: sticky; top: 0; z-index: 3; box-shadow: 0 1px 0 rgba(0,0,0,0.08); }
+  .act-head.act-cell-label { z-index: 4; box-shadow: 1px 0 0 rgba(0,0,0,0.08), 0 1px 0 rgba(0,0,0,0.08); }
   .act-row-hoofd { font-weight: 500; cursor: pointer; }
-  .act-row-hoofd:hover { background: rgba(0,0,0,0.02); }
-  .act-row-variant { color: #888; font-size: 10px; padding-left: 18px; background: rgba(0,0,0,0.015); }
-  .act-row-variant .act-cell { background: rgba(0,0,0,0.015); }
-  .act-row-aggregaat { font-weight: 600; background: rgba(0,0,0,0.04); border-top: 1px solid rgba(0,0,0,0.1); }
-  .act-row-aggregaat .act-cell { background: rgba(0,0,0,0.04); }
-  .act-row-sectie { color: #5f5e5a; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 0 4px 8px; background: transparent; }
+  .act-cell.act-row-variant { background: #fafaf6; color: #888; font-size: 10px; }
+  .act-cell-label.act-row-variant { padding-left: 22px; }
+  .act-cell.act-row-aggregaat { background: #f0efe9; font-weight: 600; border-top: 1px solid rgba(0,0,0,0.1); }
+  .act-row-sectie { color: #5f5e5a; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 0 4px 8px; background: #fff; }
   .act-cell-max { color: #5f5e5a; font-style: italic; }
   .act-cell-zero { color: #ccc; }
   .act-cell-clickable { cursor: pointer; }
@@ -248,14 +246,15 @@
     .grid-cell-empty { background: rgba(255,255,255,0.03); color: #555; }
     .form-info { background: rgba(55,138,221,0.15); color: #85b7eb; }
     .form-error { background: rgba(220,60,60,0.15); color: #ff9090; }
-    .act-grid-wrap, .act-cell, .act-period-input { background: #2a2a2a; }
-    .act-row-variant, .act-row-variant .act-cell { background: rgba(255,255,255,0.03); }
-    .act-row-aggregaat, .act-row-aggregaat .act-cell { background: rgba(255,255,255,0.06); }
-    .act-head { background: rgba(255,255,255,0.04); color: #aaa; }
+    .act-grid-wrap, .act-cell, .act-cell-label, .act-period-input { background: #2a2a2a; }
+    .act-cell.act-row-variant, .act-cell-label.act-row-variant { background: #2d2d2d; }
+    .act-cell.act-row-aggregaat, .act-cell-label.act-row-aggregaat { background: #333; }
+    .act-row-sectie { background: #2a2a2a; }
+    .act-head { background: #1f1f1f; color: #ccc; }
     .seg { background: rgba(255,255,255,0.06); }
     .seg-btn.actief { background: #3a3a3a; color: #e5e5e5; }
-    .act-cell.act-zone-laag { background: rgba(55, 138, 221, 0.18); }
-    .act-cell.act-zone-hoog { background: rgba(239, 159, 39, 0.18); }
+    .act-cell.act-zone-laag { background: rgba(55, 138, 221, 0.22); }
+    .act-cell.act-zone-hoog { background: rgba(239, 159, 39, 0.22); }
   }
 </style>
 </head>
@@ -1359,6 +1358,13 @@ function renderActView() {
 
   // Helper voor verdeling-modus: rij-gemiddelde (parttime-gecorrigeerd, alleen vaste rads)
   // en zone-bepaling (laag <85% / op niveau / hoog >115%).
+  // Codes waarvoor "verdeling" niet zinvol is (niet stuurbaar / individueel):
+  const GEEN_VERDELING_CODES = ['Z'];
+  function rijHeeftKleur(rij) {
+    if (rij.kind === 'hoofd' && GEEN_VERDELING_CODES.includes(rij.code)) return false;
+    if (rij.kind === 'variant' && GEEN_VERDELING_CODES.includes(rij.code)) return false;
+    return true;
+  }
   function rowGemPt(rij) {
     let som = 0, n = 0;
     rads.forEach(r => {
@@ -1431,8 +1437,10 @@ function renderActView() {
       ? `onclick="window.actToggleHoofd('${rij.hoofd.letter}')"`
       : '';
 
-    // Voor verdeling-modus: rij-gemiddelde één keer berekenen
-    const gemPt = verdeling ? rowGemPt(rij) : 0;
+    // Voor verdeling-modus: rij-gemiddelde één keer berekenen.
+    // Ziek (Z) en bepaalde individuele codes worden niet gekleurd.
+    const kleurDezeRij = verdeling && rijHeeftKleur(rij);
+    const gemPt = kleurDezeRij ? rowGemPt(rij) : 0;
 
     let html = `<div class="act-cell act-cell-label ${cls}" ${onclick} style="grid-column: 1;">${arrow}${rij.label}</div>`;
 
@@ -1448,9 +1456,12 @@ function renderActView() {
         } else {
           const pct = fmtPct(r);
           const w = Math.min(100, Math.round(r * 100));
+          // Dynamische intensiteit: lage ratio's licht, hoge ratio's donker.
+          // Range alpha: 0.18 (bij r=0) tot 0.55 (bij r=1).
+          const alpha = (0.18 + Math.min(1, r) * 0.37).toFixed(2);
           inhoud = `
             <div class="act-bar-wrap">
-              <div class="act-bar-bg" style="width: ${w}%;"></div>
+              <div class="act-bar-bg" style="width: ${w}%; background: rgba(55,138,221,${alpha});"></div>
               <div class="act-bar-fg act-pct">${pct}</div>
             </div>`;
         }
@@ -1461,7 +1472,7 @@ function renderActView() {
       const klikAttr = (waarde > 0 && rij.kind !== 'aggr')
         ? `onclick="window.actToonDrilldown('${k.id}','${rij.kind}','${(rij.code||rij.dagNl||'')}')"`
         : '';
-      const zone = verdeling ? zoneClass(waarde, gemPt, k.id) : '';
+      const zone = kleurDezeRij ? zoneClass(waarde, gemPt, k.id) : '';
       html += `<div class="act-cell ${cls} ${sep} ${klikbaar} ${zone}" ${klikAttr}>${inhoud}</div>`;
     });
 
