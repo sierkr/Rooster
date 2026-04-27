@@ -978,13 +978,16 @@ async function slaOpmerkingOp(datum, opmerking) {
 
 // ==== Render: tabs + chip ====
 function renderTabs() {
+  // Overzicht (voorheen "Beheer") staat helemaal links — meest gebruikt door iedereen
   const tabs = [
+    { id: 'beh', label: 'Overzicht' },
     { id: 'rad', label: 'Radioloog' },
     { id: 'afd', label: 'Afdeling' },
     { id: 'die', label: 'Dienst' },
   ];
   const rol = state.profiel?.rol;
-  // Wensen: voor radiologen (eigen) en wie alle wensen mag zien
+  // Activiteit: zichtbaar voor iedere ingelogde gebruiker
+  tabs.push({ id: 'act', label: 'Activiteit' });
   // Wensen: voor radiologen (eigen) en wie alle wensen mag zien
   if (rol === 'radioloog' || magAlleWensenZien()) {
     let label = 'Wensen';
@@ -994,9 +997,6 @@ function renderTabs() {
     }
     tabs.push({ id: 'wen', label });
   }
-  // Activiteit: zichtbaar voor iedere ingelogde gebruiker
-  tabs.push({ id: 'act', label: 'Activiteit' });
-  if (magBeheerLezen()) tabs.push({ id: 'beh', label: 'Beheer' });
   if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
 
@@ -2151,7 +2151,7 @@ function renderBehView() {
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-        <p class="muted" style="margin: 0;">${alleenLezen ? 'Alleen-lezen weergave' : (alleenOpmerkingen ? 'Tik op een dag voor opmerking' : 'Tik op een cel om te wijzigen')}</p>
+        <p class="muted" style="margin: 0;">${alleenLezen ? 'Alleen-lezen — tik ▲ voor opmerking' : (alleenOpmerkingen ? 'Tik op een dag voor opmerking' : 'Tik op een cel om te wijzigen')}</p>
         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
           <span class="muted">W-slots</span>
           <span class="toggle-switch ${toonW ? 'aan' : ''}" onclick="window.toggleWeekRads()"></span>
@@ -2173,10 +2173,21 @@ function renderBehView() {
           const d = new Date(datum + 'T12:00:00');
           const isVandaag = datum === vandaag;
           const dagLabel = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
-          const dagOnclick = alleenLezen ? '' : `onclick="window.opmerkingBewerken('${datum}')"`;
-          const dagCursor = alleenLezen ? 'default' : 'pointer';
+          const dagOpm = state.indelingMap[datum]?.opmerking;
+          // Klik-gedrag dag-label:
+          //  - wijzigers + secretariaat (magOpmerkingen): bewerken via opmerkingBewerken
+          //  - lezers (alleenLezen): leesbaar als er een opmerking is, anders niet klikbaar
+          let dagOnclick, dagCursor;
+          if (alleenLezen) {
+            dagOnclick = dagOpm ? `onclick="window.toonDagOpmerking('${datum}')"` : '';
+            dagCursor = dagOpm ? 'pointer' : 'default';
+          } else {
+            dagOnclick = `onclick="window.opmerkingBewerken('${datum}')"`;
+            dagCursor = 'pointer';
+          }
+          const dagOpmMarker = dagOpm ? `<span class="opm-marker" title="${(dagOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
           return `
-            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" ${dagOnclick} style="cursor: ${dagCursor};">${dagLabel}</div>
+            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" ${dagOnclick} style="cursor: ${dagCursor}; position: relative;">${dagLabel}${dagOpmMarker}</div>
             ${allKolommen.map((k, i) => {
               const codes = toewijzingVoor(datum, k.id);
               const code = codes[0] || '';
@@ -2534,6 +2545,21 @@ window.naarVandaag = function() {
   state.huidigeDatum = vandaagIso();
   state.huidigeWeek = isoWeekVan(state.huidigeDatum);
   render();
+};
+
+// Read-only weergave van een dag-opmerking — voor non-wijzigers
+window.toonDagOpmerking = function(datum) {
+  const dag = state.indelingMap[datum];
+  const opm = dag?.opmerking || '';
+  document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
+  document.getElementById('sheetSub').textContent = 'Dag-opmerking';
+  document.getElementById('sheetBody').innerHTML = `
+    ${opm
+      ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${opm.replace(/</g,'&lt;')}</div></div>`
+      : `<div class="muted" style="font-style: italic;">Geen dag-opmerking</div>`}
+    <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>
+  `;
+  openSheet();
 };
 
 // Read-only weergave van een cel — voor lezers, secretariaat en radiologen
@@ -2973,8 +2999,8 @@ onAuthStateChanged(auth, async (user) => {
     state.huidigeWeek = isoWeekVan(vandaagIso());
     state.huidigeDatum = vandaagIso();
 
-    // Niet-beheerders starten op radioloog-view
-    state.huidigeView = 'rad';
+    // Iedereen start op Overzicht (= meest gebruikte view)
+    state.huidigeView = 'beh';
 
     document.getElementById('login').style.display = 'none';
     document.getElementById('app').style.display = 'block';
