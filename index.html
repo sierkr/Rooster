@@ -994,8 +994,8 @@ function renderTabs() {
     }
     tabs.push({ id: 'wen', label });
   }
-  // Activiteit: zichtbaar voor wie het rooster mag zien (beheer-lezen) en voor radiologen (eigen verdeling)
-  if (magBeheerLezen() || rol === 'radioloog') tabs.push({ id: 'act', label: 'Activiteit' });
+  // Activiteit: zichtbaar voor iedere ingelogde gebruiker
+  tabs.push({ id: 'act', label: 'Activiteit' });
   if (magBeheerLezen()) tabs.push({ id: 'beh', label: 'Beheer' });
   if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
@@ -2181,14 +2181,27 @@ function renderBehView() {
               const codes = toewijzingVoor(datum, k.id);
               const code = codes[0] || '';
               const cls = code ? fclass(code) : 'grid-cell-empty';
-              const readonly = (alleenOpmerkingen || alleenLezen) ? 'grid-cell-readonly' : '';
-              const onclick = (alleenOpmerkingen || alleenLezen) ? '' : `onclick="window.openCell('${datum}', '${k.id}')"`;
+              const celOpm = state.indelingMap[datum]?.cel_opmerkingen?.[k.id];
+              // Non-wijzigers mogen klikken op cellen mét opmerking om die te lezen
+              let onclick;
+              let readonly;
+              if (alleenOpmerkingen || alleenLezen) {
+                if (celOpm) {
+                  onclick = `onclick="window.toonCelDetail('${datum}', '${k.id}')"`;
+                  readonly = '';
+                } else {
+                  onclick = '';
+                  readonly = 'grid-cell-readonly';
+                }
+              } else {
+                onclick = `onclick="window.openCell('${datum}', '${k.id}')"`;
+                readonly = '';
+              }
               const status = celStatus[`${datum}|${k.id}`];
               const statusCls = status === 'error' ? 'grid-cell-conflict-error' : (status === 'warn' ? 'grid-cell-conflict-warn' : '');
               const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15);' : '';
               const wens = wensenIndex[`${datum}|${k.id}`];
               const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="Wens: ${wens}"></span>` : '';
-              const celOpm = state.indelingMap[datum]?.cel_opmerkingen?.[k.id];
               const opmMarker = celOpm ? `<span class="opm-marker" title="${(celOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
               return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}${wensMarker}${opmMarker}</div>`;
             }).join('')}
@@ -2400,7 +2413,7 @@ async function renderGebView() {
         <div style="margin-top: 10px; display: flex; gap: 6px;">
           <button class="btn" style="flex: 1; font-size: 12px; padding: 6px;" onclick="window.gebruikerBewerken('${g.id}')">Rol wijzigen</button>
           <button class="btn" style="font-size: 12px; padding: 6px 10px;" onclick="window.gebruikerWachtwoordReset('${g.id}', '${g.email}')">🔑</button>
-          ${g.id !== state.user.uid ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${g.email}')">🗑</button>` : ''}
+          ${(g.id !== state.user.uid && (g.email||'').toLowerCase() !== VASTE_BEHEERDER_EMAIL) ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${g.email}')">🗑</button>` : ''}
         </div>
       </div>
     `;
@@ -2521,6 +2534,32 @@ window.naarVandaag = function() {
   state.huidigeDatum = vandaagIso();
   state.huidigeWeek = isoWeekVan(state.huidigeDatum);
   render();
+};
+
+// Read-only weergave van een cel — voor lezers, secretariaat en radiologen
+// die niet zelf mogen wijzigen maar wél de opmerking moeten kunnen lezen.
+window.toonCelDetail = function(datum, radId) {
+  const radsMap = radiologenMap();
+  const rad = radsMap[radId];
+  const label = rad ? `${rad.code} · ${rad.achternaam}` : radId;
+  const codes = toewijzingVoor(datum, radId);
+  const huidigCode = codes[0] || '';
+  const dag = state.indelingMap[datum];
+  const celOpm = dag?.cel_opmerkingen?.[radId] || '';
+
+  document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
+  document.getElementById('sheetSub').textContent = huidigCode ? `${huidigCode} · ${functieNaam(huidigCode)}` : 'Geen toewijzing';
+
+  const opmHtml = celOpm
+    ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${celOpm.replace(/</g,'&lt;')}</div></div>`
+    : `<div class="muted" style="font-style: italic;">Geen opmerking</div>`;
+
+  document.getElementById('sheetBody').innerHTML = `
+    ${opmHtml}
+    ${dag?.opmerking ? `<div class="summary"><div class="summary-label">Dag-opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${dag.opmerking.replace(/</g,'&lt;')}</div></div>` : ''}
+    <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>
+  `;
+  openSheet();
 };
 
 window.openCell = function(datum, radId) {
@@ -2697,11 +2736,16 @@ window.opslaanNieuweGebruiker = async function() {
   }
 };
 
+// E-mailadres van de hoofdbeheerder dat altijd de rol "beheerder" houdt
+// en niet via de UI gewijzigd kan worden.
+const VASTE_BEHEERDER_EMAIL = 'sierkr@gmail.com';
+
 window.gebruikerBewerken = function(uid) {
   const g = state.gebruikers.find(x => x.id === uid);
   if (!g) return;
   const rads = vasteRads();
   const isEigenAccount = uid === state.user.uid;
+  const isVasteBeheerder = (g.email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL;
 
   // Effectieve permissies (uit g.permissies of rol-default)
   const huidigePerm = g.permissies || defaultPermissies(g.rol);
@@ -2717,17 +2761,18 @@ window.gebruikerBewerken = function(uid) {
   document.getElementById('sheetTitle').textContent = g.email;
   document.getElementById('sheetSub').textContent = 'Rol, koppeling en permissies';
   document.getElementById('sheetBody').innerHTML = `
-    ${isEigenAccount ? `<div class="form-info" style="margin-bottom: 1rem; font-size: 12px;">⚠ Eigen account. "Gebruikers" kan niet uitgezet worden om lockout te voorkomen.</div>` : ''}
-    <div class="form-field"><label class="form-label">Rol</label>
-      <select class="select" id="wzRol" onchange="window.wzRolWissel()">
+    ${isVasteBeheerder ? `<div class="form-info" style="margin-bottom: 1rem; font-size: 12px;">🔒 Hoofdbeheerder-account. Rol en koppeling staan vast.</div>` : ''}
+    ${(isEigenAccount && !isVasteBeheerder) ? `<div class="form-info" style="margin-bottom: 1rem; font-size: 12px;">⚠ Eigen account. "Gebruikers" kan niet uitgezet worden om lockout te voorkomen.</div>` : ''}
+    <div class="form-field"><label class="form-label">Rol${isVasteBeheerder?' 🔒':''}</label>
+      <select class="select" id="wzRol" onchange="window.wzRolWissel()" ${isVasteBeheerder?'disabled':''}>
         <option value="radioloog" ${g.rol==='radioloog'?'selected':''}>Radioloog</option>
         <option value="beheerder" ${g.rol==='beheerder'?'selected':''}>Beheerder</option>
         <option value="secretariaat" ${g.rol==='secretariaat'?'selected':''}>Secretariaat</option>
         <option value="lezer" ${g.rol==='lezer'?'selected':''}>Lezer</option>
       </select>
     </div>
-    <div class="form-field"><label class="form-label">Gekoppeld aan radioloog</label>
-      <select class="select" id="wzRadId">
+    <div class="form-field"><label class="form-label">Gekoppeld aan radioloog${isVasteBeheerder?' 🔒':''}</label>
+      <select class="select" id="wzRadId" ${isVasteBeheerder?'disabled':''}>
         <option value="">— geen —</option>
         ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${r.achternaam}</option>`).join('')}
       </select>
@@ -2771,8 +2816,14 @@ window.wzPermissiesReset = function() {
 };
 
 window.opslaanGebruikerUpdate = async function(uid) {
-  const rol = document.getElementById('wzRol').value;
-  const radId = document.getElementById('wzRadId').value;
+  const g = state.gebruikers.find(x => x.id === uid);
+  const isVasteBeheerder = (g?.email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL;
+
+  // Voor de hoofdbeheerder: rol/koppeling overschrijven met huidige waardes
+  // (dubbele bescherming: select is disabled, en hier negeren we eventuele
+  // pogingen om via console of devtools te wijzigen).
+  const rol = isVasteBeheerder ? 'beheerder' : document.getElementById('wzRol').value;
+  const radId = isVasteBeheerder ? (g.radioloog_id || '') : document.getElementById('wzRadId').value;
   const permissies = {};
   ['mag_beheer','mag_beheer_lezen','mag_regels','mag_gebruikers','mag_wensen_alle'].forEach(p => {
     const el = document.getElementById('perm_' + p);
@@ -2834,6 +2885,11 @@ window.kopieerLink = async function(link) {
 };
 
 window.gebruikerVerwijderen = async function(uid, email) {
+  // Hoofdbeheerder kan niet verwijderd worden
+  if ((email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL) {
+    alert('Hoofdbeheerder-account kan niet verwijderd worden.');
+    return;
+  }
   // Lockout-check: blijft er minstens één met mag_gebruikers over?
   const overigen = state.gebruikers.filter(g => g.id !== uid);
   const aantalMet = overigen.filter(g => {
