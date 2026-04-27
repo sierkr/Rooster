@@ -317,7 +317,7 @@
 // Firebase 10 modular SDK via CDN
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, addDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
@@ -354,6 +354,9 @@ const state = {
   actTot: '2026-12-31',
   actInvallers: false,    // W-slots zichtbaar in matrix
   actUitgeklapt: {},      // { 'W': true } - hoofdfuncties die uitgeklapt staan
+  // Excel-import (v3.12.0)
+  importPreview: null,    // { dagen: [...], celOpmsAantal, dagOpmsAantal, dienstAantal, fout: [], waarschuwing: [] }
+  importBezig: false,
 };
 
 const VASTE_RAD_IDS = ['L', 'P', 'V', 'F', 'K', 'H', 'S', 'J'];
@@ -648,6 +651,247 @@ function conflictenVoorCel(week, datum, radId) {
   const alle = valideerWeek(week);
   return alle.filter(c => c.datum === datum && (c.radId === radId || c.radId === null));
 }
+
+// ==== Excel-import (v3.12.0) ====
+// Lees een .xlsm/.xlsx bestand met sheet "Indeling 2026" en zet de inhoud
+// over naar Firestore. Excel = waarheid (overschrijft bestaande data).
+// Cel-comments in radioloog-cellen worden cel_opmerkingen, kolom S wordt
+// dag-opmerking, kolom Q wordt bespreking, kolom R wordt interventie,
+// kolom P wordt dienst.dag.
+
+const IMPORT_SHEET = 'Indeling 2026';
+const IMPORT_KOL_DATUM = 'B';
+const IMPORT_KOL_DIENST = 'P';
+const IMPORT_KOL_BESPR  = 'Q';
+const IMPORT_KOL_INTERV = 'R';
+const IMPORT_KOL_OPM    = 'S';
+// Header-rij waar kolommen worden benoemd (default: rij 29 in 2026-sheet).
+// Wordt automatisch bepaald door eerste rij waar B-kolom 'Datum' = 'Datum' of
+// een datum-waarde bevat.
+const IMPORT_KOLOM_NAAR_RADID = {
+  // Vaste rads (initials → id)
+  'BL': 'L', 'KdP': 'P', 'HvV': 'V', 'GF': 'F',
+  'SK': 'K', 'FvH': 'H', 'SF': 'S', 'BJ': 'J',
+  // W-slots
+  'W5': 'W5', 'W4': 'W4', 'W3': 'W3', 'W2': 'W2', 'W1': 'W1',
+};
+
+let _xlsxPromise = null;
+function laadSheetJS() {
+  if (_xlsxPromise) return _xlsxPromise;
+  _xlsxPromise = new Promise((resolve, reject) => {
+    if (window.XLSX) return resolve(window.XLSX);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => reject(new Error('Kon SheetJS niet laden (offline?).'));
+    document.head.appendChild(s);
+  });
+  return _xlsxPromise;
+}
+
+// Map een datum-waarde (kan Date, string, of Excel serial number zijn) naar
+// een ISO-string YYYY-MM-DD. Gebruikt 12:00 als anker zodat tijdzone-
+// verschillen geen datumgrens kunnen kruisen.
+function _parseDatumCel(v) {
+  if (!v) return null;
+  if (v instanceof Date) {
+    return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;
+  }
+  if (typeof v === 'number') {
+    // Excel serial date (days since 1900-01-01, met 1900-bug)
+    const ms = (v - 25569) * 86400000;
+    const d = new Date(ms + 12 * 3600 * 1000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+  }
+  if (typeof v === 'string') {
+    // Probeer YYYY-MM-DD direct
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    // Of DD-MM-YYYY / DD/MM/YYYY
+    const m2 = v.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (m2) return `${m2[3]}-${m2[2].padStart(2,'0')}-${m2[1].padStart(2,'0')}`;
+  }
+  return null;
+}
+
+// Lees waarde uit een cel — geeft trimmed string of null
+function _celStr(cel) {
+  if (!cel) return null;
+  const v = cel.w !== undefined ? cel.w : cel.v;
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
+// Pak de comment-tekst uit een cel als die bestaat
+function _celComment(cel) {
+  if (!cel || !cel.c || !cel.c.length) return null;
+  // Combineer alle comments (meestal één)
+  return cel.c.map(c => (c.t || '').trim()).filter(Boolean).join('\n') || null;
+}
+
+window.actImportFile = async function(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  state.importBezig = true;
+  state.importPreview = null;
+  renderGebView();
+  try {
+    const XLSX = await laadSheetJS();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { cellComments: true, cellDates: true });
+    if (!wb.Sheets[IMPORT_SHEET]) {
+      throw new Error(`Sheet '${IMPORT_SHEET}' niet gevonden. Aanwezig: ${wb.SheetNames.join(', ')}`);
+    }
+    const ws = wb.Sheets[IMPORT_SHEET];
+    const ref = ws['!ref']; // bv "A1:T411"
+    const range = XLSX.utils.decode_range(ref);
+
+    // Bepaal de header-rij: zoek de rij met 'Datum' in kolom B ('Dag' in kolom A
+    // werkt ook als heuristiek). Daarna staat kolom C..O met initials/W-slots.
+    let headerRij = -1;
+    for (let r = range.s.r; r <= Math.min(range.s.r + 60, range.e.r); r++) {
+      const aCel = ws[XLSX.utils.encode_cell({ c: 0, r })];
+      const bCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
+      if (_celStr(aCel) === 'Dag' && _celStr(bCel) === 'Datum') { headerRij = r; break; }
+    }
+    if (headerRij < 0) throw new Error("Header-rij ('Dag' / 'Datum') niet gevonden in sheet.");
+
+    // Map kolomnummer → radId via header-rij
+    const kolNaarRadId = {};
+    for (let c = 2; c <= range.e.c; c++) {
+      const headerVal = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
+      if (!headerVal) continue;
+      const radId = IMPORT_KOLOM_NAAR_RADID[headerVal];
+      if (radId) kolNaarRadId[c] = radId;
+    }
+
+    // Vaste kolomnummers voor dienst / bespreking / interventie / opmerking
+    const kolDienst = XLSX.utils.decode_col(IMPORT_KOL_DIENST);
+    const kolBespr  = XLSX.utils.decode_col(IMPORT_KOL_BESPR);
+    const kolInterv = XLSX.utils.decode_col(IMPORT_KOL_INTERV);
+    const kolOpm    = XLSX.utils.decode_col(IMPORT_KOL_OPM);
+
+    const dagen = [];
+    let celOpmsAantal = 0, dagOpmsAantal = 0, dienstAantal = 0, besprAantal = 0, intervAantal = 0;
+    const waarschuwingen = [];
+
+    for (let r = headerRij + 1; r <= range.e.r; r++) {
+      const datumCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
+      const isoDatum = _parseDatumCel(datumCel?.v);
+      if (!isoDatum) continue;
+      if (!isoDatum.startsWith('2026-')) continue; // alleen 2026
+
+      const d = new Date(isoDatum + 'T12:00:00');
+      const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+
+      const toewijzingen = {};
+      const cel_opmerkingen = {};
+      Object.entries(kolNaarRadId).forEach(([cStr, radId]) => {
+        const c = parseInt(cStr, 10);
+        const cel = ws[XLSX.utils.encode_cell({ c, r })];
+        const code = _celStr(cel);
+        if (code) {
+          // Splits multi-codes op komma als die er zijn (anders één-element array)
+          const codes = code.includes(',') ? code.split(',').map(x => x.trim()).filter(Boolean) : [code];
+          toewijzingen[radId] = codes;
+        }
+        const opm = _celComment(cel);
+        if (opm) {
+          cel_opmerkingen[radId] = opm;
+          celOpmsAantal++;
+        }
+      });
+
+      const dienstStr = _celStr(ws[XLSX.utils.encode_cell({ c: kolDienst, r })]);
+      const besprStr  = _celStr(ws[XLSX.utils.encode_cell({ c: kolBespr,  r })]);
+      const intervStr = _celStr(ws[XLSX.utils.encode_cell({ c: kolInterv, r })]);
+      const opmStr    = _celStr(ws[XLSX.utils.encode_cell({ c: kolOpm,    r })]);
+
+      const docData = {
+        datum: isoDatum,
+        weeknr: isoWeekVan(isoDatum),
+        dag: DAGEN_NL[dagNlIdx],
+        toewijzingen,
+        dienst: dienstStr ? { dag: dienstStr } : {},
+        bespreking: besprStr || null,
+        interventie: intervStr || null,
+        opmerking: opmStr || null,
+        cel_opmerkingen,
+      };
+
+      if (dienstStr) dienstAantal++;
+      if (besprStr) besprAantal++;
+      if (intervStr) intervAantal++;
+      if (opmStr) dagOpmsAantal++;
+
+      // Waarschuw als dienst-id niet bestaat
+      if (dienstStr && !state.radiologen.find(rr => rr.id === dienstStr)) {
+        waarschuwingen.push(`${isoDatum}: dienst-id '${dienstStr}' niet bekend`);
+      }
+
+      dagen.push(docData);
+    }
+
+    state.importPreview = {
+      bestandnaam: file.name,
+      dagen,
+      celOpmsAantal, dagOpmsAantal, dienstAantal, besprAantal, intervAantal,
+      waarschuwingen: waarschuwingen.slice(0, 25),
+      waarschuwingenTotaal: waarschuwingen.length,
+    };
+  } catch (e) {
+    console.error('actImportFile', e);
+    alert('Bestand inlezen mislukt:\n\n' + (e.message || e));
+  } finally {
+    state.importBezig = false;
+    renderGebView();
+  }
+};
+
+window.actImportSchrijven = async function() {
+  const p = state.importPreview;
+  if (!p || !p.dagen.length) return;
+  if (!magGebruikersBeheren()) {
+    alert('Geen rechten voor schrijven.');
+    return;
+  }
+  const ok = confirm(
+    `OVERSCHRIJVEN — alle 2026-dagen in Firestore worden vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
+    `${p.dagen.length} dagen, ${p.celOpmsAantal} cel-opmerkingen, ${p.dagOpmsAantal} dag-opmerkingen.\n\n` +
+    `Bestaande data in Firestore wordt vervangen. Doorgaan?`
+  );
+  if (!ok) return;
+
+  state.importBezig = true;
+  renderGebView();
+  try {
+    // Schrijf in batches van 400 (Firestore-limiet 500, marge nemen)
+    const BATCH = 400;
+    let geschreven = 0;
+    for (let i = 0; i < p.dagen.length; i += BATCH) {
+      const batch = writeBatch(db);
+      const slice = p.dagen.slice(i, i + BATCH);
+      slice.forEach(d => batch.set(doc(db, 'indeling', d.datum), d));
+      await batch.commit();
+      geschreven += slice.length;
+    }
+    alert(`Klaar. ${geschreven} dagen weggeschreven.`);
+    state.importPreview = null;
+  } catch (e) {
+    console.error('actImportSchrijven', e);
+    alert('Schrijven mislukt:\n\n' + (e.message || e));
+  } finally {
+    state.importBezig = false;
+    renderGebView();
+  }
+};
+
+window.actImportAnnuleren = function() {
+  state.importPreview = null;
+  renderGebView();
+};
 
 // ==== Auth ====
 window.doLogin = async function() {
@@ -2474,6 +2718,43 @@ async function renderGebView() {
           `;
         }).join('')}
         <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanInvallers()">Waarnemers opslaan</button>
+      </div>
+    </div>
+  `;
+
+  // Excel-import sectie
+  const p = state.importPreview;
+  const bezig = state.importBezig;
+  html += `
+    <div style="margin-top: 1.5rem;">
+      <div class="summary-label" style="margin-bottom: 6px;">Excel-import</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Lees een <code>.xlsm</code>/<code>.xlsx</code>-bestand en zet de inhoud van het sheet '${IMPORT_SHEET}' over naar Firestore. <b>Excel = waarheid</b> — bestaande dagen in Firestore worden vervangen.</p>
+        ${!p ? `
+          <input type="file" accept=".xlsx,.xlsm,.xls" id="impFile" onchange="window.actImportFile(this)" ${bezig?'disabled':''} style="font-size: 13px;">
+          ${bezig ? '<div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;"><span class="loader"></span><span class="muted">Bezig met inlezen…</span></div>' : ''}
+        ` : `
+          <div class="form-info" style="margin-bottom: 10px; font-size: 12px;">
+            <b>${p.bestandnaam}</b><br>
+            ${p.dagen.length} dagen · ${p.celOpmsAantal} cel-opmerkingen · ${p.dagOpmsAantal} dag-opmerkingen<br>
+            ${p.dienstAantal} dienst-toewijzingen · ${p.besprAantal} besprekingen · ${p.intervAantal} interventies
+          </div>
+          ${p.waarschuwingen.length ? `
+            <div style="background: #faeeda; color: #412402; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 10px;">
+              <b>Waarschuwingen (${p.waarschuwingenTotaal}):</b><br>
+              ${p.waarschuwingen.map(w => `• ${w}`).join('<br>')}
+              ${p.waarschuwingenTotaal > p.waarschuwingen.length ? `<br>… en ${p.waarschuwingenTotaal - p.waarschuwingen.length} meer` : ''}
+            </div>
+          ` : ''}
+          <details style="margin-bottom: 10px;">
+            <summary class="muted" style="cursor: pointer; font-size: 12px;">Voorbeeld eerste 3 dagen</summary>
+            <pre style="font-size: 10px; overflow-x: auto; background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px; margin-top: 6px;">${(p.dagen.slice(0, 3).map(d => JSON.stringify(d, null, 2)).join('\n\n')).replace(/</g,'&lt;')}</pre>
+          </details>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportAnnuleren()">Annuleren</button>
+            <button class="btn btn-primary" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportSchrijven()">${bezig ? 'Schrijven…' : 'Importeer (vervangt Firestore)'}</button>
+          </div>
+        `}
       </div>
     </div>
   `;
