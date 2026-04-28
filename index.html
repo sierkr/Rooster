@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
-<title>Indeling Radiologen 2026</title>
+<title>Indeling Radiologen</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f3; color: #2c2c2a; font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
@@ -304,6 +304,9 @@
   <div id="view-geb" class="view" style="display: none;"></div>
 </div>
 
+<!-- Verborgen datum-input voor datepicker (week-tekst klikbaar) -->
+<input type="date" id="weekDatumKiezer" style="position: fixed; left: -9999px; opacity: 0;" onchange="window.weekKiezerWissel(this)">
+
 <div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-handle"></div>
@@ -341,7 +344,10 @@ const state = {
   validatieRegels: [],  // array van regels
   wensen: [],           // array van wensen-documenten
   huidigeRadId: null,
-  huidigeWeek: 1,
+  // weekMaandag = ISO-string van de maandag van de huidige week.
+  // Vervangt het oude state.huidigeWeek (nummer 1-53) zodat de agenda
+  // vloeiend over jaargrenzen werkt. Wordt bij boot gezet op maandag van vandaag.
+  weekMaandag: null,
   huidigeDatum: null,
   huidigeView: 'rad',
   toonWeekRads: false,    // W5..W1 zichtbaar in beheer-raster?
@@ -350,13 +356,14 @@ const state = {
   // Activiteit-tab
   actModus: 'aantal',     // 'aantal' | 'ratio'
   actPeriode: 'jaar',     // 'jaar' | 'q1'..'q4' | 'maand' | 'custom'
-  actVanaf: '2026-01-01',
-  actTot: '2026-12-31',
+  actVanaf: '',  // wordt bij eerste gebruik gevuld met startdatum huidig jaar
+  actTot: '',
   actInvallers: false,    // W-slots zichtbaar in matrix
   actUitgeklapt: {},      // { 'W': true } - hoofdfuncties die uitgeklapt staan
   // Excel-import (v3.12.0)
   importPreview: null,    // { dagen: [...], celOpmsAantal, dagOpmsAantal, dienstAantal, fout: [], waarschuwing: [] }
   importBezig: false,
+  importJaar: '',         // '' = alle jaren in bestand, anders bv '2026' / '2027'
 };
 
 const VASTE_RAD_IDS = ['L', 'P', 'V', 'F', 'K', 'H', 'S', 'J'];
@@ -466,27 +473,43 @@ function functiesMap() {
 }
 function vandaagIso() {
   const nu = new Date();
-  if (nu.getFullYear() !== 2026) return '2026-01-05';
-  // Bouw lokale ISO-datum (toISOString is UTC en kan een dag eerder/later geven)
   const jaar = nu.getFullYear();
   const mm = String(nu.getMonth() + 1).padStart(2, '0');
   const dd = String(nu.getDate()).padStart(2, '0');
   return `${jaar}-${mm}-${dd}`;
 }
+function huidigKalenderJaar() {
+  return new Date().getFullYear();
+}
 function isoWeekVan(iso) {
-  // Parse ISO-string direct als UTC om tijdzone-shifts te vermijden:
-  // 'new Date("2026-04-27T00:00:00")' werd in NL DST geïnterpreteerd als
-  // 2026-04-26 22:00 UTC, waardoor getUTCDay() de dag ervoor teruggaf
-  // en het weeknummer 1 te laag werd.
+  // Volledig in UTC om tijdzone-shifts te vermijden.
   const [j, m, d] = iso.split('-').map(Number);
   const dt = new Date(Date.UTC(j, m - 1, d));
-  // ISO 8601: dag-van-de-week 1=ma..7=zo, donderdag bepaalt het weeknummer
   const dagNr = dt.getUTCDay() || 7;
   dt.setUTCDate(dt.getUTCDate() + 4 - dagNr);
   const jaarStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
   return Math.ceil(((dt - jaarStart) / 86400000 + 1) / 7);
 }
+function isoWeekJaarVan(iso) {
+  // ISO-week-jaar = jaar van de donderdag van die week. Kan afwijken van
+  // het kalenderjaar bij week 1 (kan in dec van vorig jaar vallen) en
+  // week 52/53 (kan in jan van volgend jaar vallen).
+  const [j, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(j, m - 1, d));
+  const dagNr = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - dagNr);
+  return dt.getUTCFullYear();
+}
+function mandagVanIso(iso) {
+  // Returns ISO-string van maandag van de week waarin iso valt.
+  const [j, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(j, m - 1, d));
+  const dagNr = dt.getUTCDay() || 7; // 1=ma..7=zo
+  dt.setUTCDate(dt.getUTCDate() - (dagNr - 1));
+  return dt.toISOString().slice(0, 10);
+}
 function mandagVanWeek(jaar, week) {
+  // Behouden voor compat. Returnt Date-object (niet ISO-string).
   const jan4 = new Date(Date.UTC(jaar, 0, 4));
   const dag = jan4.getUTCDay() || 7;
   const week1ma = new Date(jan4);
@@ -495,14 +518,21 @@ function mandagVanWeek(jaar, week) {
   doel.setUTCDate(week1ma.getUTCDate() + (week - 1) * 7);
   return doel;
 }
-function datumsVanWeek(week) {
-  const ma = mandagVanWeek(2026, week);
-  const out = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(ma);
-    d.setUTCDate(ma.getUTCDate() + i);
-    out.push(d.toISOString().slice(0, 10));
+function plusDagen(iso, n) {
+  const [j, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(j, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+function datumsVanWeek(maandagIso) {
+  // Pakt 7 datums vanaf de gegeven maandag. Accepteert ook nummer voor compat.
+  if (typeof maandagIso === 'number') {
+    // Legacy: weeknummer in huidig kalenderjaar
+    const ma = mandagVanWeek(huidigKalenderJaar(), maandagIso);
+    maandagIso = ma.toISOString().slice(0, 10);
   }
+  const out = [];
+  for (let i = 0; i < 7; i++) out.push(plusDagen(maandagIso, i));
   return out;
 }
 function formatDatum(iso, stijl = 'kort') {
@@ -512,12 +542,30 @@ function formatDatum(iso, stijl = 'kort') {
   if (stijl === 'kort') return `${DAGEN_NL[dagNr]} ${d.getDate()} ${MAANDEN[d.getMonth()]}`;
   return iso;
 }
-function weekRange(week) {
-  const datums = datumsVanWeek(week);
+function weekRange(maandagIso) {
+  // Returnt range-string. Toont jaartal als de week niet in het huidige
+  // kalenderjaar valt (gebaseerd op de maandag).
+  if (typeof maandagIso === 'number') {
+    const ma = mandagVanWeek(huidigKalenderJaar(), maandagIso);
+    maandagIso = ma.toISOString().slice(0, 10);
+  }
+  const datums = datumsVanWeek(maandagIso);
   const a = new Date(datums[0] + 'T00:00:00');
   const b = new Date(datums[6] + 'T00:00:00');
-  if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${MAANDEN[a.getMonth()]}`;
-  return `${a.getDate()} ${MAANDEN[a.getMonth()]} – ${b.getDate()} ${MAANDEN[b.getMonth()]}`;
+  const huidigJaar = huidigKalenderJaar();
+  const toonJaar = a.getFullYear() !== huidigJaar || b.getFullYear() !== huidigJaar;
+  let str;
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
+    str = `${a.getDate()} – ${b.getDate()} ${MAANDEN[a.getMonth()]}`;
+  } else if (a.getFullYear() === b.getFullYear()) {
+    str = `${a.getDate()} ${MAANDEN[a.getMonth()]} – ${b.getDate()} ${MAANDEN[b.getMonth()]}`;
+  } else {
+    // Cross-year (week 53 → week 1)
+    str = `${a.getDate()} ${MAANDEN[a.getMonth()]} ${a.getFullYear()} – ${b.getDate()} ${MAANDEN[b.getMonth()]} ${b.getFullYear()}`;
+    return str; // jaartal al inbegrepen
+  }
+  if (toonJaar) str += ` ${b.getFullYear()}`;
+  return str;
 }
 function fclass(code) {
   if (!code) return 'grid-cell-empty';
@@ -787,7 +835,8 @@ window.actImportFile = async function(input) {
       const datumCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
       const isoDatum = _parseDatumCel(datumCel?.v);
       if (!isoDatum) continue;
-      if (!isoDatum.startsWith('2026-')) continue; // alleen 2026
+      // Jaar-filter: leeg/null = alle jaren in bestand, anders alleen die jaren
+      if (state.importJaar && !isoDatum.startsWith(state.importJaar + '-')) continue;
 
       const d = new Date(isoDatum + 'T12:00:00');
       const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
@@ -863,8 +912,9 @@ window.actImportSchrijven = async function() {
     alert('Geen rechten voor schrijven.');
     return;
   }
+  const jaarDeel = state.importJaar ? `alle ${state.importJaar}-dagen` : `alle dagen in het bestand`;
   const ok = confirm(
-    `OVERSCHRIJVEN — alle 2026-dagen in Firestore worden vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
+    `OVERSCHRIJVEN — ${jaarDeel} worden in Firestore vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
     `${p.dagen.length} dagen, ${p.celOpmsAantal} cel-opmerkingen, ${p.dagOpmsAantal} dag-opmerkingen.\n\n` +
     `Bestaande data in Firestore wordt vervangen. Doorgaan?`
   );
@@ -897,6 +947,10 @@ window.actImportSchrijven = async function() {
 window.actImportAnnuleren = function() {
   state.importPreview = null;
   renderGebView();
+};
+
+window.actZetImportJaar = function(jaar) {
+  state.importJaar = jaar || '';
 };
 
 // ==== Auth ====
@@ -1278,8 +1332,10 @@ function renderRadView() {
   const rads = vasteRads();
   if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Nog geen radiologen geladen…</div>'; return; }
   const rad = radiologenMap()[state.huidigeRadId] || rads[0];
-  const datums = datumsVanWeek(state.huidigeWeek);
+  const wkMa = state.weekMaandag;
+  const datums = datumsVanWeek(wkMa);
   const vandaag = vandaagIso();
+  const wkNr = isoWeekVan(wkMa);
 
   let html = `
     <div class="card">
@@ -1293,9 +1349,9 @@ function renderRadView() {
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
-        <div style="flex: 1; text-align: center;">
-          <div style="font-size: 14px; font-weight: 500;">Week ${state.huidigeWeek}</div>
-          <div class="muted">${weekRange(state.huidigeWeek)}</div>
+        <div style="flex: 1; text-align: center; cursor: pointer;" onclick="window.kiesDatum()" title="Kies een datum">
+          <div style="font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;">Week ${wkNr}</div>
+          <div class="muted">${weekRange(wkMa)}</div>
         </div>
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
@@ -1342,7 +1398,7 @@ function renderAfdView() {
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <p class="muted" style="margin: 0 0 2px;">${formatDatum(datum, 'lang')} 2026</p>
+          <p class="muted" style="margin: 0 0 2px;">${formatDatum(datum, 'lang')}${new Date(datum+'T12:00:00').getFullYear() !== huidigKalenderJaar() ? ' ' + new Date(datum+'T12:00:00').getFullYear() : ''}</p>
           <p style="font-size: 17px; font-weight: 500; margin: 0;">Wie doet wat</p>
         </div>
         <div style="display: flex; gap: 6px;">
@@ -1400,21 +1456,22 @@ function renderDieView() {
   const vandaag = vandaagIso();
 
   // Toon een twee-weken-blok rondom de huidige weeknavigatie
-  // Gebruik state.huidigeWeek voor consistentie met andere views
-  const week = state.huidigeWeek;
-  const datums = [...datumsVanWeek(week), ...datumsVanWeek(week + 1)].slice(0, 14);
+  const wkMa1 = state.weekMaandag;
+  const wkMa2 = plusDagen(wkMa1, 7);
+  const datums = [...datumsVanWeek(wkMa1), ...datumsVanWeek(wkMa2)].slice(0, 14);
+  const wkNr1 = isoWeekVan(wkMa1);
+  const wkNr2 = isoWeekVan(wkMa2);
 
   // Speciale DECT-nummers uit instellingen (bv. spoed/echo, weekradioloog)
-  // Voor nu hardcoded; in v3.4 lezen we ze uit instellingen-collectie
   const dectSpeciaal = window.DECT_SPECIAAL || { spoed_echo: '7862', weekradioloog: '7744' };
 
   let html = `
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
-        <div style="flex: 1; text-align: center;">
-          <div style="font-size: 15px; font-weight: 500;">Diensten week ${week} – ${week+1}</div>
-          <div class="muted">${weekRange(week)} · ${weekRange(week+1)}</div>
+        <div style="flex: 1; text-align: center; cursor: pointer;" onclick="window.kiesDatum()" title="Kies een datum">
+          <div style="font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;">Diensten week ${wkNr1} – ${wkNr2}</div>
+          <div class="muted">${weekRange(wkMa1)} · ${weekRange(wkMa2)}</div>
         </div>
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
@@ -1546,7 +1603,8 @@ async function slaDienstOp(datum, radId) {
 // (Werkvloer / Mtsdagen / Mts+Stby / Werkdagen / Roostervrij / Dienst)
 // en aanwezigheid per weekdag (ma..vr).
 function periodeRange() {
-  const jaar = 2026;
+  // Periode-presets relatief aan het huidige kalenderjaar (geen hardcoded 2026 meer).
+  const jaar = huidigKalenderJaar();
   const p = state.actPeriode;
   if (p === 'q1')   return { vanaf: `${jaar}-01-01`, tot: `${jaar}-03-31` };
   if (p === 'q2')   return { vanaf: `${jaar}-04-01`, tot: `${jaar}-06-30` };
@@ -1839,9 +1897,9 @@ function renderActView() {
       </div>
       ${state.actPeriode === 'custom' ? `
         <div style="display: flex; gap: 8px; margin-top: 10px;">
-          <input type="date" class="act-period-input" id="actVanaf" value="${state.actVanaf}" onchange="window.actZetVanafTot()" min="2026-01-01" max="2026-12-31">
+          <input type="date" class="act-period-input" id="actVanaf" value="${state.actVanaf || huidigKalenderJaar()+'-01-01'}" onchange="window.actZetVanafTot()">
           <span class="muted" style="align-self: center;">tot</span>
-          <input type="date" class="act-period-input" id="actTot" value="${state.actTot}" onchange="window.actZetVanafTot()" min="2026-01-01" max="2026-12-31">
+          <input type="date" class="act-period-input" id="actTot" value="${state.actTot || huidigKalenderJaar()+'-12-31'}" onchange="window.actZetVanafTot()">
         </div>
       ` : ''}
       <p class="muted" style="margin: 10px 0 0; font-size: 11px;">${
@@ -2307,7 +2365,7 @@ window.wensHeropen = async function(id) {
 window.springNaarBeheer = function(datum) {
   if (!magBeheerLezen()) return;
   state.huidigeDatum = datum;
-  state.huidigeWeek = isoWeekVan(datum);
+  state.weekMaandag = mandagVanIso(datum);
   state.huidigeView = 'beh';
   render();
 };
@@ -2317,7 +2375,9 @@ function renderBehView() {
   const container = document.getElementById('view-beh');
   const vasteRadsList = vasteRads();
   if (vasteRadsList.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
-  const datums = datumsVanWeek(state.huidigeWeek);
+  const wkMa = state.weekMaandag;
+  const wkNr = isoWeekVan(wkMa);
+  const datums = datumsVanWeek(wkMa);
   const vandaag = vandaagIso();
 
   const alleenOpmerkingen = !magWijzigen() && magOpmerkingen();
@@ -2352,7 +2412,7 @@ function renderBehView() {
   }
 
   // Validatie van deze week
-  const conflicten = valideerWeek(state.huidigeWeek);
+  const conflicten = valideerWeek(wkMa);
   const fouten = conflicten.filter(c => c.ernst === 'blokkeren');
   const warnings = conflicten.filter(c => c.ernst === 'waarschuwing');
 
@@ -2378,12 +2438,12 @@ function renderBehView() {
 
   let bannerHtml = '';
   if (fouten.length > 0) {
-    bannerHtml = `<div class="validatie-banner validatie-banner-error" onclick="window.toonConflictenSheet(${state.huidigeWeek})">
+    bannerHtml = `<div class="validatie-banner validatie-banner-error" onclick="window.toonConflictenSheet('${wkMa}')">
       <div class="validatie-icon validatie-icon-error">!</div>
       <div><b>${fouten.length} conflict${fouten.length===1?'':'en'}</b> deze week${warnings.length ? `, en ${warnings.length} waarschuwing${warnings.length===1?'':'en'}` : ''} — tik voor details</div>
     </div>`;
   } else if (warnings.length > 0) {
-    bannerHtml = `<div class="validatie-banner validatie-banner-warn" onclick="window.toonConflictenSheet(${state.huidigeWeek})">
+    bannerHtml = `<div class="validatie-banner validatie-banner-warn" onclick="window.toonConflictenSheet('${wkMa}')">
       <div class="validatie-icon validatie-icon-warn">!</div>
       <div><b>${warnings.length} waarschuwing${warnings.length===1?'':'en'}</b> deze week — tik voor details</div>
     </div>`;
@@ -2398,9 +2458,9 @@ function renderBehView() {
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
-        <div style="flex: 1; text-align: center;">
-          <div style="font-size: 15px; font-weight: 500;">Week ${state.huidigeWeek}</div>
-          <div class="muted">${weekRange(state.huidigeWeek)}</div>
+        <div style="flex: 1; text-align: center; cursor: pointer;" onclick="window.kiesDatum()" title="Kies een datum">
+          <div style="font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;">Week ${wkNr}</div>
+          <div class="muted">${weekRange(wkMa)}</div>
         </div>
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
@@ -2494,12 +2554,13 @@ function renderBehView() {
   container.innerHTML = html;
 }
 
-window.toonConflictenSheet = function(week) {
-  const conflicten = valideerWeek(week);
+window.toonConflictenSheet = function(weekId) {
+  const conflicten = valideerWeek(weekId);
   const fouten = conflicten.filter(c => c.ernst === 'blokkeren');
   const warnings = conflicten.filter(c => c.ernst === 'waarschuwing');
+  const wkLabel = typeof weekId === 'string' ? `Week ${isoWeekVan(weekId)}` : `Week ${weekId}`;
 
-  document.getElementById('sheetTitle').textContent = `Week ${week} — controle`;
+  document.getElementById('sheetTitle').textContent = `${wkLabel} — controle`;
   document.getElementById('sheetSub').textContent = `${fouten.length} conflict${fouten.length===1?'':'en'}, ${warnings.length} waarschuwing${warnings.length===1?'':'en'}`;
 
   let body = '';
@@ -2777,6 +2838,13 @@ async function renderGebView() {
       <div class="card">
         <p class="muted" style="margin: 0 0 10px;">Lees een <code>.xlsm</code>/<code>.xlsx</code>-bestand en zet de inhoud van het sheet '${IMPORT_SHEET}' over naar Firestore. <b>Excel = waarheid</b> — bestaande dagen in Firestore worden vervangen.</p>
         ${!p ? `
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+            <label class="muted" style="font-size: 12px;">Filter jaar:</label>
+            <select class="select" id="impJaar" onchange="window.actZetImportJaar(this.value)" style="width: auto; padding: 6px 8px; font-size: 13px;">
+              <option value="" ${!state.importJaar?'selected':''}>(alle jaren)</option>
+              ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${state.importJaar==String(j)?'selected':''}>${j}</option>`).join('')}
+            </select>
+          </div>
           <input type="file" accept=".xlsx,.xlsm,.xls" id="impFile" onchange="window.actImportFile(this)" ${bezig?'disabled':''} style="font-size: 13px;">
           ${bezig ? '<div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;"><span class="loader"></span><span class="muted">Bezig met inlezen…</span></div>' : ''}
         ` : `
@@ -2847,7 +2915,8 @@ window.showView = function(v) {
 };
 window.zetRadId = function(id) { state.huidigeRadId = id; renderRadView(); };
 window.navigeerWeek = function(delta) {
-  state.huidigeWeek = Math.max(1, Math.min(53, state.huidigeWeek + delta));
+  // Spring delta weken (±7 dagen) — vloeiend over jaargrenzen.
+  state.weekMaandag = plusDagen(state.weekMaandag || mandagVanIso(vandaagIso()), delta * 7);
   render();
 };
 window.toggleWeekRads = function() {
@@ -2855,22 +2924,34 @@ window.toggleWeekRads = function() {
   render();
 };
 window.navigeerDag = function(delta) {
-  // Gebruik 12:00 als anker zodat geen enkele timezone de datum-grens kruist
   const huidig = state.huidigeDatum || vandaagIso();
-  const d = new Date(huidig + 'T12:00:00');
-  d.setDate(d.getDate() + delta);
-  if (d.getFullYear() !== 2026) return;
-  // Bouw ISO-datum uit lokale dag/maand/jaar (toISOString geeft UTC en kan een dag verschuiven)
-  const jaar = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  state.huidigeDatum = `${jaar}-${mm}-${dd}`;
-  state.huidigeWeek = isoWeekVan(state.huidigeDatum);
+  state.huidigeDatum = plusDagen(huidig, delta);
+  state.weekMaandag = mandagVanIso(state.huidigeDatum);
   render();
 };
 window.naarVandaag = function() {
   state.huidigeDatum = vandaagIso();
-  state.huidigeWeek = isoWeekVan(state.huidigeDatum);
+  state.weekMaandag = mandagVanIso(state.huidigeDatum);
+  render();
+};
+// Datepicker: opent het systeem-eigen datum-keuze-element en spring
+// naar de week van de gekozen datum.
+window.kiesDatum = function() {
+  const inp = document.getElementById('weekDatumKiezer');
+  if (!inp) return;
+  inp.value = state.weekMaandag || mandagVanIso(vandaagIso());
+  // showPicker werkt op moderne browsers; click() is fallback voor iOS Safari
+  if (typeof inp.showPicker === 'function') {
+    try { inp.showPicker(); } catch (e) { inp.click(); }
+  } else {
+    inp.click();
+  }
+};
+window.weekKiezerWissel = function(input) {
+  const v = input.value;
+  if (!v) return;
+  state.huidigeDatum = v;
+  state.weekMaandag = mandagVanIso(v);
   render();
 };
 
@@ -3323,8 +3404,8 @@ onAuthStateChanged(auth, async (user) => {
     state.user = user;
     state.profiel = profiel;
 
-    state.huidigeWeek = isoWeekVan(vandaagIso());
     state.huidigeDatum = vandaagIso();
+    state.weekMaandag = mandagVanIso(state.huidigeDatum);
 
     // Iedereen start op Overzicht (= meest gebruikte view)
     state.huidigeView = 'beh';
