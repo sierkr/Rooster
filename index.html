@@ -206,6 +206,13 @@
   .act-bar-fg { position: relative; }
   .act-pct { font-variant-numeric: tabular-nums; }
   .act-period-input { padding: 6px 8px; font-size: 12px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; font-family: inherit; }
+  /* Datum-prikker overlay: native date-input ligt onzichtbaar OVER de week-tekst.
+     Klik op de week-tekst opent zo direct de OS-eigen datepicker (werkt op iOS,
+     Android en desktop) — i.t.t. input.showPicker() dat door browsers vaak
+     geblokkeerd wordt als de input ver buiten de viewport zit. */
+  .wk-datum-wrap { position: relative; display: inline-block; }
+  .wk-datum-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0; background: transparent; font-size: 16px; color: transparent; -webkit-appearance: none; appearance: none; width: 100%; height: 100%; }
+  .wk-datum-input::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; width: 100%; height: 100%; position: absolute; inset: 0; }
   /* Verdeling-modus: kleur-zones rond rij-gemiddelde (parttime-gecorrigeerd) */
   .act-cell.act-zone-laag { background: #e6f1fb; }
   .act-cell.act-zone-hoog { background: #faeeda; }
@@ -303,9 +310,6 @@
   <div id="view-reg" class="view" style="display: none;"></div>
   <div id="view-geb" class="view" style="display: none;"></div>
 </div>
-
-<!-- Verborgen datum-input voor datepicker (week-tekst klikbaar) -->
-<input type="date" id="weekDatumKiezer" style="position: fixed; left: -9999px; opacity: 0;" onchange="window.weekKiezerWissel(this)">
 
 <div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet">
@@ -1349,9 +1353,10 @@ function renderRadView() {
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
-        <div style="flex: 1; text-align: center; cursor: pointer;" onclick="window.kiesDatum()" title="Kies een datum">
+        <div class="wk-datum-wrap" style="flex: 1; text-align: center;" title="Kies een datum">
           <div style="font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;">Week ${wkNr}</div>
           <div class="muted">${weekRange(wkMa)}</div>
+          <input type="date" class="wk-datum-input" value="${wkMa}" onchange="window.weekKiezerWissel(this)">
         </div>
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
@@ -1469,9 +1474,10 @@ function renderDieView() {
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
-        <div style="flex: 1; text-align: center; cursor: pointer;" onclick="window.kiesDatum()" title="Kies een datum">
+        <div class="wk-datum-wrap" style="flex: 1; text-align: center;" title="Kies een datum">
           <div style="font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;">Diensten week ${wkNr1} – ${wkNr2}</div>
           <div class="muted">${weekRange(wkMa1)} · ${weekRange(wkMa2)}</div>
+          <input type="date" class="wk-datum-input" value="${wkMa1}" onchange="window.weekKiezerWissel(this)">
         </div>
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
@@ -2458,9 +2464,10 @@ function renderBehView() {
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
-        <div style="flex: 1; text-align: center; cursor: pointer;" onclick="window.kiesDatum()" title="Kies een datum">
+        <div class="wk-datum-wrap" style="flex: 1; text-align: center;" title="Kies een datum">
           <div style="font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;">Week ${wkNr}</div>
           <div class="muted">${weekRange(wkMa)}</div>
+          <input type="date" class="wk-datum-input" value="${wkMa}" onchange="window.weekKiezerWissel(this)">
         </div>
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
@@ -2934,19 +2941,8 @@ window.naarVandaag = function() {
   state.weekMaandag = mandagVanIso(state.huidigeDatum);
   render();
 };
-// Datepicker: opent het systeem-eigen datum-keuze-element en spring
-// naar de week van de gekozen datum.
-window.kiesDatum = function() {
-  const inp = document.getElementById('weekDatumKiezer');
-  if (!inp) return;
-  inp.value = state.weekMaandag || mandagVanIso(vandaagIso());
-  // showPicker werkt op moderne browsers; click() is fallback voor iOS Safari
-  if (typeof inp.showPicker === 'function') {
-    try { inp.showPicker(); } catch (e) { inp.click(); }
-  } else {
-    inp.click();
-  }
-};
+// Datepicker handler — wordt aangeroepen door de onzichtbare date-input
+// die over elke week-tekst ligt (zie .wk-datum-wrap / .wk-datum-input CSS).
 window.weekKiezerWissel = function(input) {
   const v = input.value;
   if (!v) return;
