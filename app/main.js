@@ -16,6 +16,7 @@ import { renderAfdView } from './views/afdeling.js';
 import { renderDieView } from './views/dienst.js';
 import { renderActView } from './views/activiteit.js';
 import { renderWenView } from './views/wensen.js';
+import { renderVakView } from './views/vakantie.js';
 import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
@@ -140,6 +141,8 @@ function renderTabs() {
     }
     tabs.push({ id: 'wen', label });
   }
+  // Vakantie-tab: zichtbaar voor iedereen met leesrechten
+  tabs.push({ id: 'vak', label: 'Vakantie' });
   if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
 
@@ -147,7 +150,7 @@ function renderTabs() {
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  ['rad', 'afd', 'die', 'act', 'wen', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'reg', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -172,6 +175,7 @@ function render() {
   else if (state.huidigeView === 'die') renderDieView();
   else if (state.huidigeView === 'act') renderActView();
   else if (state.huidigeView === 'wen') renderWenView();
+  else if (state.huidigeView === 'vak') renderVakView();
   else if (state.huidigeView === 'beh') renderBehView();
   else if (state.huidigeView === 'reg') renderRegView();
   else if (state.huidigeView === 'geb') renderGebView();
