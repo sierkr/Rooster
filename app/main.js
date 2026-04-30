@@ -1,13 +1,12 @@
 // Entry point van de app. Laadt alle modules in juiste volgorde, registreert
 // algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, doc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
   vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
   magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien,
-  isBeperktZichtRol, STANDAARD_WACHTWOORD, valideerWachtwoord,
 } from './helpers.js';
 import { openSheet, closeSheet } from './sheets.js';
 
@@ -17,6 +16,8 @@ import { renderAfdView } from './views/afdeling.js';
 import { renderDieView } from './views/dienst.js';
 import { renderActView } from './views/activiteit.js';
 import { renderWenView } from './views/wensen.js';
+import { renderVakView } from './views/vakantie.js';
+import { renderVakView } from './views/vakantie.js';
 import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
@@ -27,10 +28,6 @@ window.openSheet  = openSheet;
 window.closeSheet = closeSheet;
 
 // ==== Auth handlers ==========================================================
-
-// Onthoudt het wachtwoord van de zojuist uitgevoerde login. Wordt na de
-// eerste-login check op null gezet. Niet in state — alleen module-scope.
-let _laatsteLoginWachtwoord = null;
 
 window.doLogin = async function() {
   const email = document.getElementById('loginEmail').value.trim();
@@ -43,10 +40,8 @@ window.doLogin = async function() {
     return;
   }
   try {
-    _laatsteLoginWachtwoord = pw;
     await signInWithEmailAndPassword(auth, email, pw);
   } catch (e) {
-    _laatsteLoginWachtwoord = null;
     err.textContent = vertalFirebaseFout(e.code);
     err.style.display = 'block';
   }
@@ -131,26 +126,14 @@ window.toonGebruikerSheet = function() {
 // ==== Tabs + user chip =======================================================
 
 function renderTabs() {
+  const tabs = [
+    { id: 'beh', label: 'Overzicht' },
+    { id: 'rad', label: 'Radioloog' },
+    { id: 'afd', label: 'Afdeling' },
+    { id: 'die', label: 'Dienst' },
+  ];
   const rol = state.profiel?.rol;
-  // Tab-zichtbaarheid wordt volledig bepaald door permissies. De rol bepaalt
-  // alleen of de Radioloog-tab zichtbaar is (heeft koppeling met radioloog_id).
-  const tabs = [];
-
-  // Overzicht: zichtbaar als gebruiker mag wijzigen OF mag bekijken
-  if (magBeheerLezen()) tabs.push({ id: 'beh', label: 'Overzicht' });
-
-  // Radioloog-tab: alleen voor mensen met rol radioloog
-  if (rol === 'radioloog') tabs.push({ id: 'rad', label: 'Radioloog' });
-
-  // Afdeling + Dienst: altijd zichtbaar
-  tabs.push({ id: 'afd', label: 'Afdeling' });
-  tabs.push({ id: 'die', label: 'Dienst' });
-
-  // Activiteit: zichtbaar voor wie het overzicht ook ziet (en geen technician/secretariaat is)
-  // → behouden zoals voorheen: alleen voor radioloog of beheerder
-  if (rol === 'radioloog' || rol === 'beheerder') tabs.push({ id: 'act', label: 'Activiteit' });
-
-  // Wensen
+  tabs.push({ id: 'act', label: 'Activiteit' });
   if (rol === 'radioloog' || magAlleWensenZien()) {
     let label = 'Wensen';
     if (magAlleWensenZien()) {
@@ -159,21 +142,16 @@ function renderTabs() {
     }
     tabs.push({ id: 'wen', label });
   }
-
+  // Vakantie-tab: zichtbaar voor iedereen met leesrechten
+  tabs.push({ id: 'vak', label: 'Vakantie' });
   if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
-
-  // Als huidige tab niet meer in de lijst staat (rol-wijziging tijdens sessie),
-  // val terug op de eerste beschikbare tab.
-  if (!tabs.some(t => t.id === state.huidigeView)) {
-    state.huidigeView = tabs[0]?.id || 'afd';
-  }
 
   document.getElementById('tabs').innerHTML = tabs.map(t => `
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  ['rad', 'afd', 'die', 'act', 'wen', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'reg', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -198,6 +176,7 @@ function render() {
   else if (state.huidigeView === 'die') renderDieView();
   else if (state.huidigeView === 'act') renderActView();
   else if (state.huidigeView === 'wen') renderWenView();
+  else if (state.huidigeView === 'vak') renderVakView();
   else if (state.huidigeView === 'beh') renderBehView();
   else if (state.huidigeView === 'reg') renderRegView();
   else if (state.huidigeView === 'geb') renderGebView();
@@ -262,6 +241,11 @@ function luisterNaarData() {
     state.wensen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
   }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'vakantie_rankings'), (snap) => {
+    state.vakantieRankings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
 }
 
 // ==== Boot ===================================================================
@@ -287,19 +271,8 @@ onAuthStateChanged(auth, async (user) => {
     state.huidigeView = 'beh';
 
     document.getElementById('login').style.display = 'none';
-
-    // Eerste-login check: als gebruiker met standaard wachtwoord ingelogd is
-    // én er nog geen wachtwoordwissel heeft plaatsgevonden, forceer wissel.
-    const moetWisselen = profiel.wachtwoord_gewijzigd !== true
-                         && _laatsteLoginWachtwoord === STANDAARD_WACHTWOORD;
-    _laatsteLoginWachtwoord = null;
-
-    if (moetWisselen) {
-      toonEersteLoginSheet();
-      return;
-    }
-
     document.getElementById('app').style.display = 'block';
+
     renderTabs();
     luisterNaarData();
   } catch (e) {
@@ -310,63 +283,3 @@ onAuthStateChanged(auth, async (user) => {
     await signOut(auth);
   }
 });
-
-// Eerste-login wachtwoord-wissel: gebruiker moet een eigen wachtwoord kiezen
-// voordat de app verder laadt.
-function toonEersteLoginSheet() {
-  document.getElementById('sheetTitle').textContent = 'Welkom — kies een wachtwoord';
-  document.getElementById('sheetSub').textContent = 'Eerste keer inloggen — vervang het standaard wachtwoord';
-  document.getElementById('sheetBody').innerHTML = `
-    <div class="form-info" style="font-size: 12px; margin-bottom: 1rem;">Je bent ingelogd met het standaard wachtwoord. Kies nu een eigen wachtwoord van minstens 6 tekens.</div>
-    <div class="form-field">
-      <label class="form-label">Nieuw wachtwoord</label>
-      <input type="password" class="input" id="elNw1" autocomplete="new-password">
-    </div>
-    <div class="form-field">
-      <label class="form-label">Bevestig wachtwoord</label>
-      <input type="password" class="input" id="elNw2" autocomplete="new-password">
-    </div>
-    <div id="elFout" class="form-info" style="font-size: 12px; color: #c0392b; display: none; margin-bottom: 8px;"></div>
-    <button class="btn btn-primary" style="width: 100%;" onclick="window.elOpslaan()">Wachtwoord opslaan</button>
-  `;
-  // Sheet openen zonder sluit-mogelijkheid (geen annuleer-knop)
-  openSheet();
-}
-
-window.elOpslaan = async function() {
-  const nw1 = document.getElementById('elNw1').value;
-  const nw2 = document.getElementById('elNw2').value;
-  const fout = document.getElementById('elFout');
-  fout.style.display = 'none';
-
-  const fnFout = (msg) => {
-    fout.textContent = msg;
-    fout.style.display = 'block';
-  };
-
-  if (nw1 !== nw2) { fnFout('De wachtwoorden komen niet overeen'); return; }
-  const fout1 = valideerWachtwoord(nw1);
-  if (fout1) { fnFout(fout1); return; }
-
-  const btn = document.querySelector('#sheetBody .btn-primary');
-  if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
-
-  try {
-    await updatePassword(state.user, nw1);
-    await updateDoc(doc(db, 'gebruikers', state.user.uid), { wachtwoord_gewijzigd: true });
-    state.profiel.wachtwoord_gewijzigd = true;
-    closeSheet();
-    document.getElementById('app').style.display = 'block';
-    renderTabs();
-    luisterNaarData();
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Wachtwoord opslaan'; }
-    // Speciaal geval: Firebase vereist soms recente login voor updatePassword
-    if (e.code === 'auth/requires-recent-login') {
-      fnFout('Sessie te oud — log opnieuw in en probeer nogmaals');
-      setTimeout(async () => { await signOut(auth); }, 2000);
-    } else {
-      fnFout('Wijzigen mislukt: ' + (e.message || e.code));
-    }
-  }
-};

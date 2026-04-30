@@ -10,6 +10,8 @@ export const state = {
   indelingMap: {},        // datum (ISO) -> indeling-doc
   validatieRegels: [],    // array van regels
   wensen: [],             // array van wensen-documenten
+  vakantieRankings: [],   // array van vakantie_rankings-documenten
+  vakToonBeheerKolommen: false, // X/Min/Rank kolommen tonen in Vakantie-tab
   huidigeRadId: null,
   // weekMaandag = ISO-string van de maandag van de huidige week.
   // Vervangt het oude state.huidigeWeek (nummer 1-53) zodat de agenda
