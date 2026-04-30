@@ -131,37 +131,43 @@ window.toonGebruikerSheet = function() {
 // ==== Tabs + user chip =======================================================
 
 function renderTabs() {
-  const beperkt = isBeperktZichtRol();
-  const tabs = beperkt
-    ? [
-        { id: 'beh', label: 'Overzicht' },
-        { id: 'afd', label: 'Afdeling' },
-        { id: 'die', label: 'Dienst' },
-      ]
-    : [
-        { id: 'beh', label: 'Overzicht' },
-        { id: 'rad', label: 'Radioloog' },
-        { id: 'afd', label: 'Afdeling' },
-        { id: 'die', label: 'Dienst' },
-      ];
   const rol = state.profiel?.rol;
-  if (!beperkt) {
-    tabs.push({ id: 'act', label: 'Activiteit' });
-    if (rol === 'radioloog' || magAlleWensenZien()) {
-      let label = 'Wensen';
-      if (magAlleWensenZien()) {
-        const open = state.wensen.filter(w => (w.status || 'open') === 'open' && w.datum >= vandaagIso()).length;
-        if (open > 0) label += `<span class="tab-badge">${open}</span>`;
-      }
-      tabs.push({ id: 'wen', label });
+  // Tab-zichtbaarheid wordt volledig bepaald door permissies. De rol bepaalt
+  // alleen of de Radioloog-tab zichtbaar is (heeft koppeling met radioloog_id).
+  const tabs = [];
+
+  // Overzicht: zichtbaar als gebruiker mag wijzigen OF mag bekijken
+  if (magBeheerLezen()) tabs.push({ id: 'beh', label: 'Overzicht' });
+
+  // Radioloog-tab: alleen voor mensen met rol radioloog
+  if (rol === 'radioloog') tabs.push({ id: 'rad', label: 'Radioloog' });
+
+  // Afdeling + Dienst: altijd zichtbaar
+  tabs.push({ id: 'afd', label: 'Afdeling' });
+  tabs.push({ id: 'die', label: 'Dienst' });
+
+  // Activiteit: zichtbaar voor wie het overzicht ook ziet (en geen technician/secretariaat is)
+  // → behouden zoals voorheen: alleen voor radioloog of beheerder
+  if (rol === 'radioloog' || rol === 'beheerder') tabs.push({ id: 'act', label: 'Activiteit' });
+
+  // Wensen
+  if (rol === 'radioloog' || magAlleWensenZien()) {
+    let label = 'Wensen';
+    if (magAlleWensenZien()) {
+      const open = state.wensen.filter(w => (w.status || 'open') === 'open' && w.datum >= vandaagIso()).length;
+      if (open > 0) label += `<span class="tab-badge">${open}</span>`;
     }
-    if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
-    if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
+    tabs.push({ id: 'wen', label });
   }
 
+  if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
+  if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
+
   // Als huidige tab niet meer in de lijst staat (rol-wijziging tijdens sessie),
-  // val terug op Overzicht.
-  if (!tabs.some(t => t.id === state.huidigeView)) state.huidigeView = 'beh';
+  // val terug op de eerste beschikbare tab.
+  if (!tabs.some(t => t.id === state.huidigeView)) {
+    state.huidigeView = tabs[0]?.id || 'afd';
+  }
 
   document.getElementById('tabs').innerHTML = tabs.map(t => `
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>

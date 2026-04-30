@@ -10,11 +10,11 @@ export function defaultPermissies(rol) {
     mag_gebruikers: true, mag_wensen_alle: true,
   };
   if (rol === 'secretariaat') return {
-    mag_beheer: false, mag_beheer_lezen: true, mag_regels: false,
+    mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
     mag_gebruikers: false, mag_wensen_alle: false,
   };
   if (rol === 'radioloog') return {
-    mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
+    mag_beheer: false, mag_beheer_lezen: true, mag_regels: false,
     mag_gebruikers: false, mag_wensen_alle: false,
   };
   if (rol === 'technician' || rol === 'lezer') return {

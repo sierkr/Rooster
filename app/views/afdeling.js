@@ -2,7 +2,7 @@
 import { state, SLOTS } from '../state.js';
 import {
   vasteRads, functiesMap, vandaagIso, formatDatum, functieNaam,
-  toewijzingVoor, huidigKalenderJaar, isBeperktZichtRol,
+  toewijzingVoor, huidigKalenderJaar, magBeheerLezen,
 } from '../helpers.js';
 
 export function renderAfdView() {
@@ -30,8 +30,9 @@ export function renderAfdView() {
   if (!dag) {
     html += `<div class="empty-state"><div class="empty-state-icon">·</div>Geen indeling voor deze dag</div>`;
   } else {
-    const beperkt = isBeperktZichtRol();
-    // Privacy-gevoelige codes die voor secretariaat + technician verborgen blijven.
+    const beperkt = !magBeheerLezen();
+    // Privacy-gevoelige codes die voor gebruikers zonder Overzicht-rechten
+    // verborgen blijven.
     const VERBORGEN_CODES = ['V', 'Z', 'K'];
 
     const items = [];

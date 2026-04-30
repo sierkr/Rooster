@@ -247,8 +247,8 @@ window.gebruikerBewerken = function(uid) {
   const huidigePerm = g.permissies || defaultPermissies(g.rol);
 
   const permissies = [
-    { id: 'mag_beheer', label: 'Beheer (rooster wijzigen)' },
-    { id: 'mag_beheer_lezen', label: 'Beheer (alleen-lezen)' },
+    { id: 'mag_beheer', label: 'Overzicht — wijzigen' },
+    { id: 'mag_beheer_lezen', label: 'Overzicht — bekijken' },
     { id: 'mag_regels', label: 'Regels' },
     { id: 'mag_gebruikers', label: 'Gebruikers' },
     { id: 'mag_wensen_alle', label: 'Wensen van iedereen zien' },
@@ -287,8 +287,6 @@ window.gebruikerBewerken = function(uid) {
           `;
         }).join('')}
       </div>
-      <p class="muted" style="margin-top: 6px; font-size: 11px;">Knop hieronder zet permissies terug op de standaard voor de gekozen rol.</p>
-      <button class="btn" style="width: 100%; font-size: 12px; padding: 6px; margin-top: 4px;" onclick="window.wzPermissiesReset()">Permissies → standaard voor rol</button>
     </div>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>

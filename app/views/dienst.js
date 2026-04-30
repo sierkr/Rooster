@@ -8,13 +8,13 @@ import { openSheet, closeSheet } from '../sheets.js';
 import { slaDienstOp } from '../save.js';
 
 // Bouwt een tel: link met vaste prefix +3175650.
-// Werkt voor zowel 3-cijferige interne dect-nummers als al volledige nummers.
+// Werkt voor zowel 4-cijferige interne dect-nummers als al volledige nummers.
 // Als het nummer al met + begint laten we het ongemoeid.
 function telLink(nummer) {
   const n = String(nummer || '').trim();
   if (!n) return '';
-  if (n.startsWith('+')) return n;
-  return '+3175650' + n.replace(/^0+/, '');
+  if (n.startsWith('+')) return 'tel:' + n;
+  return 'tel:+3175650' + n.replace(/^0+/, '');
 }
 
 export function renderDieView() {
