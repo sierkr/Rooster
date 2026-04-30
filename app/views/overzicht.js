@@ -135,8 +135,11 @@ export function renderBehView() {
             <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" ${dagOnclick} style="cursor: ${dagCursor}; position: relative;">${dagLabel}${dagOpmMarker}</div>
             ${allKolommen.map((k, i) => {
               const codes = toewijzingVoor(datum, k.id);
-              const code = codes[0] || '';
-              const cls = code ? fclass(code) : 'grid-cell-empty';
+              const code1 = codes[0] || '';
+              const code2 = codes[1] || '';
+              const isDuo = !!code2;
+              // Bij duo: gebruik kleur van eerste code als hoofdkleur
+              const cls = code1 ? fclass(code1) : 'grid-cell-empty';
               const celOpm = state.indelingMap[datum]?.cel_opmerkingen?.[k.id];
               let onclick, readonly;
               if (alleenOpmerkingen || alleenLezen) {
@@ -157,7 +160,12 @@ export function renderBehView() {
               const wens = wensenIndex[`${datum}|${k.id}`];
               const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="Wens: ${wens}"></span>` : '';
               const opmMarker = celOpm ? `<span class="opm-marker" title="${(celOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
-              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${code || '·'}${wensMarker}${opmMarker}</div>`;
+              // Duo-weergave: code1 linksboven, code2 rechtsonder, diagonale streep
+              const inhoud = isDuo
+                ? `<span class="cel-duo-1">${code1}</span><span class="cel-duo-2 ${fclass(code2)}">${code2}</span><span class="cel-duo-streep"></span>`
+                : (code1 || '·');
+              const duoCls = isDuo ? 'grid-cell-duo' : '';
+              return `<div class="grid-cell ${cls} ${readonly} ${statusCls} ${duoCls}" style="${sep}" ${onclick}>${inhoud}${wensMarker}${opmMarker}</div>`;
             }).join('')}
             ${toonW ? (() => {
               const n = telPerDag(datum);
@@ -249,7 +257,12 @@ window.toonCelDetail = function(datum, radId) {
   const celOpm = dag?.cel_opmerkingen?.[radId] || '';
 
   document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
-  document.getElementById('sheetSub').textContent = huidigCode ? `${huidigCode} · ${functieNaam(huidigCode)}` : 'Geen toewijzing';
+  // Sub-tekst: één code = "B · Bucky/Echo", twee codes = "B · Bucky/Echo  +  M · Mammo"
+  let subTekst;
+  if (codes.length === 0) subTekst = 'Geen toewijzing';
+  else if (codes.length === 1) subTekst = `${codes[0]} · ${functieNaam(codes[0])}`;
+  else subTekst = `Ochtend ${codes[0]} · ${functieNaam(codes[0])} — Middag ${codes[1]} · ${functieNaam(codes[1])}`;
+  document.getElementById('sheetSub').textContent = subTekst;
 
   const opmHtml = celOpm
     ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${celOpm.replace(/</g,'&lt;')}</div></div>`
@@ -263,13 +276,20 @@ window.toonCelDetail = function(datum, radId) {
   openSheet();
 };
 
+// Tijdelijke staat voor de picker — wat de gebruiker nu heeft geselecteerd.
+// Wordt bij elke openCell opnieuw geïnitialiseerd vanuit de huidige toewijzing.
+let _pickerCodes = [];
+let _pickerCtx   = { datum: null, radId: null };
+
 window.openCell = function(datum, radId) {
   if (!magWijzigen()) return;
   const radsMap = radiologenMap();
   const rad = radsMap[radId];
   const label = rad ? rad.code : radId;
   const codes = toewijzingVoor(datum, radId);
-  const huidigCode = codes[0] || '';
+  _pickerCodes = [...codes].slice(0, 2);
+  _pickerCtx = { datum, radId };
+
   const dag = state.indelingMap[datum];
   const huidigOpm = dag?.cel_opmerkingen?.[radId] || '';
 
@@ -283,27 +303,91 @@ window.openCell = function(datum, radId) {
   }
 
   document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
-  document.getElementById('sheetSub').textContent = huidigCode ? `Huidig: ${huidigCode} · ${functieNaam(huidigCode)}` : 'Nog geen toewijzing';
+  document.getElementById('sheetSub').textContent = 'Tik 1 code (hele dag) of 2 codes (ochtend/middag)';
 
-  const gangbaar = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
-  const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
   const opmEsc = huidigOpm.replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
   document.getElementById('sheetBody').innerHTML = `
     ${wensInfo}
-    <div class="picker-grid">
-      ${fs.map(f => `<div class="picker-option f-${f.code} ${f.code === huidigCode ? 'selected' : ''}" onclick="window.selecteerCode('${datum}', '${radId}', '${f.code}')">${f.code}<div class="picker-label">${f.naam.split('/')[0]}</div></div>`).join('')}
-      <div class="picker-option" onclick="window.selecteerCode('${datum}', '${radId}', '')" style="grid-column: span 2;">—<div class="picker-label">Leegmaken</div></div>
-      <textarea class="input" id="celOpm" rows="2" placeholder="Opmerking…" style="grid-column: span 2; resize: vertical; font-size: 13px;">${opmEsc}</textarea>
+    <div id="pickerSelectie" style="margin-bottom: 10px;"></div>
+    <div class="picker-grid" id="pickerGrid"></div>
+    <div style="display: flex; gap: 6px; margin-top: 8px; margin-bottom: 12px;">
+      <button class="btn" style="flex: 1; font-size: 12px; padding: 8px;" onclick="window.pickerLeegmaken()">Leegmaken</button>
     </div>
+    <textarea class="input" id="celOpm" rows="2" placeholder="Opmerking…" style="resize: vertical; font-size: 13px; width: 100%; margin-bottom: 10px;">${opmEsc}</textarea>
     <div style="display: flex; gap: 8px;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
-      <button class="btn btn-primary" style="flex: 1;" onclick="window.slaCelOpmerkingAlleen('${datum}', '${radId}')">Opmerking opslaan</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.pickerOpslaan()">Opslaan</button>
     </div>
   `;
+  pickerHertekenen();
   openSheet();
 };
 
+// Hertekenen van de picker-grid en selectie-indicator op basis van _pickerCodes
+function pickerHertekenen() {
+  const gangbaar = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
+  const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
+  const codes = _pickerCodes;
+  const grid = document.getElementById('pickerGrid');
+  const sel  = document.getElementById('pickerSelectie');
+  if (!grid || !sel) return;
+
+  // Selectie-indicator
+  if (codes.length === 0) {
+    sel.innerHTML = '<div class="muted" style="font-size: 12px; font-style: italic;">Geen code geselecteerd</div>';
+  } else if (codes.length === 1) {
+    sel.innerHTML = `<div style="font-size: 13px;"><b>Hele dag:</b> ${codes[0]} · ${functieNaam(codes[0])}</div>`;
+  } else {
+    sel.innerHTML = `<div style="font-size: 13px;"><b>Ochtend:</b> ${codes[0]} · ${functieNaam(codes[0])}<br><b>Middag:</b> ${codes[1]} · ${functieNaam(codes[1])}</div>`;
+  }
+
+  // Picker-knoppen
+  const vol = codes.length >= 2;
+  grid.innerHTML = fs.map(f => {
+    const idx = codes.indexOf(f.code);
+    const isGekozen = idx !== -1;
+    const isUitgegrijsd = vol && !isGekozen;
+    const positie = isGekozen ? (idx === 0 ? '①' : '②') : '';
+    return `<div class="picker-option f-${f.code} ${isGekozen ? 'selected' : ''}"
+              style="${isUitgegrijsd ? 'opacity:0.35; cursor:not-allowed;' : ''}"
+              onclick="window.pickerToggle('${f.code}')">
+              ${f.code}${positie ? ` <sup style="font-size:9px">${positie}</sup>` : ''}
+              <div class="picker-label">${f.naam.split('/')[0]}</div>
+            </div>`;
+  }).join('');
+}
+
+// Toggle een code: aan/uit/negeer (als al 2 staan en deze niet gekozen).
+window.pickerToggle = function(code) {
+  const idx = _pickerCodes.indexOf(code);
+  if (idx !== -1) {
+    // Code zit er al → eruit halen
+    _pickerCodes.splice(idx, 1);
+  } else if (_pickerCodes.length < 2) {
+    // Plek vrij → toevoegen
+    _pickerCodes.push(code);
+  } else {
+    // Al 2 codes en dit is een nieuwe → negeer (optie 3)
+    return;
+  }
+  pickerHertekenen();
+};
+
+window.pickerLeegmaken = function() {
+  _pickerCodes = [];
+  pickerHertekenen();
+};
+
+window.pickerOpslaan = async function() {
+  const opm = (document.getElementById('celOpm')?.value || '').trim();
+  const { datum, radId } = _pickerCtx;
+  const codesArr = [..._pickerCodes];
+  window.closeSheet();
+  await slaToewijzingOp(datum, radId, codesArr, opm);
+};
+
+// Behouden voor compat (oude callsites die selecteerCode aanroepen)
 window.selecteerCode = async function(datum, radId, code) {
   const opm = (document.getElementById('celOpm')?.value || '').trim();
   window.closeSheet();

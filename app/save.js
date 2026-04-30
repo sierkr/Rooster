@@ -8,16 +8,26 @@ import { checkCelConflict } from './validatie.js';
 
 // Schrijf cel-toewijzing + (optioneel) cel-opmerking. Ook check op
 // blokkerende regels en verwerkte wensen.
+//
+// `code` mag een string zijn (één code) of een array van codes (max 2).
+// Lege string of lege array betekent: cel leegmaken.
 export async function slaToewijzingOp(datum, radId, code, opmerking) {
+  // Normaliseer naar array
+  const codesArr = Array.isArray(code)
+    ? code.filter(Boolean)
+    : (code ? [code] : []);
+  // De "primaire" code (voor wens-matching) is de eerste in de array
+  const primaireCode = codesArr[0] || '';
+
   const bestaand = state.indelingMap[datum];
   const toewijzingen = { ...(bestaand?.toewijzingen || {}) };
-  toewijzingen[radId] = code ? [code] : [];
+  toewijzingen[radId] = codesArr;
 
   const dagNr = new Date(datum + 'T00:00:00').getDay();
   const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
 
   // Pre-check: zou deze wijziging een blokkerende regel triggeren?
-  const conflicten = checkCelConflict(datum, radId, code ? [code] : []);
+  const conflicten = checkCelConflict(datum, radId, codesArr);
   const blokkades = conflicten.filter(c => c.ernst === 'blokkeren');
   if (blokkades.length > 0) {
     const ok = confirm(
@@ -33,10 +43,10 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
     w.datum === datum && w.radioloog_id === radId && (w.status || 'open') === 'verwerkt'
   );
   if (verwerkteWens) {
-    const nieuweHoofd = hoofdLetterCode(code || '');
+    const nieuweHoofd = hoofdLetterCode(primaireCode);
     let breekt = false;
     if (verwerkteWens.type === 'vakantie') breekt = nieuweHoofd !== 'V';
-    else if (verwerkteWens.type === 'niet_beschikbaar') breekt = code && !['V','Z','K','Q'].includes(nieuweHoofd);
+    else if (verwerkteWens.type === 'niet_beschikbaar') breekt = primaireCode && !['V','Z','K','Q'].includes(nieuweHoofd);
     else if (verwerkteWens.type === 'voorkeur') breekt = nieuweHoofd !== verwerkteWens.voorkeur_code;
 
     if (breekt) {
@@ -87,7 +97,7 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
       datum,
       radioloog_id: radId,
       van: bestaand?.toewijzingen?.[radId] || [],
-      naar: code ? [code] : [],
+      naar: codesArr,
       wanneer: serverTimestamp(),
     });
     if (celOpmGewijzigd) {
@@ -109,10 +119,10 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
         w.datum === datum && w.radioloog_id === radId && (w.status || 'open') === 'open'
       );
       if (openWens) {
-        const nieuweHoofd = hoofdLetterCode(code || '');
+        const nieuweHoofd = hoofdLetterCode(primaireCode);
         let matcht = false;
         if (openWens.type === 'vakantie') matcht = nieuweHoofd === 'V';
-        else if (openWens.type === 'niet_beschikbaar') matcht = !code || ['V','Z','K','Q'].includes(nieuweHoofd);
+        else if (openWens.type === 'niet_beschikbaar') matcht = !primaireCode || ['V','Z','K','Q'].includes(nieuweHoofd);
         else if (openWens.type === 'voorkeur') matcht = nieuweHoofd === openWens.voorkeur_code;
 
         if (matcht) {

@@ -39,13 +39,24 @@ export function renderAfdView() {
     vasteRads().forEach(r => {
       const codes = toewijzingVoor(datum, r.id);
       if (codes.length === 0) return;
+      const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+      // Bij beperkt zicht: hele item verbergen als ÉÉN van de codes privacy-gevoelig is
+      if (beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l))) return;
+
+      // Functienaam zonder "/Echo"-suffix etc.
+      const eersteDeel = (code) => {
+        const f = functiesMap()[code];
+        const naam = f?.naam || functieNaam(code);
+        return naam.split('/')[0];
+      };
+
       const hoofdCode = codes[0];
-      const hoofdLetter = hoofdCode.charAt(0).toUpperCase();
-      if (beperkt && VERBORGEN_CODES.includes(hoofdLetter)) return;
-      const f = functiesMap()[hoofdCode];
-      const naam = f?.naam || functieNaam(hoofdCode);
-      const isAfwezig = ['V', 'Z', 'A', 'K', 'Q', 'T'].includes(hoofdLetter);
-      items.push({ rad: r, code: hoofdCode, naam, isAfwezig });
+      const isAfwezig = ['V', 'Z', 'A', 'K', 'Q', 'T'].includes(hoofdLetters[0]);
+      // Naam: bij duo voluit met "/" tussen beide functienamen
+      const naam = codes.length === 2
+        ? `${eersteDeel(codes[0])}/${eersteDeel(codes[1])}`
+        : (functiesMap()[hoofdCode]?.naam || functieNaam(hoofdCode));
+      items.push({ rad: r, code: hoofdCode, codes, naam, isAfwezig });
     });
     items.sort((a, b) => { if (a.isAfwezig !== b.isAfwezig) return a.isAfwezig ? 1 : -1; return a.naam.localeCompare(b.naam); });
 
