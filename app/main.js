@@ -1,12 +1,13 @@
 // Entry point van de app. Laadt alle modules in juiste volgorde, registreert
 // algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, doc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
   vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
   magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien,
+  isBeperktZichtRol, STANDAARD_WACHTWOORD, valideerWachtwoord,
 } from './helpers.js';
 import { openSheet, closeSheet } from './sheets.js';
 
@@ -27,6 +28,10 @@ window.closeSheet = closeSheet;
 
 // ==== Auth handlers ==========================================================
 
+// Onthoudt het wachtwoord van de zojuist uitgevoerde login. Wordt na de
+// eerste-login check op null gezet. Niet in state — alleen module-scope.
+let _laatsteLoginWachtwoord = null;
+
 window.doLogin = async function() {
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPassword').value;
@@ -38,8 +43,10 @@ window.doLogin = async function() {
     return;
   }
   try {
+    _laatsteLoginWachtwoord = pw;
     await signInWithEmailAndPassword(auth, email, pw);
   } catch (e) {
+    _laatsteLoginWachtwoord = null;
     err.textContent = vertalFirebaseFout(e.code);
     err.style.display = 'block';
   }
@@ -124,24 +131,37 @@ window.toonGebruikerSheet = function() {
 // ==== Tabs + user chip =======================================================
 
 function renderTabs() {
-  const tabs = [
-    { id: 'beh', label: 'Overzicht' },
-    { id: 'rad', label: 'Radioloog' },
-    { id: 'afd', label: 'Afdeling' },
-    { id: 'die', label: 'Dienst' },
-  ];
+  const beperkt = isBeperktZichtRol();
+  const tabs = beperkt
+    ? [
+        { id: 'beh', label: 'Overzicht' },
+        { id: 'afd', label: 'Afdeling' },
+        { id: 'die', label: 'Dienst' },
+      ]
+    : [
+        { id: 'beh', label: 'Overzicht' },
+        { id: 'rad', label: 'Radioloog' },
+        { id: 'afd', label: 'Afdeling' },
+        { id: 'die', label: 'Dienst' },
+      ];
   const rol = state.profiel?.rol;
-  tabs.push({ id: 'act', label: 'Activiteit' });
-  if (rol === 'radioloog' || magAlleWensenZien()) {
-    let label = 'Wensen';
-    if (magAlleWensenZien()) {
-      const open = state.wensen.filter(w => (w.status || 'open') === 'open' && w.datum >= vandaagIso()).length;
-      if (open > 0) label += `<span class="tab-badge">${open}</span>`;
+  if (!beperkt) {
+    tabs.push({ id: 'act', label: 'Activiteit' });
+    if (rol === 'radioloog' || magAlleWensenZien()) {
+      let label = 'Wensen';
+      if (magAlleWensenZien()) {
+        const open = state.wensen.filter(w => (w.status || 'open') === 'open' && w.datum >= vandaagIso()).length;
+        if (open > 0) label += `<span class="tab-badge">${open}</span>`;
+      }
+      tabs.push({ id: 'wen', label });
     }
-    tabs.push({ id: 'wen', label });
+    if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
+    if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
   }
-  if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
-  if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
+
+  // Als huidige tab niet meer in de lijst staat (rol-wijziging tijdens sessie),
+  // val terug op Overzicht.
+  if (!tabs.some(t => t.id === state.huidigeView)) state.huidigeView = 'beh';
 
   document.getElementById('tabs').innerHTML = tabs.map(t => `
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
@@ -261,8 +281,19 @@ onAuthStateChanged(auth, async (user) => {
     state.huidigeView = 'beh';
 
     document.getElementById('login').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
 
+    // Eerste-login check: als gebruiker met standaard wachtwoord ingelogd is
+    // én er nog geen wachtwoordwissel heeft plaatsgevonden, forceer wissel.
+    const moetWisselen = profiel.wachtwoord_gewijzigd !== true
+                         && _laatsteLoginWachtwoord === STANDAARD_WACHTWOORD;
+    _laatsteLoginWachtwoord = null;
+
+    if (moetWisselen) {
+      toonEersteLoginSheet();
+      return;
+    }
+
+    document.getElementById('app').style.display = 'block';
     renderTabs();
     luisterNaarData();
   } catch (e) {
@@ -273,3 +304,63 @@ onAuthStateChanged(auth, async (user) => {
     await signOut(auth);
   }
 });
+
+// Eerste-login wachtwoord-wissel: gebruiker moet een eigen wachtwoord kiezen
+// voordat de app verder laadt.
+function toonEersteLoginSheet() {
+  document.getElementById('sheetTitle').textContent = 'Welkom — kies een wachtwoord';
+  document.getElementById('sheetSub').textContent = 'Eerste keer inloggen — vervang het standaard wachtwoord';
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-info" style="font-size: 12px; margin-bottom: 1rem;">Je bent ingelogd met het standaard wachtwoord. Kies nu een eigen wachtwoord van minstens 6 tekens.</div>
+    <div class="form-field">
+      <label class="form-label">Nieuw wachtwoord</label>
+      <input type="password" class="input" id="elNw1" autocomplete="new-password">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Bevestig wachtwoord</label>
+      <input type="password" class="input" id="elNw2" autocomplete="new-password">
+    </div>
+    <div id="elFout" class="form-info" style="font-size: 12px; color: #c0392b; display: none; margin-bottom: 8px;"></div>
+    <button class="btn btn-primary" style="width: 100%;" onclick="window.elOpslaan()">Wachtwoord opslaan</button>
+  `;
+  // Sheet openen zonder sluit-mogelijkheid (geen annuleer-knop)
+  openSheet();
+}
+
+window.elOpslaan = async function() {
+  const nw1 = document.getElementById('elNw1').value;
+  const nw2 = document.getElementById('elNw2').value;
+  const fout = document.getElementById('elFout');
+  fout.style.display = 'none';
+
+  const fnFout = (msg) => {
+    fout.textContent = msg;
+    fout.style.display = 'block';
+  };
+
+  if (nw1 !== nw2) { fnFout('De wachtwoorden komen niet overeen'); return; }
+  const fout1 = valideerWachtwoord(nw1);
+  if (fout1) { fnFout(fout1); return; }
+
+  const btn = document.querySelector('#sheetBody .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
+
+  try {
+    await updatePassword(state.user, nw1);
+    await updateDoc(doc(db, 'gebruikers', state.user.uid), { wachtwoord_gewijzigd: true });
+    state.profiel.wachtwoord_gewijzigd = true;
+    closeSheet();
+    document.getElementById('app').style.display = 'block';
+    renderTabs();
+    luisterNaarData();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Wachtwoord opslaan'; }
+    // Speciaal geval: Firebase vereist soms recente login voor updatePassword
+    if (e.code === 'auth/requires-recent-login') {
+      fnFout('Sessie te oud — log opnieuw in en probeer nogmaals');
+      setTimeout(async () => { await signOut(auth); }, 2000);
+    } else {
+      fnFout('Wijzigen mislukt: ' + (e.message || e.code));
+    }
+  }
+};

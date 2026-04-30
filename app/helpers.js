@@ -17,6 +17,10 @@ export function defaultPermissies(rol) {
     mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
     mag_gebruikers: false, mag_wensen_alle: false,
   };
+  if (rol === 'technician' || rol === 'lezer') return {
+    mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
+    mag_gebruikers: false, mag_wensen_alle: false,
+  };
   return {
     mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
     mag_gebruikers: false, mag_wensen_alle: false,
@@ -34,6 +38,18 @@ export function magOpmerkingen()      { return state.profiel?.rol === 'beheerder
 export function magGebruikersBeheren(){ return permissie('mag_gebruikers'); }
 export function magRegelsBeheren()    { return permissie('mag_regels'); }
 export function magAlleWensenZien()   { return permissie('mag_wensen_alle'); }
+
+// Effectieve rol: behandelt 'lezer' als 'technician' voor achterwaartse compatibiliteit.
+export function effectieveRol() {
+  const r = state.profiel?.rol;
+  if (r === 'lezer') return 'technician';
+  return r;
+}
+// Beperkt-zicht-rollen zien alleen Overzicht, Afdeling en Dienst.
+export function isBeperktZichtRol() {
+  const r = effectieveRol();
+  return r === 'secretariaat' || r === 'technician';
+}
 
 // ==== Lookup-maps ============================================================
 
@@ -216,4 +232,16 @@ export function vertalFirebaseFout(code) {
 export function genereerWachtwoord() {
   const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
   return Array.from({length: 10}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+// Standaard-wachtwoord voor nieuwe gebruikers. Bij eerste login wordt
+// gebruiker gedwongen dit te wijzigen.
+export const STANDAARD_WACHTWOORD = 'RoosterZMC';
+
+// Validatie. Voorlopig alleen min. 6 tekens; eisen kunnen hier worden uitgebreid.
+export function valideerWachtwoord(pw) {
+  if (typeof pw !== 'string') return 'Wachtwoord ontbreekt';
+  if (pw.length < 6) return 'Wachtwoord moet minimaal 6 tekens zijn';
+  if (pw === STANDAARD_WACHTWOORD) return 'Kies een ander wachtwoord dan het standaard wachtwoord';
+  return null; // geldig
 }

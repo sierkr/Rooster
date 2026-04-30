@@ -2,7 +2,7 @@
 import { state, SLOTS } from '../state.js';
 import {
   vasteRads, functiesMap, vandaagIso, formatDatum, functieNaam,
-  toewijzingVoor, huidigKalenderJaar,
+  toewijzingVoor, huidigKalenderJaar, isBeperktZichtRol,
 } from '../helpers.js';
 
 export function renderAfdView() {
@@ -30,14 +30,20 @@ export function renderAfdView() {
   if (!dag) {
     html += `<div class="empty-state"><div class="empty-state-icon">·</div>Geen indeling voor deze dag</div>`;
   } else {
+    const beperkt = isBeperktZichtRol();
+    // Privacy-gevoelige codes die voor secretariaat + technician verborgen blijven.
+    const VERBORGEN_CODES = ['V', 'Z', 'K'];
+
     const items = [];
     vasteRads().forEach(r => {
       const codes = toewijzingVoor(datum, r.id);
       if (codes.length === 0) return;
       const hoofdCode = codes[0];
+      const hoofdLetter = hoofdCode.charAt(0).toUpperCase();
+      if (beperkt && VERBORGEN_CODES.includes(hoofdLetter)) return;
       const f = functiesMap()[hoofdCode];
       const naam = f?.naam || functieNaam(hoofdCode);
-      const isAfwezig = ['V', 'Z', 'A', 'K', 'Q', 'T'].includes(hoofdCode.charAt(0).toUpperCase());
+      const isAfwezig = ['V', 'Z', 'A', 'K', 'Q', 'T'].includes(hoofdLetter);
       items.push({ rad: r, code: hoofdCode, naam, isAfwezig });
     });
     items.sort((a, b) => { if (a.isAfwezig !== b.isAfwezig) return a.isAfwezig ? 1 : -1; return a.naam.localeCompare(b.naam); });
@@ -53,7 +59,7 @@ export function renderAfdView() {
 
     const weekRads = SLOTS.map(s => ({ slot: s, codes: toewijzingVoor(datum, s) })).filter(x => x.codes.length > 0);
     if (weekRads.length > 0) {
-      html += `<div class="summary"><div class="summary-label">Weekradiologen</div><div class="summary-text">${weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' · ')}</div></div>`;
+      html += `<div class="summary"><div class="summary-label">Waarnemers</div><div class="summary-text">${weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' · ')}</div></div>`;
     }
     if (dag.bespreking)  html += `<div class="summary"><div class="summary-label">Bespreking</div><div class="summary-text">${dag.bespreking}</div></div>`;
     if (dag.interventie) html += `<div class="summary"><div class="summary-label">Interventie</div><div class="summary-text">${dag.interventie}</div></div>`;

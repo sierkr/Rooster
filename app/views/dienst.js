@@ -7,6 +7,16 @@ import {
 import { openSheet, closeSheet } from '../sheets.js';
 import { slaDienstOp } from '../save.js';
 
+// Bouwt een tel: link met vaste prefix +3175650.
+// Werkt voor zowel 3-cijferige interne dect-nummers als al volledige nummers.
+// Als het nummer al met + begint laten we het ongemoeid.
+function telLink(nummer) {
+  const n = String(nummer || '').trim();
+  if (!n) return '';
+  if (n.startsWith('+')) return n;
+  return '+3175650' + n.replace(/^0+/, '');
+}
+
 export function renderDieView() {
   const container = document.getElementById('view-die');
   const rads = vasteRads();
@@ -60,7 +70,7 @@ export function renderDieView() {
           <div class="dienst-rad">
             ${dienstRad ? `${dienstRad.code} · ${dienstRad.achternaam}` : '<span class="muted">— geen dienst —</span>'}
           </div>
-          ${dienstRad?.dect ? `<a class="dienst-dect-btn" href="tel:${dienstRad.dect}" onclick="event.stopPropagation();">📞 ${dienstRad.dect}</a>` : ''}
+          ${dienstRad?.dect ? `<a class="dienst-dect-btn" href="${telLink(dienstRad.dect)}" onclick="event.stopPropagation();">📞 ${dienstRad.dect}</a>` : ''}
         </div>
         ${interventie ? `<div class="dienst-meta">Interventie: ${interventie}</div>` : ''}
       </div>
@@ -73,16 +83,16 @@ export function renderDieView() {
       <div class="dect-tabel">
         <div class="dect-rij dect-rij-prom">
           <div class="dect-naam dect-naam-prom">Spoed / Echo</div>
-          <a class="dect-num" href="tel:${dectSpeciaal.spoed_echo}">${dectSpeciaal.spoed_echo}</a>
+          <a class="dect-num" href="${telLink(dectSpeciaal.spoed_echo)}">${dectSpeciaal.spoed_echo}</a>
         </div>
         <div class="dect-rij dect-rij-prom">
           <div class="dect-naam dect-naam-prom">Weekradioloog</div>
-          <a class="dect-num" href="tel:${dectSpeciaal.weekradioloog}">${dectSpeciaal.weekradioloog}</a>
+          <a class="dect-num" href="${telLink(dectSpeciaal.weekradioloog)}">${dectSpeciaal.weekradioloog}</a>
         </div>
         ${[...rads].sort((a,b) => a.achternaam.localeCompare(b.achternaam)).map(r => `
           <div class="dect-rij">
             <div class="dect-naam">${r.code} · ${r.achternaam}</div>
-            ${r.dect ? `<a class="dect-num" href="tel:${r.dect}">${r.dect}</a>` : '<span class="muted" style="font-size: 12px;">—</span>'}
+            ${r.dect ? `<a class="dect-num" href="${telLink(r.dect)}">${r.dect}</a>` : '<span class="muted" style="font-size: 12px;">—</span>'}
           </div>
         `).join('')}
       </div>

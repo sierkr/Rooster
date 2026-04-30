@@ -6,6 +6,7 @@ import {
   vasteRads, radiologenMap, parttimeFactor, defaultPermissies,
   magGebruikersBeheren, genereerWachtwoord,
 } from '../helpers.js';
+import { STANDAARD_WACHTWOORD } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { IMPORT_SHEET, actImportFile, actImportSchrijven, actImportAnnuleren, actZetImportJaar } from '../import.js';
 
@@ -188,13 +189,13 @@ window.nieuweGebruiker = function() {
   const rads = vasteRads();
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field"><label class="form-label">E-mail</label><input type="email" class="input" id="nuEmail" autocapitalize="off"></div>
-    <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${genereerWachtwoord()}"></div>
+    <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${STANDAARD_WACHTWOORD}"></div>
     <div class="form-field"><label class="form-label">Rol</label>
       <select class="select" id="nuRol">
         <option value="radioloog">Radioloog</option>
         <option value="beheerder">Beheerder</option>
         <option value="secretariaat">Secretariaat</option>
-        <option value="lezer">Lezer</option>
+        <option value="technician">Technician</option>
       </select>
     </div>
     <div class="form-field"><label class="form-label">Gekoppeld aan radioloog (optioneel)</label>
@@ -203,7 +204,7 @@ window.nieuweGebruiker = function() {
         ${rads.map(r => `<option value="${r.id}">${r.code} · ${r.achternaam}</option>`).join('')}
       </select>
     </div>
-    <div class="form-info" style="font-size: 12px;">De gebruiker kan direct inloggen met dit wachtwoord en moet het zelf veranderen via 'Wachtwoord vergeten' of je reset-functie.</div>
+    <div class="form-info" style="font-size: 12px;">De gebruiker logt de eerste keer in met dit wachtwoord en wordt dan gevraagd een eigen wachtwoord te kiezen.</div>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
       <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanNieuweGebruiker()">Aanmaken</button>
@@ -263,7 +264,7 @@ window.gebruikerBewerken = function(uid) {
         <option value="radioloog" ${g.rol==='radioloog'?'selected':''}>Radioloog</option>
         <option value="beheerder" ${g.rol==='beheerder'?'selected':''}>Beheerder</option>
         <option value="secretariaat" ${g.rol==='secretariaat'?'selected':''}>Secretariaat</option>
-        <option value="lezer" ${g.rol==='lezer'?'selected':''}>Lezer</option>
+        <option value="technician" ${(g.rol==='technician' || g.rol==='lezer')?'selected':''}>Technician</option>
       </select>
     </div>
     <div class="form-field"><label class="form-label">Gekoppeld aan radioloog${isVasteBeheerder?' 🔒':''}</label>
