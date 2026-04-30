@@ -180,8 +180,8 @@ export function renderVakView() {
   const rankingMap = {};
   state.vakantieRankings.forEach(r => { rankingMap[r.naam] = r; });
 
-  // Saldo voor het lopende kalenderjaar
-  const huidigJaar = new Date().getFullYear();
+  // Saldo voor het zichtbare jaar (wordt bij scroll bijgewerkt)
+  const huidigJaar = state.vakZichtbaarJaar || new Date().getFullYear();
   const jaarStart = `${huidigJaar}-01-01`;
   const jaarEind  = `${huidigJaar}-12-31`;
   const saldoMap = {};
@@ -229,7 +229,7 @@ export function renderVakView() {
     const maandKey = `${y}-${m}`;
     if (maandKey !== vorigeMaandKey) {
       vorigeMaandKey = maandKey;
-      body += `<div class="vak-maand-rij" style="grid-column: 1 / span ${totaalKolommen};">${MAANDEN[m].toUpperCase()} ${y}</div>`;
+      body += `<div class="vak-maand-rij" data-vak-jaar="${y}" style="grid-column: 1 / span ${totaalKolommen};">${MAANDEN[m].toUpperCase()} ${y}</div>`;
     }
 
     const dag = state.indelingMap[iso] || {};
@@ -357,8 +357,8 @@ export function renderVakView() {
           <div class="grid-head" title="Saldo dit jaar (V minus dagen samenvallend met dienst)">\u2211</div>
           ${beheerHeads}
         </div>
-        <div class="vak-sticky-row vak-saldo-row">
-          <div class="vak-saldo-label">Saldo ${huidigJaar}</div>
+        <div class="vak-sticky-row vak-saldo-row" id="vakSaldoRow">
+          <div class="vak-saldo-label" id="vakSaldoLabel">Saldo ${huidigJaar}</div>
           ${saldoCells}
           <div></div>
           ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
@@ -402,13 +402,95 @@ export function renderVakView() {
         requestAnimationFrame(() => {
           const offset = vandaagEl.offsetTop - 60;
           wrap.scrollTop = Math.max(0, offset);
+          updateZichtbaarJaar();
         });
       }
     } else {
       wrap.scrollTop = scrollTop;
       wrap.scrollLeft = scrollLeft;
     }
+    // Throttled scroll-listener: detecteer welk jaar centraal staat
+    let scrollTicking = false;
+    wrap.addEventListener('scroll', () => {
+      if (scrollTicking) return;
+      scrollTicking = true;
+      requestAnimationFrame(() => {
+        updateZichtbaarJaar();
+        scrollTicking = false;
+      });
+    });
   }
+}
+
+// Bepaal welk jaar centraal in het zichtbare deel staat, en update de
+// saldo-rij als dat anders is dan wat nu getoond wordt. Render NIET de hele
+// matrix opnieuw — alleen de saldo-cellen vervangen voor soepele scroll.
+function updateZichtbaarJaar() {
+  const container = document.getElementById('view-vak');
+  const wrap = container?.querySelector('.vak-grid-wrap');
+  if (!wrap) return;
+  const maandRijen = container.querySelectorAll('[data-vak-jaar]');
+  if (maandRijen.length === 0) return;
+
+  // Vind de maand-rij die het dichtst bij de top van de zichtbare area staat,
+  // net onder de sticky head+saldo (~60px).
+  const wrapTop = wrap.getBoundingClientRect().top;
+  const drempel = wrapTop + 60;
+  let huidigeJaar = parseInt(maandRijen[0].getAttribute('data-vak-jaar'), 10);
+  for (const el of maandRijen) {
+    const top = el.getBoundingClientRect().top;
+    if (top <= drempel) {
+      huidigeJaar = parseInt(el.getAttribute('data-vak-jaar'), 10);
+    } else {
+      break;
+    }
+  }
+
+  const ingestelJaar = state.vakZichtbaarJaar || new Date().getFullYear();
+  if (huidigeJaar === ingestelJaar) return;
+
+  state.vakZichtbaarJaar = huidigeJaar;
+  vernieuwSaldoRij();
+}
+
+// Vervang alleen de saldo-cellen in de saldo-rij + label, zonder volledige
+// re-render. Houdt scroll-positie en interactiestaat intact.
+function vernieuwSaldoRij() {
+  const container = document.getElementById('view-vak');
+  if (!container) return;
+  const row = container.querySelector('#vakSaldoRow');
+  const label = container.querySelector('#vakSaldoLabel');
+  if (!row || !label) return;
+
+  const rads = vasteRads();
+  const invallers = state.toonWeekRads ? actieveInvallers() : [];
+  const allKolommen = [
+    ...rads.map(r => ({ id: r.id, label: r.code })),
+    ...invallers.map(r => ({ id: r.id, label: r.slot || r.code })),
+  ];
+  const toonW = state.toonWeekRads;
+  const toonBeheer = state.toonWeekRads;
+  const huidigJaar = state.vakZichtbaarJaar || new Date().getFullYear();
+  const jaarStart = `${huidigJaar}-01-01`;
+  const jaarEind  = `${huidigJaar}-12-31`;
+
+  label.textContent = `Saldo ${huidigJaar}`;
+
+  const saldoCells = allKolommen.map((k, i) => {
+    const s = berekenSaldoRange(k.id, jaarStart, jaarEind);
+    const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
+    const radObj = rads.find(r => r.id === k.id) || invallers.find(r => r.id === k.id);
+    const recht = (typeof radObj?.vakantierecht === 'number') ? radObj.vakantierecht : 40;
+    const resterend = recht - s.saldo;
+    const overschreden = resterend < 0;
+    const kleur = overschreden ? 'color: #c0392b; font-weight: 700;' : '';
+    const titel = `${s.v} V-dagen ingedeeld, ${s.vEnDienst} samenvallend met dienst, recht ${recht}, resterend ${resterend}`;
+    return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${resterend}</div>`;
+  }).join('');
+
+  // Herbouw de hele rij-inhoud
+  const trailingDivs = toonBeheer ? '<div></div><div></div><div></div><div></div>' : '';
+  row.innerHTML = `<div class="vak-saldo-label" id="vakSaldoLabel">Saldo ${huidigJaar}</div>${saldoCells}<div></div>${trailingDivs}`;
 }
 
 // ----- Window handlers -----------------------------------------------------

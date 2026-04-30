@@ -12,6 +12,7 @@ export const state = {
   wensen: [],             // array van wensen-documenten
   vakantieRankings: [],   // array van vakantie_rankings-documenten
   vakToonBeheerKolommen: false, // X/Min/Rank kolommen tonen in Vakantie-tab
+  vakZichtbaarJaar: null, // jaar waarvoor saldo getoond wordt (null = lopend kalenderjaar)
   huidigeRadId: null,
   // weekMaandag = ISO-string van de maandag van de huidige week.
   // Vervangt het oude state.huidigeWeek (nummer 1-53) zodat de agenda
