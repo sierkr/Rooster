@@ -64,7 +64,7 @@ export function renderBehView() {
   state.wensen.forEach(w => {
     if (datums.includes(w.datum)) {
       const k = `${w.datum}|${w.radioloog_id}`;
-      wensenIndex[k] = w.type;
+      wensenIndex[k] = w.status || 'open';
     }
   });
 
@@ -158,7 +158,8 @@ export function renderBehView() {
               const statusCls = status === 'error' ? 'grid-cell-conflict-error' : (status === 'warn' ? 'grid-cell-conflict-warn' : '');
               const sep = (i === vasteRadsList.length && toonW) ? 'border-left: 1px solid rgba(0,0,0,0.15);' : '';
               const wens = wensenIndex[`${datum}|${k.id}`];
-              const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="Wens: ${wens}"></span>` : '';
+              const wensTitels = { open: 'Wens: nog niet behandeld', verwerkt: 'Wens: goedgekeurd', afgewezen: 'Wens: afgewezen' };
+              const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="${wensTitels[wens] || wens}"></span>` : '';
               const opmMarker = celOpm ? `<span class="opm-marker" title="${(celOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
               // Duo-weergave: code1 linksboven, code2 rechtsonder, diagonale streep
               const inhoud = isDuo
