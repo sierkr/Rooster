@@ -115,34 +115,51 @@ function dagenInBereik(startISO, eindISO) {
 
 // ----- Dubbel-tik detectie -------------------------------------------------
 //
-// Eerste tik: start een 300ms timer met de "kort"-actie. Als binnen die
-// 300ms een tweede tik komt op dezelfde cel, annuleer de timer en doe de
-// "lang"-actie (sheet openen).
+// Werkt op desktop (muis) en mobiel (touch). Gebruikt pointerup zodat de
+// tap meteen geregistreerd wordt zonder de ~300 ms click-delay die iOS/
+// Android toevoegen voor double-tap-zoom-detectie. `touch-action:
+// manipulation` zet die zoom-detectie ook uit voor het element zelf,
+// zodat de eerste tap direct doorkomt.
+//
+// Eerste tik: bewaar timestamp + key, start 310ms timer voor "kort"-actie.
+// Als binnen die tijd een tweede tik komt op dezelfde key: timer annuleren
+// en "lang"-actie uitvoeren.
 
 const DBL_TAP_MS = 300;
 let _dblTimer = null;
-let _dblTarget = null;
+let _dblKey = null;
+let _dblTime = 0;
 
 function attachDblTap(el, key, onShort, onLong) {
-  el.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (_dblTimer && _dblTarget === key) {
-      // Tweede tik binnen vertraging: annuleer V-toggle en open sheet
-      clearTimeout(_dblTimer);
-      _dblTimer = null;
-      _dblTarget = null;
+  el.style.touchAction = 'manipulation';
+  el.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const now = Date.now();
+    if (_dblKey === key && (now - _dblTime) < DBL_TAP_MS) {
+      // Tweede tik binnen vertraging: annuleer kort-actie en open sheet
+      if (_dblTimer) { clearTimeout(_dblTimer); _dblTimer = null; }
+      _dblKey = null;
+      _dblTime = 0;
       onLong();
     } else {
       // Eerste tik: wacht of er een tweede komt
       if (_dblTimer) clearTimeout(_dblTimer);
-      _dblTarget = key;
+      _dblKey = key;
+      _dblTime = now;
       _dblTimer = setTimeout(() => {
         _dblTimer = null;
-        _dblTarget = null;
-        onShort();
-      }, DBL_TAP_MS);
+        // Alleen uitvoeren als deze tap nog steeds de actuele is
+        if (_dblKey === key && _dblTime === now) {
+          _dblKey = null;
+          _dblTime = 0;
+          onShort();
+        }
+      }, DBL_TAP_MS + 10);
     }
   });
+  // Voorkom dat synthetische click op desktop ook nog vuurt en de toggle
+  // dubbel uitvoert
+  el.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
 }
 
 // ----- Render --------------------------------------------------------------
@@ -244,17 +261,13 @@ export function renderVakView() {
     const vDataObj = dag.vakantie_v || {};
     const vAantal = allKolommen.reduce((n, k) => n + (vCode(vDataObj[k.id]) === 'V' ? 1 : 0), 0);
     const overschreden = (typeof min === 'number' && vAantal > (rads.length - min));
-    // Heeft de rij een afwijkende code (niet V)? Bepaalt rijkleur.
-    const heeftAfwijkendeCode = Object.values(vDataObj).some(w => {
-      const c = vCode(w);
-      return c && c !== 'V';
-    });
+    // Rij-kleur: alleen overschrijding (rood), ranking-blok (lichte tint),
+    // of weekend (lichtgrijs). K/Z worden niet meer rij-gekleurd — ze hebben
+    // hun eigen f-K / f-Z cel-kleur (zie regel ~280).
 
     let rijStyle = '';
     if (overschreden) {
       rijStyle = 'background: #fde0e0;';
-    } else if (heeftAfwijkendeCode) {
-      rijStyle = 'background: #fff3d6;';
     } else if (x && ranking?.kleur) {
       rijStyle = `background: ${ranking.kleur}1F;`;
     } else if (isWeekend) {
