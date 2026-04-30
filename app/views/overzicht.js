@@ -125,7 +125,7 @@ export function renderBehView() {
         ${datums.map(datum => {
           const d = new Date(datum + 'T12:00:00');
           const isVandaag = datum === vandaag;
-          const dagLabel = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
+          const dagLabel = `${DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1]} ${d.getDate()}`;
           const dagOpm = state.indelingMap[datum]?.opmerking;
           let dagOnclick, dagCursor;
           if (alleenLezen) {
