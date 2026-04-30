@@ -192,9 +192,9 @@ export function renderVakView() {
 
   const radCount = allKolommen.length;
   const radColsCss = `repeat(${radCount}, minmax(28px, 1fr))`;
-  const beheerCols = toonBeheer ? ' 24px 32px 64px' : '';
+  const beheerCols = toonBeheer ? ' 24px 32px 64px 50px' : '';
   const gridCols = `50px ${radColsCss} 38px${beheerCols}`;
-  const totaalKolommen = 1 + radCount + 1 + (toonBeheer ? 3 : 0);
+  const totaalKolommen = 1 + radCount + 1 + (toonBeheer ? 4 : 0);
 
   const radHeads = allKolommen.map((k, i) => {
     const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
@@ -203,7 +203,8 @@ export function renderVakView() {
   const beheerHeads = toonBeheer
     ? `<div class="grid-head" title="Vakantiedag aan/uit">X</div>` +
       `<div class="grid-head" title="Minimale bezetting">Min</div>` +
-      `<div class="grid-head" title="Ranking-tabel">Rank</div>`
+      `<div class="grid-head" title="Ranking-tabel">Rank</div>` +
+      `<div class="grid-head"></div>`
     : '';
 
   const saldoCells = allKolommen.map((k, i) => {
@@ -211,10 +212,11 @@ export function renderVakView() {
     const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
     const radObj = rads.find(r => r.id === k.id) || invallers.find(r => r.id === k.id);
     const recht = (typeof radObj?.vakantierecht === 'number') ? radObj.vakantierecht : 40;
-    const overschreden = s.saldo > recht;
+    const resterend = recht - s.saldo;
+    const overschreden = resterend < 0;
     const kleur = overschreden ? 'color: #c0392b; font-weight: 700;' : '';
-    const titel = `${s.v} V-dagen, ${s.vEnDienst} samenvallend met dienst, recht ${recht}`;
-    return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${s.saldo}/${recht}</div>`;
+    const titel = `${s.v} V-dagen ingedeeld, ${s.vEnDienst} samenvallend met dienst, recht ${recht}, resterend ${resterend}`;
+    return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${resterend}</div>`;
   }).join('');
 
   let body = '';
@@ -242,10 +244,17 @@ export function renderVakView() {
     const vDataObj = dag.vakantie_v || {};
     const vAantal = allKolommen.reduce((n, k) => n + (vCode(vDataObj[k.id]) === 'V' ? 1 : 0), 0);
     const overschreden = (typeof min === 'number' && vAantal > (rads.length - min));
+    // Heeft de rij een afwijkende code (niet V)? Bepaalt rijkleur.
+    const heeftAfwijkendeCode = Object.values(vDataObj).some(w => {
+      const c = vCode(w);
+      return c && c !== 'V';
+    });
 
     let rijStyle = '';
     if (overschreden) {
       rijStyle = 'background: #fde0e0;';
+    } else if (heeftAfwijkendeCode) {
+      rijStyle = 'background: #fff3d6;';
     } else if (x && ranking?.kleur) {
       rijStyle = `background: ${ranking.kleur}1F;`;
     } else if (isWeekend) {
@@ -310,6 +319,10 @@ export function renderVakView() {
       }
 
       beheerCells = xCel + mCel + rCel;
+
+      // Extra datum-kolom helemaal rechts (zelfde inhoud als links)
+      const dagCellRechts = `<div class="grid-day" style="${dagCellStyle}"><span>${dagNaamKort}</span><span>${dagNummer}</span></div>`;
+      beheerCells += dagCellRechts;
     }
 
     body += dagCell + radCells + saldoCel + beheerCells;
@@ -348,7 +361,7 @@ export function renderVakView() {
           <div class="vak-saldo-label">Saldo ${huidigJaar}</div>
           ${saldoCells}
           <div></div>
-          ${toonBeheer ? '<div></div><div></div><div></div>' : ''}
+          ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
         </div>
         ${body}
       </div>
@@ -368,7 +381,10 @@ export function renderVakView() {
   });
   container.querySelectorAll('[data-vak-x]').forEach(el => {
     const datum = el.getAttribute('data-vak-x');
-    el.addEventListener('click', () => window.vakToggleX(datum));
+    attachDblTap(el, 'x|' + datum,
+      () => window.vakToggleX(datum),
+      () => window.openVakXSheet(datum),
+    );
   });
   container.querySelectorAll('[data-vak-blok]').forEach(el => {
     const datum = el.getAttribute('data-vak-blok');
@@ -514,6 +530,63 @@ window.vakKiesCode = async function(datum, radId, code) {
   } catch (e) {
     alert('Opslaan mislukt: ' + (e.message || e.code));
   }
+};
+
+// ----- X-cel: rij vullen met één code voor iedereen ---------------------
+
+window.openVakXSheet = function(datum) {
+  if (!isBeheerder()) return;
+  const dag = state.indelingMap[datum] || {};
+  if (dag.vakantie_geaccordeerd) return;
+
+  document.getElementById('sheetTitle').textContent = `Hele dag invullen \u00b7 ${datum}`;
+  document.getElementById('sheetSub').textContent = 'Vult deze code in voor alle radiologen op deze dag';
+  document.getElementById('sheetBody').innerHTML = `
+    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 1rem;">
+      <button class="picker-option f-V" onclick="window.vakVulRijIn('${datum}','V')">V<div class="picker-label">Vakantie</div></button>
+      <button class="picker-option f-K" onclick="window.vakVulRijIn('${datum}','K')">K<div class="picker-label">Cursus</div></button>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Vrije code (1 letter, bv. F voor feestdag)</label>
+      <input type="text" class="input" id="vakXVrij" maxlength="3" placeholder="bv. F" style="text-transform: uppercase;">
+    </div>
+    <div style="display:flex; gap:8px; margin-top: 12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="window.vakVulRijInVrij('${datum}')">Vrije code invullen</button>
+    </div>
+    <div style="display:flex; gap:8px; margin-top: 8px;">
+      <button class="btn" style="flex:1;" onclick="window.vakVulRijIn('${datum}','')">Rij leegmaken</button>
+      <button class="btn" style="flex:1;" onclick="window.closeSheet()">Annuleer</button>
+    </div>
+  `;
+  openSheet();
+};
+
+window.vakVulRijIn = async function(datum, code) {
+  if (!isBeheerder()) return;
+  const dag = state.indelingMap[datum] || {};
+  if (dag.vakantie_geaccordeerd) return;
+
+  const rads = vasteRads();
+  const nieuw = {};
+  if (code) {
+    rads.forEach(r => {
+      nieuw[r.id] = (code === 'V') ? true : code;
+    });
+  }
+  closeSheet();
+  try {
+    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
+  } catch (e) {
+    alert('Opslaan mislukt: ' + (e.message || e.code));
+  }
+};
+
+window.vakVulRijInVrij = function(datum) {
+  const inp = document.getElementById('vakXVrij');
+  const code = (inp?.value || '').trim().toUpperCase();
+  if (!code) { alert('Vul een code in.'); return; }
+  if (code.length > 3) { alert('Max 3 tekens.'); return; }
+  window.vakVulRijIn(datum, code);
 };
 
 // ----- Per-blok accorderen -----------------------------------------------
