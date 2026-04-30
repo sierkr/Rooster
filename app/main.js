@@ -7,6 +7,7 @@ import { state, VASTE_RAD_IDS } from './state.js';
 import {
   vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
   magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien,
+  magVakantieZien,
 } from './helpers.js';
 import { openSheet, closeSheet } from './sheets.js';
 
@@ -141,8 +142,8 @@ function renderTabs() {
     }
     tabs.push({ id: 'wen', label });
   }
-  // Vakantie-tab: zichtbaar voor iedereen met leesrechten
-  tabs.push({ id: 'vak', label: 'Vakantie' });
+  // Vakantie-tab: zichtbaar als gebruiker mag_vakantie heeft
+  if (magVakantieZien()) tabs.push({ id: 'vak', label: 'Vakantie' });
   if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
   if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
 

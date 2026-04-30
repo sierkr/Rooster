@@ -55,22 +55,32 @@ export async function renderGebView() {
     `;
   });
 
-  // Vaste radiologen — parttime-percentage
+  // Vaste radiologen — parttime-percentage en vakantierecht
   html += `
     <div style="margin-top: 1.5rem;">
-      <div class="summary-label" style="margin-bottom: 6px;">Vaste radiologen — parttime</div>
+      <div class="summary-label" style="margin-bottom: 6px;">Vaste radiologen — parttime &amp; vakantierecht</div>
       <div class="card">
-        <p class="muted" style="margin: 0 0 10px;">Percentage van fulltime (default 100%). Gebruikt voor de ratio-weergave in Activiteit-tab.</p>
+        <p class="muted" style="margin: 0 0 10px;">Parttime: percentage van fulltime (default 100%). Vakantierecht: aantal V-dagen per jaar (default 40).</p>
+        <div style="display: grid; grid-template-columns: 60px 1fr 70px 70px; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); font-size: 11px; font-weight: 600; color: #5f5e5a;">
+          <div>Code</div>
+          <div>Naam</div>
+          <div style="text-align: center;">Parttime</div>
+          <div style="text-align: center;">Vakantie</div>
+        </div>
         ${vasteRads().map(r => {
           const pf = parttimeFactor(r.id);
           const pct = Math.round(pf * 100);
+          const vrecht = (typeof r.vakantierecht === 'number') ? r.vakantierecht : 40;
           return `
-            <div style="display: grid; grid-template-columns: 90px 1fr 70px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+            <div style="display: grid; grid-template-columns: 60px 1fr 70px 70px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <div style="font-weight: 500;">${r.code}</div>
               <div class="muted" style="font-size: 13px;">${r.achternaam || ''}</div>
-              <div style="display: flex; align-items: center; gap: 4px;">
-                <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" style="padding: 6px 8px; font-size: 13px; text-align: right;">
-                <span class="muted" style="font-size: 13px;">%</span>
+              <div style="display: flex; align-items: center; gap: 2px;">
+                <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" style="padding: 6px 4px; font-size: 13px; text-align: right;">
+                <span class="muted" style="font-size: 11px;">%</span>
+              </div>
+              <div>
+                <input type="number" class="input" id="vr_${r.id}" value="${vrecht}" min="0" max="100" step="1" style="padding: 6px 4px; font-size: 13px; text-align: right; width: 100%;">
               </div>
             </div>
           `;
@@ -155,13 +165,22 @@ export async function renderGebView() {
 window.opslaanParttime = async function() {
   try {
     for (const r of vasteRads()) {
-      const el = document.getElementById('pf_' + r.id);
-      if (!el) continue;
-      const pct = Math.max(10, Math.min(100, parseInt(el.value, 10) || 100));
-      const factor = pct / 100;
-      await setDoc(doc(db, 'radiologen', r.id), { parttime_factor: factor }, { merge: true });
+      const elPf = document.getElementById('pf_' + r.id);
+      const elVr = document.getElementById('vr_' + r.id);
+      const update = {};
+      if (elPf) {
+        const pct = Math.max(10, Math.min(100, parseInt(elPf.value, 10) || 100));
+        update.parttime_factor = pct / 100;
+      }
+      if (elVr) {
+        const dgn = Math.max(0, Math.min(100, parseInt(elVr.value, 10) || 40));
+        update.vakantierecht = dgn;
+      }
+      if (Object.keys(update).length > 0) {
+        await setDoc(doc(db, 'radiologen', r.id), update, { merge: true });
+      }
     }
-    alert('Parttime-percentages opgeslagen.');
+    alert('Parttime &amp; vakantierecht opgeslagen.');
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
@@ -252,6 +271,7 @@ window.gebruikerBewerken = function(uid) {
     { id: 'mag_regels', label: 'Regels' },
     { id: 'mag_gebruikers', label: 'Gebruikers' },
     { id: 'mag_wensen_alle', label: 'Wensen van iedereen zien' },
+    { id: 'mag_vakantie', label: 'Vakantie-tab zien' },
   ];
 
   document.getElementById('sheetTitle').textContent = g.email;

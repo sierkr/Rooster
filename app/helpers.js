@@ -7,23 +7,23 @@ import { state, VASTE_RAD_IDS, SLOTS, DAGEN_NL, DAGEN_LANG, MAANDEN } from './st
 export function defaultPermissies(rol) {
   if (rol === 'beheerder') return {
     mag_beheer: true, mag_beheer_lezen: true, mag_regels: true,
-    mag_gebruikers: true, mag_wensen_alle: true,
+    mag_gebruikers: true, mag_wensen_alle: true, mag_vakantie: true,
   };
   if (rol === 'secretariaat') return {
     mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
-    mag_gebruikers: false, mag_wensen_alle: false,
+    mag_gebruikers: false, mag_wensen_alle: false, mag_vakantie: false,
   };
   if (rol === 'radioloog') return {
     mag_beheer: false, mag_beheer_lezen: true, mag_regels: false,
-    mag_gebruikers: false, mag_wensen_alle: false,
+    mag_gebruikers: false, mag_wensen_alle: false, mag_vakantie: true,
   };
   if (rol === 'technician' || rol === 'lezer') return {
     mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
-    mag_gebruikers: false, mag_wensen_alle: false,
+    mag_gebruikers: false, mag_wensen_alle: false, mag_vakantie: false,
   };
   return {
     mag_beheer: false, mag_beheer_lezen: false, mag_regels: false,
-    mag_gebruikers: false, mag_wensen_alle: false,
+    mag_gebruikers: false, mag_wensen_alle: false, mag_vakantie: false,
   };
 }
 export function permissie(naam) {
@@ -38,6 +38,7 @@ export function magOpmerkingen()      { return state.profiel?.rol === 'beheerder
 export function magGebruikersBeheren(){ return permissie('mag_gebruikers'); }
 export function magRegelsBeheren()    { return permissie('mag_regels'); }
 export function magAlleWensenZien()   { return permissie('mag_wensen_alle'); }
+export function magVakantieZien()     { return permissie('mag_vakantie'); }
 
 // Effectieve rol: behandelt 'lezer' als 'technician' voor achterwaartse compatibiliteit.
 export function effectieveRol() {

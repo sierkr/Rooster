@@ -209,7 +209,12 @@ export function renderVakView() {
   const saldoCells = allKolommen.map((k, i) => {
     const s = saldoMap[k.id];
     const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
-    return `<div class="vak-saldo-cell" style="${sep}" title="${s.v} V-dagen, ${s.vEnDienst} samenvallend met dienst">${s.saldo}</div>`;
+    const radObj = rads.find(r => r.id === k.id) || invallers.find(r => r.id === k.id);
+    const recht = (typeof radObj?.vakantierecht === 'number') ? radObj.vakantierecht : 40;
+    const overschreden = s.saldo > recht;
+    const kleur = overschreden ? 'color: #c0392b; font-weight: 700;' : '';
+    const titel = `${s.v} V-dagen, ${s.vEnDienst} samenvallend met dienst, recht ${recht}`;
+    return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${s.saldo}/${recht}</div>`;
   }).join('');
 
   let body = '';
