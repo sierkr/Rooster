@@ -17,7 +17,6 @@ import { renderDieView } from './views/dienst.js';
 import { renderActView } from './views/activiteit.js';
 import { renderWenView } from './views/wensen.js';
 import { renderVakView } from './views/vakantie.js';
-import { renderVakView } from './views/vakantie.js';
 import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
