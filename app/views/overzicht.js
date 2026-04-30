@@ -5,6 +5,7 @@ import {
   vasteRads, actieveInvallers, radiologenMap, functiesMap, vandaagIso,
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
+  magAlleWensenZien,
 } from '../helpers.js';
 import { openSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
@@ -61,11 +62,15 @@ export function renderBehView() {
   });
 
   const wensenIndex = {};
+  // Beheerder of gebruiker met "Wensen van iedereen zien" → alle stippen.
+  // Anders: alleen de eigen wensen.
+  const eigenRadId = state.profiel?.radioloog_id;
+  const alleZien = magAlleWensenZien();
   state.wensen.forEach(w => {
-    if (datums.includes(w.datum)) {
-      const k = `${w.datum}|${w.radioloog_id}`;
-      wensenIndex[k] = w.status || 'open';
-    }
+    if (!datums.includes(w.datum)) return;
+    if (!alleZien && w.radioloog_id !== eigenRadId) return;
+    const k = `${w.datum}|${w.radioloog_id}`;
+    wensenIndex[k] = w.status || 'open';
   });
 
   let bannerHtml = '';
