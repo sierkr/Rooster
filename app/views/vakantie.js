@@ -1,4 +1,4 @@
-// Vakantie-view (Fase 3: ranking CRUD, long press, accorderen).
+// Vakantie-view (Fase 4: doorlopende kalender + dubbel-tik + bevries periode).
 //
 // Datamodel:
 //   indeling/{datum}.vakantie_x        bool
@@ -9,7 +9,7 @@
 //   vakantie_rankings/{naam} { naam, label, kleur, anker_jaar, anker_volgorde[8] }
 
 import {
-  setDoc, doc, deleteDoc, writeBatch, collection
+  setDoc, doc, deleteDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state, DAGEN_NL, MAANDEN } from '../state.js';
@@ -20,8 +20,6 @@ import { openSheet, closeSheet } from '../sheets.js';
 
 // ----- Helpers -------------------------------------------------------------
 
-// Volgorde voor een ranking voor een specifiek jaar.
-// Formule: (pos + (jaar - anker_jaar) * 3) mod 8
 export function rankingVolgordeVoorJaar(ranking, jaar) {
   if (!ranking?.anker_volgorde) return [];
   const v = ranking.anker_volgorde;
@@ -38,10 +36,11 @@ function vCode(waarde) {
   return null;
 }
 
-function berekenSaldo(radId, jaar) {
+function berekenSaldoRange(radId, isoStart, isoEind) {
   let v = 0, vEnDienst = 0;
   Object.values(state.indelingMap).forEach(dag => {
-    if (!dag?.datum?.startsWith(String(jaar))) return;
+    if (!dag?.datum) return;
+    if (dag.datum < isoStart || dag.datum > isoEind) return;
     const w = dag.vakantie_v?.[radId];
     if (!w) return;
     const isV = (w === true || w === 'V' || (typeof w === 'object' && (w.code || 'V') === 'V'));
@@ -59,8 +58,11 @@ function eigenRadId() {
   return state.profiel?.radioloog_id || null;
 }
 
-// Zoek de meest recente eerdere dag met een vakantie_min ingevuld.
-// Wordt gebruikt voor auto-fill als beheerder X aanzet.
+function plusDagenIso(iso, n) {
+  return new Date(new Date(iso + 'T12:00:00').getTime() + n * 86400000)
+    .toISOString().slice(0, 10);
+}
+
 function vorigeMinWaarde(datum) {
   const allDates = Object.keys(state.indelingMap).filter(d => d < datum).sort();
   for (let i = allDates.length - 1; i >= 0; i--) {
@@ -70,7 +72,6 @@ function vorigeMinWaarde(datum) {
   return null;
 }
 
-// Zoek de meest recente eerdere dag met een vakantie_rank ingevuld.
 function vorigeRankWaarde(datum) {
   const allDates = Object.keys(state.indelingMap).filter(d => d < datum).sort();
   for (let i = allDates.length - 1; i >= 0; i--) {
@@ -80,26 +81,21 @@ function vorigeRankWaarde(datum) {
   return null;
 }
 
-// Detecteer aaneengesloten "blok" (zelfde rank rondom datum).
 function vindBlok(datum) {
   const dag = state.indelingMap[datum];
   if (!dag?.vakantie_x || !dag?.vakantie_rank) return null;
   const rank = dag.vakantie_rank;
 
-  // Loop terug zolang aaneengesloten + zelfde rank
   let start = datum;
   while (true) {
-    const prev = new Date(new Date(start + 'T12:00:00').getTime() - 86400000)
-      .toISOString().slice(0, 10);
+    const prev = plusDagenIso(start, -1);
     const prevDag = state.indelingMap[prev];
     if (!prevDag?.vakantie_x || prevDag.vakantie_rank !== rank) break;
     start = prev;
   }
-  // Loop vooruit
   let eind = datum;
   while (true) {
-    const next = new Date(new Date(eind + 'T12:00:00').getTime() + 86400000)
-      .toISOString().slice(0, 10);
+    const next = plusDagenIso(eind, 1);
     const nextDag = state.indelingMap[next];
     if (!nextDag?.vakantie_x || nextDag.vakantie_rank !== rank) break;
     eind = next;
@@ -107,51 +103,61 @@ function vindBlok(datum) {
   return { rank, start, eind };
 }
 
-function dagenInBlok(blok) {
+function dagenInBereik(startISO, eindISO) {
   const dagen = [];
-  let cur = blok.start;
-  while (cur <= blok.eind) {
+  let cur = startISO;
+  while (cur <= eindISO) {
     dagen.push(cur);
-    cur = new Date(new Date(cur + 'T12:00:00').getTime() + 86400000)
-      .toISOString().slice(0, 10);
+    cur = plusDagenIso(cur, 1);
   }
   return dagen;
 }
 
-// ----- Long press detectie -------------------------------------------------
+// ----- Dubbel-tik detectie -------------------------------------------------
 //
-// Eén globale handler die op een element pointerdown registreert en bij
-// vasthouden >500ms een long-press callback aanroept i.p.v. de short-click.
+// Eerste tik: start een 300ms timer met de "kort"-actie. Als binnen die
+// 300ms een tweede tik komt op dezelfde cel, annuleer de timer en doe de
+// "lang"-actie (sheet openen).
 
-const LONG_PRESS_MS = 500;
-let _lpTimer = null;
-let _lpFired = false;
+const DBL_TAP_MS = 300;
+let _dblTimer = null;
+let _dblTarget = null;
 
-function attachLp(el, onShort, onLong) {
-  el.addEventListener('pointerdown', (e) => {
-    _lpFired = false;
-    _lpTimer = setTimeout(() => {
-      _lpFired = true;
-      onLong(e);
-    }, LONG_PRESS_MS);
-  });
-  el.addEventListener('pointerup', () => {
-    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
-    if (!_lpFired) onShort();
-  });
-  el.addEventListener('pointercancel', () => {
-    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
-  });
-  el.addEventListener('pointerleave', () => {
-    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+function attachDblTap(el, key, onShort, onLong) {
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (_dblTimer && _dblTarget === key) {
+      // Tweede tik binnen vertraging: annuleer V-toggle en open sheet
+      clearTimeout(_dblTimer);
+      _dblTimer = null;
+      _dblTarget = null;
+      onLong();
+    } else {
+      // Eerste tik: wacht of er een tweede komt
+      if (_dblTimer) clearTimeout(_dblTimer);
+      _dblTarget = key;
+      _dblTimer = setTimeout(() => {
+        _dblTimer = null;
+        _dblTarget = null;
+        onShort();
+      }, DBL_TAP_MS);
+    }
   });
 }
 
 // ----- Render --------------------------------------------------------------
 
+// Of de matrix al een keer is gerenderd (voor scroll-naar-vandaag bij eerste opening)
+let _eersteRender = true;
+
 export function renderVakView() {
   const container = document.getElementById('view-vak');
   if (!container) return;
+
+  // Scroll-positie bewaren
+  const oudeScrollWrap = container.querySelector('.vak-grid-wrap');
+  const scrollTop = oudeScrollWrap?.scrollTop || 0;
+  const scrollLeft = oudeScrollWrap?.scrollLeft || 0;
 
   const rads = vasteRads();
   const invallers = state.toonWeekRads ? actieveInvallers() : [];
@@ -164,20 +170,22 @@ export function renderVakView() {
     ...invallers.map(r => ({ id: r.id, label: r.slot || r.code })),
   ];
 
-  const jaar = new Date().getFullYear();
+  // Doorlopende kalender: 6 maanden terug, 18 vooruit (~2 jaar totaal)
+  const vandaag = vandaagIso();
+  const startDatum = plusDagenIso(vandaag, -183);
+  const eindDatum  = plusDagenIso(vandaag, 549);
 
-  const datums = [];
-  const start = new Date(jaar, 0, 1);
-  const eind  = new Date(jaar, 11, 31);
-  for (let d = new Date(start); d <= eind; d.setDate(d.getDate() + 1)) {
-    datums.push(d.toISOString().slice(0, 10));
-  }
+  const datums = dagenInBereik(startDatum, eindDatum);
 
   const rankingMap = {};
   state.vakantieRankings.forEach(r => { rankingMap[r.naam] = r; });
 
+  // Saldo voor het lopende kalenderjaar
+  const huidigJaar = new Date().getFullYear();
+  const jaarStart = `${huidigJaar}-01-01`;
+  const jaarEind  = `${huidigJaar}-12-31`;
   const saldoMap = {};
-  allKolommen.forEach(k => { saldoMap[k.id] = berekenSaldo(k.id, jaar); });
+  allKolommen.forEach(k => { saldoMap[k.id] = berekenSaldoRange(k.id, jaarStart, jaarEind); });
 
   const toonBeheer = state.toonWeekRads;
   const toonW = state.toonWeekRads;
@@ -205,14 +213,16 @@ export function renderVakView() {
   }).join('');
 
   let body = '';
-  let vorigeMaand = -1;
+  let vorigeMaandKey = '';
 
   datums.forEach(iso => {
     const d = new Date(iso + 'T12:00:00');
     const m = d.getMonth();
-    if (m !== vorigeMaand) {
-      vorigeMaand = m;
-      body += `<div class="vak-maand-rij" style="grid-column: 1 / span ${totaalKolommen};">${MAANDEN[m].toUpperCase()} ${jaar}</div>`;
+    const y = d.getFullYear();
+    const maandKey = `${y}-${m}`;
+    if (maandKey !== vorigeMaandKey) {
+      vorigeMaandKey = maandKey;
+      body += `<div class="vak-maand-rij" style="grid-column: 1 / span ${totaalKolommen};">${MAANDEN[m].toUpperCase()} ${y}</div>`;
     }
 
     const dag = state.indelingMap[iso] || {};
@@ -221,7 +231,7 @@ export function renderVakView() {
     const rank = dag.vakantie_rank;
     const ranking = rank ? rankingMap[rank] : null;
     const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-    const isVandaag = (iso === vandaagIso());
+    const isVandaag = (iso === vandaag);
     const geaccordeerd = dag.vakantie_geaccordeerd || false;
 
     const vDataObj = dag.vakantie_v || {};
@@ -240,9 +250,9 @@ export function renderVakView() {
     const dagNaamKort = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
     const dagNummer = d.getDate();
     const dagCellStyle = `${rijStyle} display:flex; justify-content:space-between; align-items:baseline; padding:6px 4px 0 2px; ${isVandaag ? 'color:#185fa5; font-weight:500;' : ''}`;
-    const dagCell = `<div class="grid-day" style="${dagCellStyle}"><span>${dagNaamKort}</span><span>${dagNummer}</span></div>`;
+    const vandaagAttr = isVandaag ? 'data-vak-vandaag="1"' : '';
+    const dagCell = `<div class="grid-day" style="${dagCellStyle}" ${vandaagAttr}><span>${dagNaamKort}</span><span>${dagNummer}</span></div>`;
 
-    // Rad-cellen
     const radCells = allKolommen.map((k, i) => {
       const code = vCode(vDataObj[k.id]);
       const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);' : '';
@@ -257,7 +267,7 @@ export function renderVakView() {
         const cls = code === 'V' ? 'f-V' : (code === 'K' ? 'f-K' : (code === 'Z' ? 'f-Z' : 'f-V'));
         return `<div class="grid-cell ${cls}" style="${sep} ${eigenMark} ${cursor}" ${dataAttr}>${code}</div>`;
       } else {
-        return `<div class="grid-cell grid-cell-empty" style="${sep} ${eigenMark} ${rijStyle} ${cursor}" ${dataAttr}>·</div>`;
+        return `<div class="grid-cell grid-cell-empty" style="${sep} ${eigenMark} ${rijStyle} ${cursor}" ${dataAttr}>\u00b7</div>`;
       }
     }).join('');
 
@@ -265,17 +275,14 @@ export function renderVakView() {
 
     let beheerCells = '';
     if (toonBeheer) {
-      // X
       let xCel;
+      const slotje = geaccordeerd ? ' \uD83D\uDD12' : '';
       if (isBeheer && !geaccordeerd) {
-        const slotje = geaccordeerd ? ' \uD83D\uDD12' : '';
         xCel = `<div class="vak-cell-readonly" style="${rijStyle} cursor:pointer;" data-vak-x="${iso}">${x ? '\u2713' : ''}${slotje}</div>`;
       } else {
-        const slotje = geaccordeerd ? ' \uD83D\uDD12' : '';
         xCel = `<div class="vak-cell-readonly" style="${rijStyle}">${x ? '\u2713' : ''}${slotje}</div>`;
       }
 
-      // Min
       let mCel;
       if (isBeheer && x && !geaccordeerd) {
         const val = (typeof min === 'number') ? min : '';
@@ -284,19 +291,17 @@ export function renderVakView() {
         mCel = `<div class="vak-cell-readonly" style="${rijStyle}">${typeof min === 'number' ? min : ''}</div>`;
       }
 
-      // Rank
       let rCel;
       if (isBeheer && x && !geaccordeerd) {
         const opties = state.vakantieRankings.map(rk =>
           `<option value="${rk.naam}" ${rk.naam === rank ? 'selected' : ''}>${rk.label || rk.naam}</option>`
         ).join('');
-        rCel = `<div class="vak-cell-readonly" style="${rijStyle} padding: 2px;"><select onchange="window.vakSetRank('${iso}', this.value)" style="width:100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 3px; padding: 2px; font-size: 10px; background: transparent;"><option value="">—</option>${opties}</select></div>`;
+        rCel = `<div class="vak-cell-readonly" style="${rijStyle} padding: 2px;"><select onchange="window.vakSetRank('${iso}', this.value)" style="width:100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 3px; padding: 2px; font-size: 10px; background: transparent;"><option value="">\u2014</option>${opties}</select></div>`;
       } else {
-        // Klikbaar voor beheerder als x+rank gezet zijn → opent accordeer-sheet
         const klikbaar = isBeheer && x && rank;
         const ds = klikbaar ? `data-vak-blok="${iso}"` : '';
         const cur = klikbaar ? 'cursor:pointer;' : '';
-        rCel = `<div class="vak-cell-readonly" style="${rijStyle} font-size:10px; ${cur}" ${ds} title="${ranking?.label || ''}${klikbaar ? ' — tik voor accordeer' : ''}">${ranking?.label || rank || ''}</div>`;
+        rCel = `<div class="vak-cell-readonly" style="${rijStyle} font-size:10px; ${cur}" ${ds} title="${ranking?.label || ''}${klikbaar ? ' \u2014 tik voor accordeer' : ''}">${ranking?.label || rank || ''}</div>`;
       }
 
       beheerCells = xCel + mCel + rCel;
@@ -307,14 +312,18 @@ export function renderVakView() {
 
   const html = `
     <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
         <div>
-          <p style="font-size: 15px; font-weight: 500; margin: 0;">Vakantie ${jaar}</p>
-          <p class="muted" style="margin: 2px 0 0;">Tik = V toggle &middot; vasthouden = code kiezen (V/K/Z)</p>
+          <p style="font-size: 15px; font-weight: 500; margin: 0;">Vakantie</p>
+          <p class="muted" style="margin: 2px 0 0;">Tik = V toggle &middot; dubbel-tik = code kiezen (V/K/Z)</p>
         </div>
-        ${isBeheer ? `<button class="btn btn-primary" onclick="window.openVakRankings()" style="font-size: 12px; padding: 6px 12px;">\u2699 Rankings</button>` : ''}
+        ${isBeheer ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn" onclick="window.openVakBevriezenSheet()" style="font-size: 12px; padding: 6px 12px;">\uD83D\uDD12 Bevries periode</button>
+          <button class="btn btn-primary" onclick="window.openVakRankings()" style="font-size: 12px; padding: 6px 12px;">\u2699 Rankings</button>
+        </div>` : ''}
       </div>
-      <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+        <button class="btn" onclick="window.vakScrollNaarVandaag()" style="font-size: 12px; padding: 4px 10px;">\u2190 Vandaag</button>
         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
           <span class="muted">Waarnemers + beheerkolommen</span>
           <span class="toggle-switch ${toonW ? 'aan' : ''}" onclick="window.vakToggleW()"></span>
@@ -327,11 +336,11 @@ export function renderVakView() {
         <div class="vak-sticky-row vak-head-row">
           <div class="grid-head"></div>
           ${radHeads}
-          <div class="grid-head" title="Saldo (V minus dagen samenvallend met dienst)">\u2211</div>
+          <div class="grid-head" title="Saldo dit jaar (V minus dagen samenvallend met dienst)">\u2211</div>
           ${beheerHeads}
         </div>
         <div class="vak-sticky-row vak-saldo-row">
-          <div class="vak-saldo-label">Saldo</div>
+          <div class="vak-saldo-label">Saldo ${huidigJaar}</div>
           ${saldoCells}
           <div></div>
           ${toonBeheer ? '<div></div><div></div><div></div>' : ''}
@@ -343,32 +352,58 @@ export function renderVakView() {
 
   container.innerHTML = html;
 
-  // Long-press handlers koppelen
+  // Click handlers koppelen
   container.querySelectorAll('[data-vak-cel]').forEach(el => {
-    const [datum, radId] = el.getAttribute('data-vak-cel').split('|');
-    attachLp(el,
+    const key = el.getAttribute('data-vak-cel');
+    const [datum, radId] = key.split('|');
+    attachDblTap(el, key,
       () => window.vakToggleV(datum, radId),
-      () => window.openVakCelSheet(datum, radId)
+      () => window.openVakCelSheet(datum, radId),
     );
   });
   container.querySelectorAll('[data-vak-x]').forEach(el => {
     const datum = el.getAttribute('data-vak-x');
-    attachLp(el,
-      () => window.vakToggleX(datum),
-      () => {} // long press X doet niks (kan later voor min+rank in 1 sheet)
-    );
+    el.addEventListener('click', () => window.vakToggleX(datum));
   });
   container.querySelectorAll('[data-vak-blok]').forEach(el => {
     const datum = el.getAttribute('data-vak-blok');
     el.addEventListener('click', () => window.openVakBlokSheet(datum));
   });
+
+  // Scroll-positie behouden of naar vandaag scrollen bij eerste render
+  const wrap = container.querySelector('.vak-grid-wrap');
+  if (wrap) {
+    if (_eersteRender) {
+      _eersteRender = false;
+      const vandaagEl = container.querySelector('[data-vak-vandaag]');
+      if (vandaagEl) {
+        // Wacht op layout, scroll dan zodat vandaag bovenaan staat (onder de sticky kop)
+        requestAnimationFrame(() => {
+          const offset = vandaagEl.offsetTop - 60;
+          wrap.scrollTop = Math.max(0, offset);
+        });
+      }
+    } else {
+      wrap.scrollTop = scrollTop;
+      wrap.scrollLeft = scrollLeft;
+    }
+  }
 }
 
-// ----- Window handlers (basic schrijfacties) -------------------------------
+// ----- Window handlers -----------------------------------------------------
 
 window.vakToggleW = function() {
   state.toonWeekRads = !state.toonWeekRads;
   renderVakView();
+};
+
+window.vakScrollNaarVandaag = function() {
+  const container = document.getElementById('view-vak');
+  const wrap = container?.querySelector('.vak-grid-wrap');
+  const vandaagEl = container?.querySelector('[data-vak-vandaag]');
+  if (wrap && vandaagEl) {
+    wrap.scrollTop = Math.max(0, vandaagEl.offsetTop - 60);
+  }
 };
 
 window.vakToggleV = async function(datum, radId) {
@@ -386,7 +421,6 @@ window.vakToggleV = async function(datum, radId) {
   }
 };
 
-// X aan/uit. Bij aanzetten: auto-fill min en rank van vorige dag met die waardes.
 window.vakToggleX = async function(datum) {
   if (!isBeheerder()) return;
   const dag = state.indelingMap[datum] || {};
@@ -395,7 +429,6 @@ window.vakToggleX = async function(datum) {
 
   const update = { datum, vakantie_x: nieuw };
   if (nieuw) {
-    // Auto-fill: alleen waarden invullen die nog niet bestaan voor deze dag
     if (typeof dag.vakantie_min !== 'number') {
       const vorige = vorigeMinWaarde(datum);
       if (vorige !== null) update.vakantie_min = vorige;
@@ -440,7 +473,7 @@ window.vakSetRank = async function(datum, rankNaam) {
   }
 };
 
-// ----- Long press: vrije code-keuze (V / K / Z) ----------------------------
+// ----- Code-keuze sheet (V/K/Z) ------------------------------------------
 
 window.openVakCelSheet = function(datum, radId) {
   const dag = state.indelingMap[datum] || {};
@@ -478,20 +511,17 @@ window.vakKiesCode = async function(datum, radId, code) {
   }
 };
 
-// ----- Accorderen --------------------------------------------------------
+// ----- Per-blok accorderen -----------------------------------------------
 
-// Klik op rank-cel (read-only voor beheerder als rank/x ingevuld)
-// → toont blok-info en accordeer/deaccordeer-knop.
 window.openVakBlokSheet = function(datum) {
   if (!isBeheerder()) return;
   const blok = vindBlok(datum);
   if (!blok) return;
   const ranking = state.vakantieRankings.find(r => r.naam === blok.rank);
-  const dagen = dagenInBlok(blok);
+  const dagen = dagenInBereik(blok.start, blok.eind);
   const eersteDag = state.indelingMap[blok.start];
   const isGeaccordeerd = !!eersteDag?.vakantie_geaccordeerd;
 
-  // V-tellingen per radioloog in dit blok
   const rads = vasteRads();
   const tellingen = {};
   rads.forEach(r => { tellingen[r.id] = 0; });
@@ -515,7 +545,7 @@ window.openVakBlokSheet = function(datum) {
       <p class="muted" style="margin:0 0 6px; font-size: 12px;">V-totalen in dit blok:</p>
       <div style="font-size: 12px;">${tellLijst}</div>
     </div>
-    ${isGeaccordeerd ? '<div class="form-info" style="font-size:12px; margin-bottom:1rem;">Dit blok is geaccordeerd. Radiologen kunnen V niet meer wijzigen. Bij deaccorderen blijven de V-toewijzingen in Overzicht staan tot je ze handmatig wist.</div>' : '<div class="form-info" style="font-size:12px; margin-bottom:1rem;">Bij accorderen worden alle V-cellen in dit blok ook als V geschreven naar het hoofdrooster (Overzicht).</div>'}
+    ${isGeaccordeerd ? '<div class="form-info" style="font-size:12px; margin-bottom:1rem;">Dit blok is geaccordeerd. Radiologen kunnen V niet meer wijzigen.</div>' : '<div class="form-info" style="font-size:12px; margin-bottom:1rem;">Bij accorderen worden alle V-cellen ook als V geschreven naar het hoofdrooster (Overzicht).</div>'}
     <div style="display:flex; gap:8px;">
       ${knopAccord}
       <button class="btn" style="flex:1;" onclick="window.closeSheet()">Sluiten</button>
@@ -524,77 +554,128 @@ window.openVakBlokSheet = function(datum) {
   openSheet();
 };
 
-// Accorderen: zet vakantie_geaccordeerd=true op alle dagen in blok,
-// en schrijf V naar indeling.toewijzingen voor elke radioloog die V heeft.
 window.vakAccordeer = async function(startISO, eindISO) {
   if (!isBeheerder()) return;
-  if (!confirm('Blok accorderen en V-cellen doorzetten naar het hoofdrooster?')) return;
-
+  if (!confirm('Periode accorderen en V-cellen doorzetten naar het hoofdrooster?')) return;
   closeSheet();
+  await accordeerRange(startISO, eindISO, true);
+};
 
-  const dagen = [];
-  let cur = startISO;
-  while (cur <= eindISO) {
-    dagen.push(cur);
-    cur = new Date(new Date(cur + 'T12:00:00').getTime() + 86400000)
-      .toISOString().slice(0, 10);
-  }
+window.vakDeaccordeer = async function(startISO, eindISO) {
+  if (!isBeheerder()) return;
+  if (!confirm('Periode deaccorderen? V-cellen blijven in Overzicht staan tot je ze handmatig wist.')) return;
+  closeSheet();
+  await accordeerRange(startISO, eindISO, false);
+};
 
+// Generieke accorderen/deaccorderen voor een range datums.
+// Bij accorderen=true worden V-cellen ook doorgezet naar toewijzingen.
+async function accordeerRange(startISO, eindISO, accorderen) {
+  const dagen = dagenInBereik(startISO, eindISO);
   try {
     const batch = writeBatch(db);
     for (const datum of dagen) {
       const dag = state.indelingMap[datum] || {};
-      const vData = dag.vakantie_v || {};
-      const huidigeToewijzingen = { ...(dag.toewijzingen || {}) };
+      const update = { datum, vakantie_geaccordeerd: accorderen };
 
-      // Voor elke V in vakantie_v: zet toewijzingen[radId] = ['V']
-      // Bestaande toewijzingen worden overschreven.
-      Object.entries(vData).forEach(([radId, w]) => {
-        if (vCode(w) === 'V') {
-          huidigeToewijzingen[radId] = ['V'];
-        }
-      });
+      if (accorderen) {
+        const vData = dag.vakantie_v || {};
+        const huidigeToewijzingen = { ...(dag.toewijzingen || {}) };
+        Object.entries(vData).forEach(([radId, w]) => {
+          if (vCode(w) === 'V') {
+            huidigeToewijzingen[radId] = ['V'];
+          }
+        });
+        update.toewijzingen = huidigeToewijzingen;
+      }
 
-      batch.set(doc(db, 'indeling', datum), {
-        datum,
-        vakantie_geaccordeerd: true,
-        toewijzingen: huidigeToewijzingen,
-      }, { merge: true });
+      batch.set(doc(db, 'indeling', datum), update, { merge: true });
     }
     await batch.commit();
   } catch (e) {
-    alert('Accorderen mislukt: ' + (e.message || e.code));
+    alert('Bewerking mislukt: ' + (e.message || e.code));
   }
+}
+
+// ----- Bevries periode (datum-range) -------------------------------------
+
+window.openVakBevriezenSheet = function() {
+  if (!isBeheerder()) return;
+
+  const vandaag = vandaagIso();
+  // Default suggesties: 1 mei tot 1 september voor "april" of vergelijkbaar
+  const startSugg = vandaag;
+  const eindSugg = plusDagenIso(vandaag, 90);
+
+  document.getElementById('sheetTitle').textContent = 'Bevries periode';
+  document.getElementById('sheetSub').textContent = 'Accordeer alle vakantiedagen in de gekozen range in een keer';
+  document.getElementById('sheetBody').innerHTML = `
+    <div style="display:flex; gap:12px; margin-bottom: 12px;">
+      <div style="flex:1;">
+        <label class="form-label">Vanaf</label>
+        <input type="date" class="input" id="vakBvStart" value="${startSugg}">
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Tot en met</label>
+        <input type="date" class="input" id="vakBvEind" value="${eindSugg}">
+      </div>
+    </div>
+    <div id="vakBvPreview" class="form-info" style="font-size:12px; margin-bottom:1rem;">Tik op "Preview" om te zien wat er bevroren wordt.</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" style="flex:1;" onclick="window.vakBevriezenPreview()">Preview</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="window.vakBevriezenUitvoeren()">\uD83D\uDD12 Bevries</button>
+    </div>
+    <button class="btn" style="width:100%; margin-top:8px;" onclick="window.closeSheet()">Annuleer</button>
+  `;
+  openSheet();
 };
 
-// Deaccorderen: zet vakantie_geaccordeerd=false. V-toewijzingen in Overzicht
-// blijven staan (beheerder kan ze handmatig wijzigen via Overzicht-tab).
-window.vakDeaccordeer = async function(startISO, eindISO) {
+window.vakBevriezenPreview = function() {
+  const start = document.getElementById('vakBvStart')?.value;
+  const eind  = document.getElementById('vakBvEind')?.value;
+  const preview = document.getElementById('vakBvPreview');
+  if (!start || !eind || start > eind) {
+    preview.textContent = 'Kies een geldige periode (vanaf moet voor tot zijn).';
+    return;
+  }
+
+  const dagen = dagenInBereik(start, eind);
+  const xDagen = dagen.filter(d => state.indelingMap[d]?.vakantie_x);
+  const rankSet = new Set();
+  xDagen.forEach(d => {
+    const r = state.indelingMap[d]?.vakantie_rank;
+    if (r) rankSet.add(r);
+  });
+
+  // V-totalen per radioloog in deze range
+  const rads = vasteRads();
+  const tellingen = {};
+  rads.forEach(r => { tellingen[r.id] = 0; });
+  xDagen.forEach(d => {
+    const v = state.indelingMap[d]?.vakantie_v || {};
+    rads.forEach(r => {
+      if (vCode(v[r.id]) === 'V') tellingen[r.id]++;
+    });
+  });
+  const tellLijst = rads.map(r => `<div style="display:flex; justify-content:space-between; padding:2px 0;"><span>${r.code} \u00b7 ${r.achternaam}</span><strong>${tellingen[r.id]} V</strong></div>`).join('');
+
+  preview.innerHTML = `
+    <div style="font-size:12px;">
+      <p style="margin:0 0 6px;"><strong>${dagen.length}</strong> dagen totaal, waarvan <strong>${xDagen.length}</strong> vakantiedagen (X) over <strong>${rankSet.size}</strong> ranking(s): ${[...rankSet].join(', ') || '\u2014'}</p>
+      <div>${tellLijst}</div>
+    </div>
+  `;
+};
+
+window.vakBevriezenUitvoeren = async function() {
   if (!isBeheerder()) return;
-  if (!confirm('Blok deaccorderen? V-cellen blijven in Overzicht staan tot je ze handmatig wist.')) return;
+  const start = document.getElementById('vakBvStart')?.value;
+  const eind  = document.getElementById('vakBvEind')?.value;
+  if (!start || !eind || start > eind) { alert('Kies een geldige periode.'); return; }
 
+  if (!confirm(`Periode ${start} t/m ${eind} bevriezen en V-cellen doorzetten naar Overzicht?`)) return;
   closeSheet();
-
-  const dagen = [];
-  let cur = startISO;
-  while (cur <= eindISO) {
-    dagen.push(cur);
-    cur = new Date(new Date(cur + 'T12:00:00').getTime() + 86400000)
-      .toISOString().slice(0, 10);
-  }
-
-  try {
-    const batch = writeBatch(db);
-    for (const datum of dagen) {
-      batch.set(doc(db, 'indeling', datum), {
-        datum,
-        vakantie_geaccordeerd: false,
-      }, { merge: true });
-    }
-    await batch.commit();
-  } catch (e) {
-    alert('Deaccorderen mislukt: ' + (e.message || e.code));
-  }
+  await accordeerRange(start, eind, true);
 };
 
 // ----- Ranking CRUD ------------------------------------------------------
@@ -625,7 +706,6 @@ window.openVakRankings = function() {
   openSheet();
 };
 
-// Bewerk-sheet voor één ranking. naam='' = nieuw.
 window.openVakRankingEdit = function(naam) {
   const bestaand = naam ? state.vakantieRankings.find(r => r.naam === naam) : null;
   const rads = vasteRads();
