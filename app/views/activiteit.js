@@ -136,8 +136,8 @@ export function renderActView() {
   const aantalKol = kolommen.length;
   const labelBreedte = '110px';
   const cellBreedte = ratio ? 'minmax(40px, 1fr)' : 'minmax(30px, 1fr)';
-  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 72px`;
-  const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 72;
+  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 44px`;
+  const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 44;
 
   // Codes waarvoor "verdeling" niet zinvol is (niet stuurbaar / individueel)
   const GEEN_VERDELING_CODES = ['Z'];
@@ -202,9 +202,9 @@ export function renderActView() {
     return Math.round(v * 100) + '%';
   }
   function fmtGem(v) {
-    if (!v) return v === 0 ? '0' : '';
-    const r = Math.round(v * 10) / 10;
-    return Number.isInteger(r) ? String(r) : r.toFixed(1);
+    if (v === null || v === undefined) return '';
+    // Algebraïsch afronden (half naar boven) op heel getal.
+    return String(Math.round(v));
   }
 
   function rijHtml(rij) {
@@ -322,7 +322,7 @@ export function renderActView() {
           const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
           return `<div class="act-head ${sep}">${k.label}</div>`;
         }).join('')}
-        <div class="act-head act-sep">Gemiddelde</div>
+        <div class="act-head act-sep" title="Gemiddelde">x̄</div>
 
         ${rijen.map(rijHtml).join('')}
 
