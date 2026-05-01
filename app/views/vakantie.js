@@ -1,6 +1,19 @@
-// Vakantie-view (Fase 4: doorlopende kalender + dubbel-tik + bevries periode).
+// Vakantie-view v3.15.7
 //
-// Datamodel:
+// Wijzigingen t.o.v. v3.15.6:
+//  1. Optimistic UI: state.indelingMap direct bijwerken vóór setDoc,
+//     daarna alleen de gewijzigde cel(len) in de DOM patchen (geen volledige
+//     re-render). Firebase-write via debounce + flush-on-leave.
+//  2. Scroll vs. tap: bewegingsdrempel 10 px op pointermove — meer beweging =
+//     scroll, cel-actie geannuleerd.
+//  3. attachDblTap: per-element timer-state i.p.v. module-level variabelen.
+//     Tap-window 250 ms.
+//  4. Beheerder scroll-mode toggle: knop in header schakelt _scrollModus.
+//     In scroll-modus worden geen cellen geactiveerd.
+//  5. Write-strategie: debounced write per datum (500 ms), flush bij verlaten
+//     van de vakantie-tab (visibilitychange + pagehide).
+//
+// Datamodel (ongewijzigd):
 //   indeling/{datum}.vakantie_x        bool
 //   indeling/{datum}.vakantie_min      number
 //   indeling/{datum}.vakantie_rank     string
@@ -17,6 +30,49 @@ import {
   vasteRads, actieveInvallers, radiologenMap, vandaagIso,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
+
+// ----- Scroll-modus (beheerder) -------------------------------------------
+// In scroll-modus worden geen cellen geactiveerd door tap.
+let _scrollModus = false;
+
+// ----- Write-queue (debounced + flush-on-leave) ---------------------------
+// Pendende writes: { [datum]: updateObject }
+const _pendingWrites = {};
+const _writeTimers = {};
+
+function _scheduleWrite(datum, update) {
+  // Merge met eventuele al openstaande pending write voor dit datum
+  _pendingWrites[datum] = Object.assign(_pendingWrites[datum] || {}, update);
+  if (_writeTimers[datum]) clearTimeout(_writeTimers[datum]);
+  _writeTimers[datum] = setTimeout(() => _flushDatum(datum), 500);
+}
+
+async function _flushDatum(datum) {
+  if (_writeTimers[datum]) { clearTimeout(_writeTimers[datum]); delete _writeTimers[datum]; }
+  const update = _pendingWrites[datum];
+  if (!update) return;
+  delete _pendingWrites[datum];
+  try {
+    await setDoc(doc(db, 'indeling', datum), update, { merge: true });
+  } catch (e) {
+    console.error('Vakantie write mislukt', datum, e);
+    alert('Opslaan mislukt: ' + (e.message || e.code));
+  }
+}
+
+async function _flushAll() {
+  const datums = Object.keys(_pendingWrites);
+  await Promise.all(datums.map(d => _flushDatum(d)));
+}
+
+// Flush bij verlaten pagina / tab-switch
+if (!window._vakFlushHooked) {
+  window._vakFlushHooked = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _flushAll();
+  });
+  window.addEventListener('pagehide', _flushAll);
+}
 
 // ----- Helpers -------------------------------------------------------------
 
@@ -113,65 +169,107 @@ function dagenInBereik(startISO, eindISO) {
   return dagen;
 }
 
-// ----- Dubbel-tik detectie -------------------------------------------------
+// ----- Optimistic cel-update + DOM-patch ----------------------------------
 //
-// Werkt op desktop (muis) en mobiel (touch). Gebruikt pointerup zodat de
-// tap meteen geregistreerd wordt zonder de ~300 ms click-delay die iOS/
-// Android toevoegen voor double-tap-zoom-detectie. `touch-action:
-// manipulation` zet die zoom-detectie ook uit voor het element zelf,
-// zodat de eerste tap direct doorkomt.
+// Werkt state.indelingMap bij en patcht alleen de betreffende cel in de DOM,
+// zonder volledige re-render. Daarna wordt de write gedebounced naar Firebase.
+
+function _patchVakCel(datum, radId) {
+  const container = document.getElementById('view-vak');
+  if (!container) return;
+  const key = `${datum}|${radId}`;
+  const el = container.querySelector(`[data-vak-cel="${key}"]`);
+  if (!el) return;
+
+  const dag = state.indelingMap[datum] || {};
+  const geaccordeerd = dag.vakantie_geaccordeerd || false;
+  const vDataObj = dag.vakantie_v || {};
+  const code = vCode(vDataObj[radId]);
+
+  const magKlikken = !geaccordeerd && (isBeheerder() || radId === eigenRadId());
+  const cursor = magKlikken ? 'cursor:pointer;' : 'cursor:default;';
+
+  // Behoud bestaande inline style attributen (sep, eigenMark, rijStyle)
+  // door alleen klasse en inhoud te vervangen, niet de hele ouder-rij.
+  el.className = code
+    ? `grid-cell ${code === 'V' ? 'f-V' : code === 'K' ? 'f-K' : code === 'Z' ? 'f-Z' : 'f-V'}`
+    : 'grid-cell grid-cell-empty';
+  el.textContent = code || '\u00b7';
+  // cursor refreshen
+  el.style.cursor = magKlikken ? 'pointer' : 'default';
+}
+
+// ----- Dubbel-tik detectie (per element, met scroll-drempel) --------------
 //
-// Eerste tik: bewaar timestamp + key, start 310ms timer voor "kort"-actie.
-// Als binnen die tijd een tweede tik komt op dezelfde key: timer annuleren
-// en "lang"-actie uitvoeren.
+// Fix t.o.v. v3.15.6:
+//   • Per-element _dblState i.p.v. module-level variabelen → geen cross-element
+//     interferentie bij snel tikken op verschillende cellen.
+//   • Scroll-drempel 10 px: als de vinger meer dan 10 px beweegt vóór pointerup
+//     wordt de actie geannuleerd (= scrollen, niet tikken).
+//   • Tap-window 250 ms (was 300 ms).
+//   • In _scrollModus (beheerder-toggle) wordt nooit een actie uitgevoerd.
 
-const DBL_TAP_MS = 300;
-let _dblTimer = null;
-let _dblKey = null;
-let _dblTime = 0;
+const DBL_TAP_MS = 250;
+const SCROLL_DREMPEL = 10; // px
 
-function attachDblTap(el, key, onShort, onLong) {
+function attachDblTap(el, onShort, onLong) {
   el.style.touchAction = 'manipulation';
+
+  // Per-element state (closure)
+  let dblTimer = null;
+  let dblTime = 0;
+  let startX = 0;
+  let startY = 0;
+  let bewogen = false;
+
+  el.addEventListener('pointerdown', (e) => {
+    startX = e.clientX;
+    startY = e.clientY;
+    bewogen = false;
+  });
+
+  el.addEventListener('pointermove', (e) => {
+    if (Math.abs(e.clientX - startX) > SCROLL_DREMPEL ||
+        Math.abs(e.clientY - startY) > SCROLL_DREMPEL) {
+      bewogen = true;
+    }
+  });
+
   el.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (bewogen || _scrollModus) return; // scroll of beheerder-scroll-modus
+
     const now = Date.now();
-    if (_dblKey === key && (now - _dblTime) < DBL_TAP_MS) {
-      // Tweede tik binnen vertraging: annuleer kort-actie en open sheet
-      if (_dblTimer) { clearTimeout(_dblTimer); _dblTimer = null; }
-      _dblKey = null;
-      _dblTime = 0;
+    if (dblTimer !== null && (now - dblTime) < DBL_TAP_MS) {
+      // Tweede tik: dubbel-tap
+      clearTimeout(dblTimer);
+      dblTimer = null;
+      dblTime = 0;
       onLong();
     } else {
-      // Eerste tik: wacht of er een tweede komt
-      if (_dblTimer) clearTimeout(_dblTimer);
-      _dblKey = key;
-      _dblTime = now;
-      _dblTimer = setTimeout(() => {
-        _dblTimer = null;
-        // Alleen uitvoeren als deze tap nog steeds de actuele is
-        if (_dblKey === key && _dblTime === now) {
-          _dblKey = null;
-          _dblTime = 0;
-          onShort();
-        }
+      // Eerste tik
+      if (dblTimer !== null) clearTimeout(dblTimer);
+      dblTime = now;
+      dblTimer = setTimeout(() => {
+        dblTimer = null;
+        dblTime = 0;
+        onShort();
       }, DBL_TAP_MS + 10);
     }
   });
-  // Voorkom dat synthetische click op desktop ook nog vuurt en de toggle
-  // dubbel uitvoert
+
+  // Voorkom dat synthetische click ook nog vuurt
   el.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
 }
 
 // ----- Render --------------------------------------------------------------
 
-// Of de matrix al een keer is gerenderd (voor scroll-naar-vandaag bij eerste opening)
 let _eersteRender = true;
 
 export function renderVakView() {
   const container = document.getElementById('view-vak');
   if (!container) return;
 
-  // Scroll-positie bewaren
   const oudeScrollWrap = container.querySelector('.vak-grid-wrap');
   const scrollTop = oudeScrollWrap?.scrollTop || 0;
   const scrollLeft = oudeScrollWrap?.scrollLeft || 0;
@@ -187,17 +285,14 @@ export function renderVakView() {
     ...invallers.map(r => ({ id: r.id, label: r.slot || r.code })),
   ];
 
-  // Doorlopende kalender: 6 maanden terug, 18 vooruit (~2 jaar totaal)
   const vandaag = vandaagIso();
   const startDatum = plusDagenIso(vandaag, -183);
   const eindDatum  = plusDagenIso(vandaag, 549);
-
   const datums = dagenInBereik(startDatum, eindDatum);
 
   const rankingMap = {};
   state.vakantieRankings.forEach(r => { rankingMap[r.naam] = r; });
 
-  // Saldo voor het zichtbare jaar (wordt bij scroll bijgewerkt)
   const huidigJaar = state.vakZichtbaarJaar || new Date().getFullYear();
   const jaarStart = `${huidigJaar}-01-01`;
   const jaarEind  = `${huidigJaar}-12-31`;
@@ -261,9 +356,6 @@ export function renderVakView() {
     const vDataObj = dag.vakantie_v || {};
     const vAantal = allKolommen.reduce((n, k) => n + (vCode(vDataObj[k.id]) === 'V' ? 1 : 0), 0);
     const overschreden = (typeof min === 'number' && vAantal > (rads.length - min));
-    // Rij-kleur: alleen overschrijding (rood), ranking-blok (lichte tint),
-    // of weekend (lichtgrijs). K/Z worden niet meer rij-gekleurd — ze hebben
-    // hun eigen f-K / f-Z cel-kleur (zie regel ~280).
 
     let rijStyle = '';
     if (overschreden) {
@@ -332,14 +424,18 @@ export function renderVakView() {
       }
 
       beheerCells = xCel + mCel + rCel;
-
-      // Extra datum-kolom helemaal rechts (zelfde inhoud als links)
       const dagCellRechts = `<div class="grid-day" style="${dagCellStyle}"><span>${dagNaamKort}</span><span>${dagNummer}</span></div>`;
       beheerCells += dagCellRechts;
     }
 
     body += dagCell + radCells + saldoCel + beheerCells;
   });
+
+  // Scroll-modus knop label
+  const scrollModusLabel = _scrollModus ? '\uD83D\uDD12 Scroll-modus aan' : '\uD83D\uDD13 Scroll-modus';
+  const scrollModusStyle = _scrollModus
+    ? 'font-size: 12px; padding: 6px 12px; background: #e8f0fe; border-color: #185fa5; color: #185fa5;'
+    : 'font-size: 12px; padding: 6px 12px;';
 
   const html = `
     <div class="card">
@@ -348,13 +444,16 @@ export function renderVakView() {
           <p style="font-size: 15px; font-weight: 500; margin: 0;">Vakantie</p>
           <p class="muted" style="margin: 2px 0 0;">Tik = V toggle &middot; dubbel-tik = code kiezen (V/K/Z)</p>
         </div>
-        ${isBeheer ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn" onclick="window.openVakBevriezenSheet()" style="font-size: 12px; padding: 6px 12px;">\uD83D\uDD12 Bevries periode</button>
-          <button class="btn btn-primary" onclick="window.openVakRankings()" style="font-size: 12px; padding: 6px 12px;">\u2699 Rankings</button>
-        </div>` : ''}
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          ${isBeheer ? `
+            <button class="btn" onclick="window.vakToggleScrollModus()" style="${scrollModusStyle}">${scrollModusLabel}</button>
+            <button class="btn" onclick="window.openVakBevriezenSheet()" style="font-size: 12px; padding: 6px 12px;">\uD83D\uDD12 Bevries periode</button>
+            <button class="btn btn-primary" onclick="window.openVakRankings()" style="font-size: 12px; padding: 6px 12px;">\u2699 Rankings</button>
+          ` : ''}
+        </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-        <button class="btn" onclick="window.vakScrollNaarVandaag()" style="font-size: 12px; padding: 4px 10px;">\u2190 Vandaag</button>
+        <button class="btn" onclick="window.vakScrollNaarVandaag()" style="font-size: 12px; padding: 4px 10px;">&larr; Vandaag</button>
         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
           <span class="muted">Waarnemers + beheerkolommen</span>
           <span class="toggle-switch ${toonW ? 'aan' : ''}" onclick="window.vakToggleW()"></span>
@@ -367,7 +466,7 @@ export function renderVakView() {
         <div class="vak-sticky-row vak-head-row">
           <div class="grid-head"></div>
           ${radHeads}
-          <div class="grid-head" title="Saldo dit jaar (V minus dagen samenvallend met dienst)">\u2211</div>
+          <div class="grid-head" title="Saldo dit jaar (V minus dagen samenvallend met dienst)">&sum;</div>
           ${beheerHeads}
         </div>
         <div class="vak-sticky-row vak-saldo-row" id="vakSaldoRow">
@@ -383,18 +482,18 @@ export function renderVakView() {
 
   container.innerHTML = html;
 
-  // Click handlers koppelen
+  // Event handlers koppelen
   container.querySelectorAll('[data-vak-cel]').forEach(el => {
     const key = el.getAttribute('data-vak-cel');
     const [datum, radId] = key.split('|');
-    attachDblTap(el, key,
+    attachDblTap(el,
       () => window.vakToggleV(datum, radId),
       () => window.openVakCelSheet(datum, radId),
     );
   });
   container.querySelectorAll('[data-vak-x]').forEach(el => {
     const datum = el.getAttribute('data-vak-x');
-    attachDblTap(el, 'x|' + datum,
+    attachDblTap(el,
       () => window.vakToggleX(datum),
       () => window.openVakXSheet(datum),
     );
@@ -404,14 +503,12 @@ export function renderVakView() {
     el.addEventListener('click', () => window.openVakBlokSheet(datum));
   });
 
-  // Scroll-positie behouden of naar vandaag scrollen bij eerste render
   const wrap = container.querySelector('.vak-grid-wrap');
   if (wrap) {
     if (_eersteRender) {
       _eersteRender = false;
       const vandaagEl = container.querySelector('[data-vak-vandaag]');
       if (vandaagEl) {
-        // Wacht op layout, scroll dan zodat vandaag bovenaan staat (onder de sticky kop)
         requestAnimationFrame(() => {
           const offset = vandaagEl.offsetTop - 60;
           wrap.scrollTop = Math.max(0, offset);
@@ -422,7 +519,6 @@ export function renderVakView() {
       wrap.scrollTop = scrollTop;
       wrap.scrollLeft = scrollLeft;
     }
-    // Throttled scroll-listener: detecteer welk jaar centraal staat
     let scrollTicking = false;
     wrap.addEventListener('scroll', () => {
       if (scrollTicking) return;
@@ -435,9 +531,6 @@ export function renderVakView() {
   }
 }
 
-// Bepaal welk jaar centraal in het zichtbare deel staat, en update de
-// saldo-rij als dat anders is dan wat nu getoond wordt. Render NIET de hele
-// matrix opnieuw — alleen de saldo-cellen vervangen voor soepele scroll.
 function updateZichtbaarJaar() {
   const container = document.getElementById('view-vak');
   const wrap = container?.querySelector('.vak-grid-wrap');
@@ -445,8 +538,6 @@ function updateZichtbaarJaar() {
   const maandRijen = container.querySelectorAll('[data-vak-jaar]');
   if (maandRijen.length === 0) return;
 
-  // Vind de maand-rij die het dichtst bij de top van de zichtbare area staat,
-  // net onder de sticky head+saldo (~60px).
   const wrapTop = wrap.getBoundingClientRect().top;
   const drempel = wrapTop + 60;
   let huidigeJaar = parseInt(maandRijen[0].getAttribute('data-vak-jaar'), 10);
@@ -466,8 +557,6 @@ function updateZichtbaarJaar() {
   vernieuwSaldoRij();
 }
 
-// Vervang alleen de saldo-cellen in de saldo-rij + label, zonder volledige
-// re-render. Houdt scroll-positie en interactiestaat intact.
 function vernieuwSaldoRij() {
   const container = document.getElementById('view-vak');
   if (!container) return;
@@ -501,12 +590,24 @@ function vernieuwSaldoRij() {
     return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${resterend}</div>`;
   }).join('');
 
-  // Herbouw de hele rij-inhoud
   const trailingDivs = toonBeheer ? '<div></div><div></div><div></div><div></div>' : '';
   row.innerHTML = `<div class="vak-saldo-label" id="vakSaldoLabel">Saldo ${huidigJaar}</div>${saldoCells}<div></div>${trailingDivs}`;
 }
 
 // ----- Window handlers -----------------------------------------------------
+
+window.vakToggleScrollModus = function() {
+  _scrollModus = !_scrollModus;
+  // Alleen de knop refreshen, niet de hele view
+  const container = document.getElementById('view-vak');
+  const btn = container?.querySelector('[onclick="window.vakToggleScrollModus()"]');
+  if (btn) {
+    btn.textContent = _scrollModus ? '\uD83D\uDD12 Scroll-modus aan' : '\uD83D\uDD13 Scroll-modus';
+    btn.style.cssText = _scrollModus
+      ? 'font-size: 12px; padding: 6px 12px; background: #e8f0fe; border-color: #185fa5; color: #185fa5;'
+      : 'font-size: 12px; padding: 6px 12px;';
+  }
+};
 
 window.vakToggleW = function() {
   state.toonWeekRads = !state.toonWeekRads;
@@ -522,22 +623,29 @@ window.vakScrollNaarVandaag = function() {
   }
 };
 
-window.vakToggleV = async function(datum, radId) {
+// Optimistic toggle V: update state direct, patch DOM, schrijf debounced
+window.vakToggleV = function(datum, radId) {
   const dag = state.indelingMap[datum] || {};
   if (dag.vakantie_geaccordeerd) return;
+
+  // Optimistic update
   const huidig = dag.vakantie_v || {};
   const huidigeCode = vCode(huidig[radId]);
   const nieuw = { ...huidig };
   if (huidigeCode) delete nieuw[radId];
   else nieuw[radId] = true;
-  try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
+
+  if (!state.indelingMap[datum]) state.indelingMap[datum] = { datum };
+  state.indelingMap[datum] = { ...state.indelingMap[datum], vakantie_v: nieuw };
+
+  // Patch alleen deze cel
+  _patchVakCel(datum, radId);
+
+  // Debounced write
+  _scheduleWrite(datum, { datum, vakantie_v: nieuw });
 };
 
-window.vakToggleX = async function(datum) {
+window.vakToggleX = function(datum) {
   if (!isBeheerder()) return;
   const dag = state.indelingMap[datum] || {};
   if (dag.vakantie_geaccordeerd) return;
@@ -558,11 +666,14 @@ window.vakToggleX = async function(datum) {
     update.vakantie_rank = null;
   }
 
-  try {
-    await setDoc(doc(db, 'indeling', datum), update, { merge: true });
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
+  // Optimistic update
+  if (!state.indelingMap[datum]) state.indelingMap[datum] = { datum };
+  state.indelingMap[datum] = { ...state.indelingMap[datum], ...update };
+
+  // X-toggle vereist rij-herrender (achtergrondkleur, min/rank kolommen)
+  renderVakView();
+
+  _scheduleWrite(datum, update);
 };
 
 window.vakSetMin = async function(datum, waarde) {
@@ -571,22 +682,22 @@ window.vakSetMin = async function(datum, waarde) {
   if (dag.vakantie_geaccordeerd) return;
   const num = waarde === '' ? null : Number(waarde);
   if (num !== null && (isNaN(num) || num < 0)) return;
-  try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_min: num }, { merge: true });
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
+
+  if (!state.indelingMap[datum]) state.indelingMap[datum] = { datum };
+  state.indelingMap[datum] = { ...state.indelingMap[datum], vakantie_min: num };
+
+  _scheduleWrite(datum, { datum, vakantie_min: num });
 };
 
 window.vakSetRank = async function(datum, rankNaam) {
   if (!isBeheerder()) return;
   const dag = state.indelingMap[datum] || {};
   if (dag.vakantie_geaccordeerd) return;
-  try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_rank: rankNaam || null }, { merge: true });
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
+
+  if (!state.indelingMap[datum]) state.indelingMap[datum] = { datum };
+  state.indelingMap[datum] = { ...state.indelingMap[datum], vakantie_rank: rankNaam || null };
+
+  _scheduleWrite(datum, { datum, vakantie_rank: rankNaam || null });
 };
 
 // ----- Code-keuze sheet (V/K/Z) ------------------------------------------
@@ -613,18 +724,20 @@ window.openVakCelSheet = function(datum, radId) {
   openSheet();
 };
 
-window.vakKiesCode = async function(datum, radId, code) {
+window.vakKiesCode = function(datum, radId, code) {
   const dag = state.indelingMap[datum] || {};
   const huidig = dag.vakantie_v || {};
   const nieuw = { ...huidig };
   if (code) nieuw[radId] = (code === 'V') ? true : code;
   else delete nieuw[radId];
+
+  // Optimistic update
+  if (!state.indelingMap[datum]) state.indelingMap[datum] = { datum };
+  state.indelingMap[datum] = { ...state.indelingMap[datum], vakantie_v: nieuw };
+
   closeSheet();
-  try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
+  _patchVakCel(datum, radId);
+  _scheduleWrite(datum, { datum, vakantie_v: nieuw });
 };
 
 // ----- X-cel: rij vullen met één code voor iedereen ---------------------
@@ -656,7 +769,7 @@ window.openVakXSheet = function(datum) {
   openSheet();
 };
 
-window.vakVulRijIn = async function(datum, code) {
+window.vakVulRijIn = function(datum, code) {
   if (!isBeheerder()) return;
   const dag = state.indelingMap[datum] || {};
   if (dag.vakantie_geaccordeerd) return;
@@ -664,16 +777,17 @@ window.vakVulRijIn = async function(datum, code) {
   const rads = vasteRads();
   const nieuw = {};
   if (code) {
-    rads.forEach(r => {
-      nieuw[r.id] = (code === 'V') ? true : code;
-    });
+    rads.forEach(r => { nieuw[r.id] = (code === 'V') ? true : code; });
   }
+
+  // Optimistic update
+  if (!state.indelingMap[datum]) state.indelingMap[datum] = { datum };
+  state.indelingMap[datum] = { ...state.indelingMap[datum], vakantie_v: nieuw };
+
   closeSheet();
-  try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
+  // Meerdere cellen gewijzigd: volledige re-render
+  renderVakView();
+  _scheduleWrite(datum, { datum, vakantie_v: nieuw });
 };
 
 window.vakVulRijInVrij = function(datum) {
@@ -710,8 +824,8 @@ window.openVakBlokSheet = function(datum) {
   document.getElementById('sheetSub').textContent = `${blok.start} t/m ${blok.eind} (${dagen.length} dagen)`;
 
   const knopAccord = isGeaccordeerd
-    ? `<button class="btn" style="flex:1; background:#fde0e0;" onclick="window.vakDeaccordeer('${blok.start}','${blok.eind}')">\uD83D\uDD13 Deaccorderen</button>`
-    : `<button class="btn btn-primary" style="flex:1;" onclick="window.vakAccordeer('${blok.start}','${blok.eind}')">\uD83D\uDD12 Accorderen + doorzetten</button>`;
+    ? `<button class="btn" style="flex:1; background:#fde0e0;" onclick="window.vakDeaccordeer('${blok.start}','${blok.eind}')">&#x1F513; Deaccorderen</button>`
+    : `<button class="btn btn-primary" style="flex:1;" onclick="window.vakAccordeer('${blok.start}','${blok.eind}')">&#x1F512; Accorderen + doorzetten</button>`;
 
   document.getElementById('sheetBody').innerHTML = `
     <div style="margin-bottom: 1rem;">
@@ -730,6 +844,8 @@ window.openVakBlokSheet = function(datum) {
 window.vakAccordeer = async function(startISO, eindISO) {
   if (!isBeheerder()) return;
   if (!confirm('Periode accorderen en V-cellen doorzetten naar het hoofdrooster?')) return;
+  // Flush pending writes eerst zodat state klopt voor accorderen
+  await _flushAll();
   closeSheet();
   await accordeerRange(startISO, eindISO, true);
 };
@@ -741,8 +857,6 @@ window.vakDeaccordeer = async function(startISO, eindISO) {
   await accordeerRange(startISO, eindISO, false);
 };
 
-// Generieke accorderen/deaccorderen voor een range datums.
-// Bij accorderen=true worden V-cellen ook doorgezet naar toewijzingen.
 async function accordeerRange(startISO, eindISO, accorderen) {
   const dagen = dagenInBereik(startISO, eindISO);
   try {
@@ -770,13 +884,12 @@ async function accordeerRange(startISO, eindISO, accorderen) {
   }
 }
 
-// ----- Bevries periode (datum-range) -------------------------------------
+// ----- Bevries periode ---------------------------------------------------
 
 window.openVakBevriezenSheet = function() {
   if (!isBeheerder()) return;
 
   const vandaag = vandaagIso();
-  // Default suggesties: 1 mei tot 1 september voor "april" of vergelijkbaar
   const startSugg = vandaag;
   const eindSugg = plusDagenIso(vandaag, 90);
 
@@ -820,7 +933,6 @@ window.vakBevriezenPreview = function() {
     if (r) rankSet.add(r);
   });
 
-  // V-totalen per radioloog in deze range
   const rads = vasteRads();
   const tellingen = {};
   rads.forEach(r => { tellingen[r.id] = 0; });
@@ -847,6 +959,7 @@ window.vakBevriezenUitvoeren = async function() {
   if (!start || !eind || start > eind) { alert('Kies een geldige periode.'); return; }
 
   if (!confirm(`Periode ${start} t/m ${eind} bevriezen en V-cellen doorzetten naar Overzicht?`)) return;
+  await _flushAll();
   closeSheet();
   await accordeerRange(start, eind, true);
 };
