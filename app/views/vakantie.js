@@ -173,6 +173,77 @@ function dagenInBereik(startISO, eindISO) {
 //
 // Werkt state.indelingMap bij en patcht alleen de betreffende cel in de DOM,
 // zonder volledige re-render. Daarna wordt de write gedebounced naar Firebase.
+//
+// patchVakDatums() wordt aangeroepen vanuit de Firestore onSnapshot-listener
+// in main.js i.p.v. render(). Per gewijzigd document:
+//   - Alleen vakantie_v gewijzigd → cel-patch per radId
+//   - vakantie_x / vakantie_rank / vakantie_min / vakantie_geaccordeerd
+//     gewijzigd → volledige renderVakView() (rij-achtergrond, kolommen)
+//   - Nieuw document (added) → volledige renderVakView()
+
+export function patchVakDatums(docChanges) {
+  if (state.huidigeView !== 'vak') return;
+
+  let needsFullRender = false;
+
+  for (const change of docChanges) {
+    const datum = change.doc.id;
+    const oudDag = state.indelingMap[datum] || {};
+    const nieuwDag = { datum, ...change.doc.data() };
+
+    // State altijd bijwerken
+    state.indelingMap[datum] = nieuwDag;
+
+    if (change.type === 'removed') {
+      needsFullRender = true;
+      continue;
+    }
+    if (change.type === 'added') {
+      // Nieuw document: alleen renderen als het binnen het zichtbare bereik valt
+      // en structurele velden heeft (x, rank). Anders cel-patch volstaat niet
+      // want de rij bestaat nog niet in de DOM.
+      if (nieuwDag.vakantie_x || nieuwDag.vakantie_rank || nieuwDag.vakantie_min != null) {
+        needsFullRender = true;
+      }
+      // vakantie_v op nieuw doc: cellen bestaan al in DOM (lege dots), patch
+      if (!needsFullRender && nieuwDag.vakantie_v) {
+        _patchVakDag(datum, oudDag, nieuwDag);
+      }
+      continue;
+    }
+
+    // modified: check welke velden veranderden
+    const structuurGewijzigd =
+      oudDag.vakantie_x !== nieuwDag.vakantie_x ||
+      oudDag.vakantie_rank !== nieuwDag.vakantie_rank ||
+      oudDag.vakantie_min !== nieuwDag.vakantie_min ||
+      oudDag.vakantie_geaccordeerd !== nieuwDag.vakantie_geaccordeerd;
+
+    if (structuurGewijzigd) {
+      needsFullRender = true;
+    } else {
+      // Alleen vakantie_v gewijzigd: per-cel patch
+      _patchVakDag(datum, oudDag, nieuwDag);
+    }
+  }
+
+  if (needsFullRender) renderVakView();
+  else vernieuwSaldoRij();
+}
+
+// Patch alle gewijzigde cellen voor één datum
+function _patchVakDag(datum, oudDag, nieuwDag) {
+  const oudV = oudDag.vakantie_v || {};
+  const nieuwV = nieuwDag.vakantie_v || {};
+
+  // Verzamel alle radIds die veranderd zijn
+  const alleIds = new Set([...Object.keys(oudV), ...Object.keys(nieuwV)]);
+  for (const radId of alleIds) {
+    if (vCode(oudV[radId]) !== vCode(nieuwV[radId])) {
+      _patchVakCel(datum, radId);
+    }
+  }
+}
 
 function _patchVakCel(datum, radId) {
   const container = document.getElementById('view-vak');
