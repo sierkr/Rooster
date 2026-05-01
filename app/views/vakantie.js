@@ -190,10 +190,13 @@ export function renderVakView() {
   const [zichtbaarJaarStr, zichtbaarMaandStr] = state.vakZichtbareMaand.split('-');
   const zichtbaarJaarNum = parseInt(zichtbaarJaarStr, 10);
   const zichtbaarMaandNum = parseInt(zichtbaarMaandStr, 10) - 1; // 0-indexed
-  const startMaand = new Date(zichtbaarJaarNum, zichtbaarMaandNum, 1);
-  const eindMaand  = new Date(zichtbaarJaarNum, zichtbaarMaandNum + 1, 0); // laatste dag van maand
-  const startDatum = startMaand.toISOString().slice(0, 10);
-  const eindDatum  = eindMaand.toISOString().slice(0, 10);
+  // Bereken start/eind van de maand zonder via toISOString te gaan: dat
+  // converteert naar UTC en verschuift in tijdzones met positieve offset
+  // (bv. CET) de eerste dag naar de laatste dag van de vorige maand.
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const laatsteDag = new Date(zichtbaarJaarNum, zichtbaarMaandNum + 1, 0).getDate();
+  const startDatum = `${zichtbaarJaarNum}-${pad2(zichtbaarMaandNum + 1)}-01`;
+  const eindDatum  = `${zichtbaarJaarNum}-${pad2(zichtbaarMaandNum + 1)}-${pad2(laatsteDag)}`;
 
   const datums = dagenInBereik(startDatum, eindDatum);
 
@@ -952,10 +955,4 @@ window.vakOpslaanRanking = async function(origineelNaam) {
 
 window.vakVerwijderRanking = async function(naam) {
   if (!isBeheerder()) return;
-  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
-  try {
-    await deleteDoc(doc(db, 'vakantie_rankings', naam));
-  } catch (e) {
-    alert('Verwijderen mislukt: ' + (e.message || e.code));
-  }
-};
+  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die d

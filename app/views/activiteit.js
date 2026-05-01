@@ -136,8 +136,8 @@ export function renderActView() {
   const aantalKol = kolommen.length;
   const labelBreedte = '110px';
   const cellBreedte = ratio ? 'minmax(40px, 1fr)' : 'minmax(30px, 1fr)';
-  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 36px`;
-  const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 36;
+  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 72px`;
+  const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 72;
 
   // Codes waarvoor "verdeling" niet zinvol is (niet stuurbaar / individueel)
   const GEEN_VERDELING_CODES = ['Z'];
@@ -185,24 +185,30 @@ export function renderActView() {
     if (rij.kind === 'weekdag') return (perWeekdag[k.id] || {})[rij.dagNl] || 0;
     return 0;
   }
-  function rowMax(rij) {
-    let m = 0;
-    kolommen.forEach(k => { const v = celWaarde(rij, k); if (v > m) m = v; });
-    return m;
+  function rowGem(rij) {
+    if (kolommen.length === 0) return 0;
+    let som = 0;
+    kolommen.forEach(k => { som += celWaarde(rij, k); });
+    return som / kolommen.length;
   }
-  function celRatio(waarde, max, radId) {
-    if (!max) return null;
+  function celRatio(waarde, gem, radId) {
+    if (!gem) return null;
     const pf = parttimeFactor(radId);
     if (pf <= 0) return null;
-    return waarde / max / pf;
+    return waarde / gem / pf;
   }
   function fmtPct(v) {
     if (v === null || v === undefined) return '';
     return Math.round(v * 100) + '%';
   }
+  function fmtGem(v) {
+    if (!v) return v === 0 ? '0' : '';
+    const r = Math.round(v * 10) / 10;
+    return Number.isInteger(r) ? String(r) : r.toFixed(1);
+  }
 
   function rijHtml(rij) {
-    const max = rowMax(rij);
+    const gem = rowGem(rij);
     const cls = rij.kind === 'hoofd'   ? 'act-row-hoofd'
               : rij.kind === 'variant' ? 'act-row-variant'
               : rij.kind === 'aggr'    ? 'act-row-aggregaat'
@@ -227,7 +233,7 @@ export function renderActView() {
       const zero = waarde === 0 ? 'act-cell-zero' : '';
       let inhoud;
       if (ratio) {
-        const r = celRatio(waarde, max, k.id);
+        const r = celRatio(waarde, gem, k.id);
         if (r === null) {
           inhoud = `<span class="act-cell-zero">—</span>`;
         } else {
@@ -251,10 +257,10 @@ export function renderActView() {
       html += `<div class="act-cell ${cls} ${sep} ${klikbaar} ${zone}" ${klikAttr}>${inhoud}</div>`;
     });
 
-    const maxCelInhoud = ratio
-      ? (max ? `<span class="act-cell-max">${max}</span>` : '<span class="act-cell-zero">0</span>')
-      : `<span class="act-cell-max">${max}</span>`;
-    html += `<div class="act-cell ${cls} act-sep">${maxCelInhoud}</div>`;
+    const gemCelInhoud = gem
+      ? `<span class="act-cell-max">${fmtGem(gem)}</span>`
+      : '<span class="act-cell-zero">0</span>';
+    html += `<div class="act-cell ${cls} act-sep">${gemCelInhoud}</div>`;
     return html;
   }
 
@@ -294,7 +300,7 @@ export function renderActView() {
       ` : ''}
       <p class="muted" style="margin: 10px 0 0; font-size: 11px;">${
         ratio
-          ? 'Ratio = aantal / max-kolom / parttime-factor (zoals Excel "vdgn")'
+          ? 'Ratio = aantal / rij-gemiddelde / parttime-factor (100% = gemiddelde)'
           : verdeling
             ? 'Kleur = afwijking t.o.v. rij-gemiddelde (parttime-gecorrigeerd, vaste 8 als basis).'
             : 'Tik een hoofdfunctie om varianten in/uit te klappen. Tik een cel voor de datums.'
@@ -316,7 +322,7 @@ export function renderActView() {
           const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
           return `<div class="act-head ${sep}">${k.label}</div>`;
         }).join('')}
-        <div class="act-head act-sep">Max</div>
+        <div class="act-head act-sep">Gemiddelde</div>
 
         ${rijen.map(rijHtml).join('')}
 
@@ -345,7 +351,7 @@ export function renderActView() {
       <div class="legend-label">Definities</div>
       <div style="font-size: 11px; line-height: 1.6; color: #5f5e5a;">
         <b>Werkvloer</b> = productie-functies (W, B, E, M, D, S, O, A varianten).<br>
-        <b>Maatschapsdagen</b> = configureerbaar in Regels-tab.<br>
+        <b>Maatschapsdagen</b> = ${(window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X']).join(', ')} (configureerbaar in Regels-tab).<br>
         <b>Mts + Stby</b> = Maatschapsdagen + Quarantaine.<br>
         <b>Werkdagen</b> = Mts + Stby + Cursus.<br>
         <b>Roostervrij</b> = Cursus + Parttime + Quarantaine + Reserve + Vakantie.
@@ -425,13 +431,4 @@ window.actToonDrilldown = function(radId, kind, code) {
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span>${formatDatum(it.datum, 'kort')}</span>
             <span class="badge ${fclass(it.code)}">${it.code}</span>
-          </div>
-        </div>
-      `;
-    });
-    body += `</div>`;
-  }
-  body += `<button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>`;
-  document.getElementById('sheetBody').innerHTML = body;
-  openSheet();
-};
+          
