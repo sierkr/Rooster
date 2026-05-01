@@ -82,6 +82,14 @@ function vorigeRankWaarde(datum) {
   return null;
 }
 
+// Lazy ranking-resolution: als een dag geen eigen vakantie_rank heeft,
+// gebruik dan de rank van de meest recente eerdere X-dag met expliciete rank.
+function effectieveRank(datum) {
+  const dag = state.indelingMap[datum];
+  if (dag?.vakantie_rank) return dag.vakantie_rank;
+  return vorigeRankWaarde(datum);
+}
+
 function vindBlok(datum) {
   const dag = state.indelingMap[datum];
   if (!dag?.vakantie_x || !dag?.vakantie_rank) return null;
@@ -231,6 +239,32 @@ export function renderVakView() {
     return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${resterend}</div>`;
   }).join('');
 
+  // Ranking-balk: zoek de eerste X-dag in de zichtbare maand (of ervoor via lazy)
+  // en bereken de positie 1-8 per radioloog voor het zichtbare jaar.
+  let rankingCells = '';
+  let rankingActief = false;
+  {
+    let eersteX = null;
+    for (const iso of datums) {
+      if (state.indelingMap[iso]?.vakantie_x) { eersteX = iso; break; }
+    }
+    const rankNaam = eersteX ? effectieveRank(eersteX) : null;
+    const rk = rankNaam ? rankingMap[rankNaam] : null;
+    if (rk && eersteX) {
+      rankingActief = true;
+      const jaar = parseInt(eersteX.slice(0, 4), 10);
+      const volgorde = rankingVolgordeVoorJaar(rk, jaar);
+      // posMap: radId -> positie 1..8
+      const posMap = {};
+      volgorde.forEach((rid, i) => { posMap[rid] = i + 1; });
+      rankingCells = allKolommen.map((k, i) => {
+        const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
+        const pos = posMap[k.id];
+        return `<div class="vak-rank-cell" style="${sep}">${pos != null ? pos : ''}</div>`;
+      }).join('');
+    }
+  }
+
   let body = '';
 
   datums.forEach(iso => {
@@ -238,8 +272,9 @@ export function renderVakView() {
 
     const dag = state.indelingMap[iso] || {};
     const x   = dag.vakantie_x || false;
-    const min = dag.vakantie_min;
-    const rank = dag.vakantie_rank;
+    const min = (typeof dag.vakantie_min === 'number') ? dag.vakantie_min : 5;
+    // Lazy rank: als deze dag geen rank heeft, erf van eerdere X-dag.
+    const rank = x ? effectieveRank(iso) : (dag.vakantie_rank || null);
     const ranking = rank ? rankingMap[rank] : null;
     const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
     const isVandaag = (iso === vandaag);
@@ -247,18 +282,11 @@ export function renderVakView() {
 
     const vDataObj = dag.vakantie_v || {};
     const vAantal = allKolommen.reduce((n, k) => n + (vCode(vDataObj[k.id]) === 'V' ? 1 : 0), 0);
-    const overschreden = (typeof min === 'number' && vAantal > (rads.length - min));
-    // Heeft de rij een afwijkende code (niet V)? Bepaalt rijkleur.
-    const heeftAfwijkendeCode = Object.values(vDataObj).some(w => {
-      const c = vCode(w);
-      return c && c !== 'V';
-    });
+    const overschreden = vAantal > (rads.length - min);
 
     let rijStyle = '';
     if (overschreden) {
       rijStyle = 'background: #fde0e0;';
-    } else if (heeftAfwijkendeCode) {
-      rijStyle = 'background: #fff3d6;';
     } else if (x && ranking?.kleur) {
       rijStyle = `background: ${ranking.kleur}1F;`;
     } else if (isWeekend) {
@@ -282,8 +310,12 @@ export function renderVakView() {
       const cursor = magKlikken ? 'cursor:pointer;' : 'cursor:default;';
 
       if (code) {
-        const cls = code === 'V' ? 'f-V' : (code === 'K' ? 'f-K' : (code === 'Z' ? 'f-Z' : 'f-V'));
-        return `<div class="grid-cell ${cls}" style="${sep} ${eigenMark} ${cursor}" ${dataAttr}>${code}</div>`;
+        if (code === 'V') {
+          return `<div class="grid-cell f-V" style="${sep} ${eigenMark} ${cursor}" ${dataAttr}>${code}</div>`;
+        } else {
+          // Niet-V (K, Z, vrije code) krijgt een gele celkleur, niet de hele rij
+          return `<div class="grid-cell" style="${sep} ${eigenMark} ${cursor} background: #fff3d6; color: #6b5b1a; font-weight: 500;" ${dataAttr}>${code}</div>`;
+        }
       } else {
         return `<div class="grid-cell grid-cell-empty" style="${sep} ${eigenMark} ${rijStyle} ${cursor}" ${dataAttr}>\u00b7</div>`;
       }
@@ -362,12 +394,18 @@ export function renderVakView() {
           ${beheerHeads}
         </div>
         <div class="vak-sticky-row vak-saldo-row" id="vakSaldoRow">
-          <div class="vak-saldo-label" id="vakSaldoLabel">Saldo ${huidigJaar}</div>
+          <div class="vak-saldo-label" id="vakSaldoLabel">Saldo</div>
           ${saldoCells}
           <div></div>
           ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
         </div>
-        <div class="vak-maand-nav" style="grid-column: 1 / span ${totaalKolommen};">
+        ${rankingActief ? `<div class="vak-sticky-row vak-rank-row">
+          <div class="vak-rank-label">Rang</div>
+          ${rankingCells}
+          <div></div>
+          ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
+        </div>` : ''}
+        <div class="vak-maand-nav" style="top: ${rankingActief ? '82px' : '56px'}; grid-column: 1 / span ${totaalKolommen};">
           <button class="vak-maand-knop" onclick="window.vakNavMaand(-1)" title="Vorige maand">\u2039</button>
           <span class="vak-maand-titel">${MAANDEN[zichtbaarMaandNum].toUpperCase()} ${zichtbaarJaarNum}</span>
           <button class="vak-maand-knop" onclick="window.vakNavMaand(1)" title="Volgende maand">\u203a</button>
