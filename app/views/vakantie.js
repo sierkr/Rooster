@@ -15,7 +15,8 @@ import {
 import { db } from '../firebase-init.js';
 import { state, DAGEN_NL, MAANDEN } from '../state.js';
 import {
-  vasteRads, actieveInvallers, radiologenMap, vandaagIso,
+  vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
+  radiologenMap, vandaagIso,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 
@@ -169,8 +170,12 @@ export function renderVakView() {
   const scrollTop = oudeScrollWrap?.scrollTop || 0;
   const scrollLeft = oudeScrollWrap?.scrollLeft || 0;
 
-  const rads = vasteRads();
-  const invallers = state.toonWeekRads ? actieveInvallers() : [];
+  // Datum-aware bezetting: gebruik de eerste van de zichtbare maand.
+  // (We berekenen die hieronder voor de datums-array; voor nu de huidige
+  // zichtbare maand-string + '-01' is een veilige proxy.)
+  const peilDatum = (state.vakZichtbareMaand || vandaagIso().slice(0,7)) + '-01';
+  const rads = vasteRadsOpDatum(peilDatum);
+  const invallers = state.toonWeekRads ? actieveInvallersOpDatum(peilDatum) : [];
   const radsMap = radiologenMap();
   const eigenId = eigenRadId();
   const isBeheer = isBeheerder();
@@ -956,6 +961,30 @@ window.vakOpslaanRanking = async function(origineelNaam) {
 window.vakVerwijderRanking = async function(naam) {
   if (!isBeheerder()) return;
   if (!confirm(`Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
+  try {
+    await deleteDoc(doc(db, 'vakantie_rankings', naam));
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + (e.message || e.code));
+  }
+};
+
+    });
+    closeSheet();
+  } catch (e) {
+    alert('Opslaan mislukt: ' + (e.message || e.code));
+  }
+};
+
+window.vakVerwijderRanking = async function(naam) {
+  if (!isBeheerder()) return;
+  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
+  try {
+    await deleteDoc(doc(db, 'vakantie_rankings', naam));
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + (e.message || e.code));
+  }
+};
+eze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
   try {
     await deleteDoc(doc(db, 'vakantie_rankings', naam));
   } catch (e) {

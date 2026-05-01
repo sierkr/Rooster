@@ -2,7 +2,8 @@
 // Klik op cel = wijzigen (beheerders), opmerking lezen (lezers).
 import { state, DAGEN_NL } from '../state.js';
 import {
-  vasteRads, actieveInvallers, radiologenMap, functiesMap, vandaagIso,
+  vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
+  radiologenMap, functiesMap, vandaagIso,
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
   magAlleWensenZien,
@@ -13,9 +14,10 @@ import { slaToewijzingOp, slaCelOpmerkingOp, slaOpmerkingOp } from '../save.js';
 
 export function renderBehView() {
   const container = document.getElementById('view-beh');
-  const vasteRadsList = vasteRads();
-  if (vasteRadsList.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
   const wkMa = state.weekMaandag;
+  // Datum-aware bezetting: kolomnamen tonen wie er die week op de stoel zit.
+  const vasteRadsList = vasteRadsOpDatum(wkMa);
+  if (vasteRadsList.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
   const wkNr = isoWeekVan(wkMa);
   const datums = datumsVanWeek(wkMa);
   const vandaag = vandaagIso();
@@ -24,7 +26,7 @@ export function renderBehView() {
   const alleenLezen = !magWijzigen() && !magOpmerkingen();
 
   const toonW = state.toonWeekRads;
-  const invallers = toonW ? actieveInvallers() : [];
+  const invallers = toonW ? actieveInvallersOpDatum(wkMa) : [];
   const allKolommen = [
     ...vasteRadsList.map(r => ({ id: r.id, label: r.code, isSlot: false })),
     ...invallers.map(r => ({ id: r.id, label: r.code || r.id, isSlot: true })),

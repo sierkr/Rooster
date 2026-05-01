@@ -57,16 +57,131 @@ export function isBeperktZichtRol() {
 export function radiologenMap() {
   return Object.fromEntries(state.radiologen.map(r => [r.id, r]));
 }
-export function vasteRads() {
-  return VASTE_RAD_IDS.map(id => state.radiologen.find(r => r.id === id)).filter(Boolean);
-}
-export function actieveInvallers() {
-  // W-slots waar actief !== false (default actief). Volgorde: W5..W1.
-  return SLOTS.map(id => state.radiologen.find(r => r.id === id))
-              .filter(r => r && r.actief !== false);
-}
 export function functiesMap() {
   return Object.fromEntries(state.functies.map(f => [f.id, f]));
+}
+
+// ==== Bezetting per stoel over tijd =========================================
+//
+// Een "stoel" (slotId in VASTE_RAD_IDS of SLOTS) houdt een tijdlijn bij van
+// wie er op zit, in `bezetting_historie`. Een entry is:
+//   { voornaam, achternaam, code, vakantierecht, parttime_factor,
+//     van: 'YYYY-MM-DD'|null, tot: 'YYYY-MM-DD'|null }
+// `van=null` = altijd al; `tot=null` = lopend. Voor records zonder historie
+// (oud datamodel) vallen we terug op de top-level velden alsof er één open
+// entry van begin tot oneindig is.
+
+function _binnen(entry, datum) {
+  if (entry.van && datum < entry.van) return false;
+  if (entry.tot && datum > entry.tot) return false;
+  return true;
+}
+
+// Geeft de bezetting-entry die op `datum` op deze stoel zit, of null als
+// de stoel op die datum leeg is.
+export function bezettingOpDatum(slotId, datum) {
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  if (!stoel) return null;
+  const hist = Array.isArray(stoel.bezetting_historie) ? stoel.bezetting_historie : null;
+  if (hist && hist.length > 0) {
+    const entry = hist.find(e => _binnen(e, datum));
+    if (!entry) return null;
+    return {
+      slotId,
+      voornaam: entry.voornaam || '',
+      achternaam: entry.achternaam || '',
+      code: entry.code || stoel.code || slotId,
+      vakantierecht: typeof entry.vakantierecht === 'number' ? entry.vakantierecht : (stoel.vakantierecht ?? 40),
+      parttime_factor: typeof entry.parttime_factor === 'number' ? entry.parttime_factor : (stoel.parttime_factor ?? 1),
+      van: entry.van || null,
+      tot: entry.tot || null,
+    };
+  }
+  // Fallback: oud datamodel zonder historie. Behandel top-level als één
+  // open entry. Voor W-slots geldt dat actief=false betekent "leeg".
+  if (stoel.isSlot && stoel.actief === false) return null;
+  return {
+    slotId,
+    voornaam: stoel.voornaam || '',
+    achternaam: stoel.achternaam || '',
+    code: stoel.code || slotId,
+    vakantierecht: typeof stoel.vakantierecht === 'number' ? stoel.vakantierecht : 40,
+    parttime_factor: typeof stoel.parttime_factor === 'number' ? stoel.parttime_factor : 1,
+    van: null,
+    tot: null,
+  };
+}
+
+// Geeft de naam (of code) die in de kolomheader hoort op `datum`.
+export function naamVoorSlotOpDatum(slotId, datum) {
+  const b = bezettingOpDatum(slotId, datum);
+  return b ? (b.code || b.achternaam || slotId) : slotId;
+}
+
+// Geeft alle bezetting-entries (uit historie) voor een stoel die overlappen
+// met de range [van..tot]. Gebruikt door Activiteit-tab voor split-kolom.
+export function bezettingenInRange(slotId, vanIso, totIso) {
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  if (!stoel) return [];
+  const hist = Array.isArray(stoel.bezetting_historie) ? stoel.bezetting_historie : null;
+  const lijst = hist && hist.length > 0
+    ? hist.slice()
+    : [{
+        voornaam: stoel.voornaam || '',
+        achternaam: stoel.achternaam || '',
+        code: stoel.code || slotId,
+        vakantierecht: stoel.vakantierecht,
+        parttime_factor: stoel.parttime_factor,
+        van: null, tot: null,
+      }];
+  return lijst
+    .filter(e => {
+      const eindOk = !e.tot || e.tot >= vanIso;
+      const startOk = !e.van || e.van <= totIso;
+      return eindOk && startOk;
+    })
+    .map(e => ({
+      slotId,
+      voornaam: e.voornaam || '',
+      achternaam: e.achternaam || '',
+      code: e.code || stoel.code || slotId,
+      vakantierecht: typeof e.vakantierecht === 'number' ? e.vakantierecht : (stoel.vakantierecht ?? 40),
+      parttime_factor: typeof e.parttime_factor === 'number' ? e.parttime_factor : (stoel.parttime_factor ?? 1),
+      van: e.van || null,
+      tot: e.tot || null,
+    }));
+}
+
+// Vaste radiologen op een gegeven datum. Wanneer een stoel leeg is op die
+// datum (geen geldige entry), valt hij terug op het ruwe stoel-record zodat
+// de kolom-volgorde stabiel blijft. Default datum = vandaag.
+export function vasteRadsOpDatum(datum) {
+  const d = datum || vandaagIso();
+  return VASTE_RAD_IDS.map(id => {
+    const b = bezettingOpDatum(id, d);
+    const stoel = state.radiologen.find(r => r.id === id);
+    if (!stoel) return null;
+    if (b) return { ...stoel, ...b, id };
+    return stoel;
+  }).filter(Boolean);
+}
+export function vasteRads() {
+  return vasteRadsOpDatum(vandaagIso());
+}
+
+export function actieveInvallersOpDatum(datum) {
+  const d = datum || vandaagIso();
+  return SLOTS.map(id => {
+    const b = bezettingOpDatum(id, d);
+    if (!b) return null;
+    const stoel = state.radiologen.find(r => r.id === id);
+    if (!stoel) return null;
+    if (stoel.actief === false && (!Array.isArray(stoel.bezetting_historie) || stoel.bezetting_historie.length === 0)) return null;
+    return { ...stoel, ...b, id };
+  }).filter(Boolean);
+}
+export function actieveInvallers() {
+  return actieveInvallersOpDatum(vandaagIso());
 }
 
 // ==== Datum / week ===========================================================

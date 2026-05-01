@@ -2,7 +2,9 @@
 // Groot bestand omdat alle berekeningen, helpers en handlers hier samenkomen.
 import { state, VASTE_RAD_IDS, DAGEN_NL, HOOFD_FUNCTIES } from '../state.js';
 import {
-  vasteRads, actieveInvallers, radiologenMap, vandaagIso, formatDatum, fclass,
+  vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
+  bezettingenInRange,
+  radiologenMap, vandaagIso, formatDatum, fclass,
   hoofdLetterCode, functieFlags, parttimeFactor, huidigKalenderJaar,
   magBeheerLezen,
 } from '../helpers.js';
@@ -28,29 +30,28 @@ function periodeRange() {
 
 function berekenActiviteit() {
   const { vanaf, tot } = periodeRange();
+  // Pak alle slot-IDs (vast + actieve W). De actieve-W lijst gebruikt
+  // vandaag als peildatum — dat is OK omdat we ook werkvloerdata over de
+  // hele periode ophalen, niet alleen voor de actuele bezetters.
   const radIds = [...VASTE_RAD_IDS, ...actieveInvallers().map(r => r.id)];
 
   const counts = {};
   const datums = {};
   const dienst = {};
   const dienstDatums = {};
-  const perWeekdag = {};
+  const werkvloerDatums = {}; // datums waarop iemand werkvloer-actief was
   radIds.forEach(rid => {
     counts[rid] = {};
     datums[rid] = {};
     dienst[rid] = 0;
     dienstDatums[rid] = [];
-    perWeekdag[rid] = { ma:0, di:0, wo:0, do:0, vr:0 };
+    werkvloerDatums[rid] = [];
   });
 
   Object.values(state.indelingMap).forEach(dag => {
     const dat = dag?.datum;
     if (!dat) return;
     if (dat < vanaf || dat > tot) return;
-
-    const d = new Date(dat + 'T00:00:00');
-    const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
-    const dagNl = DAGEN_NL[dagNlIdx];
 
     const toew = dag.toewijzingen || {};
     radIds.forEach(rid => {
@@ -62,9 +63,7 @@ function berekenActiviteit() {
         datums[rid][c].push(dat);
         if (functieFlags(c).werkvloer) werkvloerOpDag = true;
       });
-      if (werkvloerOpDag && perWeekdag[rid][dagNl] !== undefined) {
-        perWeekdag[rid][dagNl] += 1;
-      }
+      if (werkvloerOpDag) werkvloerDatums[rid].push(dat);
     });
 
     const dId = dag.dienst?.dag;
@@ -74,29 +73,47 @@ function berekenActiviteit() {
     }
   });
 
-  // Aggregaties per radioloog. Mtsdagen is configureerbaar.
-  const mtsCodes = (window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X']);
-  const aggr = {};
-  radIds.forEach(rid => {
-    const c = counts[rid];
-    let werkvloer = 0;
-    let mtsdagen = 0;
-    Object.entries(c).forEach(([code, n]) => {
-      if (functieFlags(code).werkvloer) werkvloer += n;
-      if (mtsCodes.includes(hoofdLetterCode(code))) mtsdagen += n;
-    });
-    const Q = c['Q'] || 0;
-    const K = c['K'] || 0;
-    const P = c['P'] || 0;
-    const R = c['R'] || 0;
-    const V = c['V'] || 0;
-    const mtsstby   = mtsdagen + (mtsCodes.includes('Q') ? 0 : Q);
-    const werkdagen = mtsstby  + (mtsCodes.includes('K') ? 0 : K);
-    const roostervrij = K + P + Q + R + V;
-    aggr[rid] = { werkvloer, mtsdagen, mtsstby, werkdagen, roostervrij };
-  });
+  return { vanaf, tot, radIds, counts, datums, dienst, dienstDatums, werkvloerDatums };
+}
 
-  return { vanaf, tot, radIds, counts, datums, dienst, dienstDatums, perWeekdag, aggr };
+// Tel hoe vaak code voorkomt voor slotId in de sub-periode [vanSub..totSub].
+function aantalIn(datums, slotId, code, vanSub, totSub) {
+  const lijst = datums[slotId]?.[code] || [];
+  if (!vanSub && !totSub) return lijst.length;
+  return lijst.filter(d => (!vanSub || d >= vanSub) && (!totSub || d <= totSub)).length;
+}
+
+// Bereken aggregaties (werkvloer/mtsdagen/etc.) voor een slot in een sub-periode.
+function aggrIn(datums, slotId, vanSub, totSub) {
+  const mtsCodes = (window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X']);
+  let werkvloer = 0, mtsdagen = 0;
+  let Q = 0, K = 0, P = 0, R = 0, V = 0;
+  Object.entries(datums[slotId] || {}).forEach(([code, dates]) => {
+    const inSub = dates.filter(d => (!vanSub || d >= vanSub) && (!totSub || d <= totSub)).length;
+    if (functieFlags(code).werkvloer) werkvloer += inSub;
+    if (mtsCodes.includes(hoofdLetterCode(code))) mtsdagen += inSub;
+    if (code === 'Q') Q = inSub;
+    if (code === 'K') K = inSub;
+    if (code === 'P') P = inSub;
+    if (code === 'R') R = inSub;
+    if (code === 'V') V = inSub;
+  });
+  const mtsstby   = mtsdagen + (mtsCodes.includes('Q') ? 0 : Q);
+  const werkdagen = mtsstby  + (mtsCodes.includes('K') ? 0 : K);
+  const roostervrij = K + P + Q + R + V;
+  return { werkvloer, mtsdagen, mtsstby, werkdagen, roostervrij };
+}
+
+// Tel werkvloer-aanwezigheid op een specifieke weekdag in de sub-periode.
+function perWeekdagIn(werkvloerDatums, slotId, dagNl, vanSub, totSub) {
+  const lijst = werkvloerDatums[slotId] || [];
+  return lijst.filter(d => {
+    if (vanSub && d < vanSub) return false;
+    if (totSub && d > totSub) return false;
+    const dt = new Date(d + 'T00:00:00');
+    const idx = dt.getDay() === 0 ? 6 : dt.getDay() - 1;
+    return DAGEN_NL[idx] === dagNl && idx < 5; // alleen werkdagen
+  }).length;
 }
 
 function somHoofdGroep(counts, hoofd) {
@@ -111,14 +128,52 @@ export function renderActView() {
   if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Laden…</div>'; return; }
 
   const data = berekenActiviteit();
-  const { counts, dienst, perWeekdag, aggr, vanaf, tot } = data;
+  const { datums, dienstDatums, werkvloerDatums, vanaf, tot } = data;
 
   const toonInv = state.actInvallers;
   const invallers = toonInv ? actieveInvallers() : [];
-  const kolommen = [
-    ...rads.map(r => ({ id: r.id, label: (r.code || r.id).slice(0, 4), isSlot: false })),
-    ...invallers.map(r => ({ id: r.id, label: (r.code || r.id).slice(0, 4), isSlot: true })),
+  const slotIds = [
+    ...VASTE_RAD_IDS,
+    ...(toonInv ? invallers.map(r => r.id) : []),
   ];
+
+  // Bouw kolommen op basis van bezetting_historie binnen de periode.
+  // Bij meerdere overlappende entries krijgt de stoel een sub-kolom per entry,
+  // zodat een wisseljaar gesplitst getoond wordt per persoon.
+  const kolommen = [];
+  slotIds.forEach(slotId => {
+    const entries = bezettingenInRange(slotId, vanaf, tot);
+    const isVast = VASTE_RAD_IDS.includes(slotId);
+    if (entries.length === 0) {
+      // Stoel had geen bezetting in periode — toon lege kolom voor stabiliteit (alleen vast).
+      if (isVast) kolommen.push({ id: slotId, slotId, label: slotId, isSlot: false, vanSub: vanaf, totSub: tot });
+      return;
+    }
+    if (entries.length === 1) {
+      const e = entries[0];
+      kolommen.push({
+        id: slotId, slotId,
+        label: (e.code || slotId).slice(0, 4),
+        isSlot: !isVast,
+        vanSub: vanaf, totSub: tot,
+        bezetting: e,
+      });
+    } else {
+      // Splits: één kolom per entry, elk geclamped op periode.
+      entries.forEach((e, i) => {
+        const subVan = e.van && e.van > vanaf ? e.van : vanaf;
+        const subTot = e.tot && e.tot < tot ? e.tot : tot;
+        kolommen.push({
+          id: `${slotId}#${i}`, slotId,
+          label: (e.code || slotId).slice(0, 4),
+          subLabel: `${formatDatum(subVan, 'kort')} – ${formatDatum(subTot, 'kort')}`,
+          isSlot: !isVast,
+          vanSub: subVan, totSub: subTot,
+          bezetting: e,
+        });
+      });
+    }
+  });
 
   const periodes = [
     { id: 'jaar',   label: 'Heel jaar' },
@@ -136,8 +191,10 @@ export function renderActView() {
   const aantalKol = kolommen.length;
   const labelBreedte = '110px';
   const cellBreedte = ratio ? 'minmax(40px, 1fr)' : 'minmax(30px, 1fr)';
-  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte})${toonInv && rads.length ? '' : ''} 44px`;
+  const gridCols = `${labelBreedte} repeat(${aantalKol}, ${cellBreedte}) 44px`;
   const minWidth = 120 + aantalKol * (ratio ? 44 : 34) + 44;
+  // Eerste kolom-index van de waarnemer-sectie (voor visuele scheiding).
+  const sepKolomIndex = kolommen.findIndex(k => k.isSlot);
 
   // Codes waarvoor "verdeling" niet zinvol is (niet stuurbaar / individueel)
   const GEEN_VERDELING_CODES = ['Z'];
@@ -146,20 +203,24 @@ export function renderActView() {
     if (rij.kind === 'variant' && GEEN_VERDELING_CODES.includes(rij.code)) return false;
     return true;
   }
+  function pfVan(k) {
+    const pf = k.bezetting && typeof k.bezetting.parttime_factor === 'number'
+      ? k.bezetting.parttime_factor
+      : parttimeFactor(k.slotId);
+    return Number.isFinite(pf) && pf > 0 ? Math.min(1, pf) : 1;
+  }
   function rowGemPt(rij) {
     let som = 0, n = 0;
-    rads.forEach(r => {
-      const pf = parttimeFactor(r.id);
-      if (pf > 0) {
-        som += celWaarde(rij, { id: r.id }) / pf;
-        n++;
-      }
+    kolommen.forEach(k => {
+      if (k.isSlot) return; // alleen vaste stoelen tellen voor de norm
+      const pf = pfVan(k);
+      if (pf > 0) { som += celWaarde(rij, k) / pf; n++; }
     });
     return n ? som / n : 0;
   }
-  function zoneClass(waarde, gem, radId) {
+  function zoneClass(waarde, gem, k) {
     if (!gem) return '';
-    const pf = parttimeFactor(radId);
+    const pf = pfVan(k);
     if (pf <= 0) return '';
     const r = (waarde / pf) / gem;
     if (r < 0.85) return 'act-zone-laag';
@@ -178,11 +239,19 @@ export function renderActView() {
   });
 
   function celWaarde(rij, k) {
-    if (rij.kind === 'hoofd')   return somHoofdGroep(counts[k.id] || {}, rij.hoofd);
-    if (rij.kind === 'variant') return (counts[k.id] || {})[rij.code] || 0;
-    if (rij.kind === 'aggr')    return aggr[k.id]?.[rij.aggrKey] || 0;
-    if (rij.kind === 'dienst')  return dienst[k.id] || 0;
-    if (rij.kind === 'weekdag') return (perWeekdag[k.id] || {})[rij.dagNl] || 0;
+    const s = k.slotId;
+    const v = k.vanSub, t = k.totSub;
+    if (rij.kind === 'hoofd') {
+      let n = aantalIn(datums, s, rij.hoofd.letter, v, t);
+      rij.hoofd.varianten.forEach(va => { n += aantalIn(datums, s, va, v, t); });
+      return n;
+    }
+    if (rij.kind === 'variant') return aantalIn(datums, s, rij.code, v, t);
+    if (rij.kind === 'aggr')    return aggrIn(datums, s, v, t)[rij.aggrKey] || 0;
+    if (rij.kind === 'dienst') {
+      return (dienstDatums[s] || []).filter(d => (!v || d >= v) && (!t || d <= t)).length;
+    }
+    if (rij.kind === 'weekdag') return perWeekdagIn(werkvloerDatums, s, rij.dagNl, v, t);
     return 0;
   }
   function rowGem(rij) {
@@ -191,9 +260,9 @@ export function renderActView() {
     kolommen.forEach(k => { som += celWaarde(rij, k); });
     return som / kolommen.length;
   }
-  function celRatio(waarde, gem, radId) {
+  function celRatio(waarde, gem, k) {
     if (!gem) return null;
-    const pf = parttimeFactor(radId);
+    const pf = pfVan(k);
     if (pf <= 0) return null;
     return waarde / gem / pf;
   }
@@ -229,11 +298,11 @@ export function renderActView() {
 
     kolommen.forEach((k, i) => {
       const waarde = celWaarde(rij, k);
-      const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
+      const sep = (i === sepKolomIndex && sepKolomIndex !== -1 && toonInv) ? 'act-sep' : '';
       const zero = waarde === 0 ? 'act-cell-zero' : '';
       let inhoud;
       if (ratio) {
-        const r = celRatio(waarde, gem, k.id);
+        const r = celRatio(waarde, gem, k);
         if (r === null) {
           inhoud = `<span class="act-cell-zero">—</span>`;
         } else {
@@ -251,9 +320,9 @@ export function renderActView() {
       }
       const klikbaar = waarde > 0 && rij.kind !== 'aggr' ? 'act-cell-clickable' : '';
       const klikAttr = (waarde > 0 && rij.kind !== 'aggr')
-        ? `onclick="window.actToonDrilldown('${k.id}','${rij.kind}','${(rij.code||rij.dagNl||'')}')"`
+        ? `onclick="window.actToonDrilldown('${k.slotId}','${rij.kind}','${(rij.code||rij.dagNl||'')}','${k.vanSub||''}','${k.totSub||''}')"`
         : '';
-      const zone = kleurDezeRij ? zoneClass(waarde, gemPt, k.id) : '';
+      const zone = kleurDezeRij ? zoneClass(waarde, gemPt, k) : '';
       html += `<div class="act-cell ${cls} ${sep} ${klikbaar} ${zone}" ${klikAttr}>${inhoud}</div>`;
     });
 
@@ -319,8 +388,10 @@ export function renderActView() {
       <div class="act-grid" style="grid-template-columns: ${gridCols}; min-width: ${minWidth}px;">
         <div class="act-head act-cell-label">Functie</div>
         ${kolommen.map((k, i) => {
-          const sep = (i === rads.length && toonInv) ? 'act-sep' : '';
-          return `<div class="act-head ${sep}">${k.label}</div>`;
+          const sep = (i === sepKolomIndex && sepKolomIndex !== -1 && toonInv) ? 'act-sep' : '';
+          const tooltip = k.subLabel ? `${k.label} · ${k.subLabel}` : (k.bezetting?.achternaam || k.label);
+          const sub = k.subLabel ? `<div style="font-size:9px; font-weight:400; color:#5f5e5a; line-height:1.1;">${k.subLabel}</div>` : '';
+          return `<div class="act-head ${sep}" title="${tooltip}">${k.label}${sub}</div>`;
         }).join('')}
         <div class="act-head act-sep" title="Gemiddelde">x̄</div>
 
@@ -376,11 +447,12 @@ window.actZetVanafTot = function() {
 window.actToggleInvallers = function() { state.actInvallers = !state.actInvallers; renderActView(); };
 window.actToggleHoofd = function(letter){ state.actUitgeklapt[letter] = !state.actUitgeklapt[letter]; renderActView(); };
 
-window.actToonDrilldown = function(radId, kind, code) {
+window.actToonDrilldown = function(radId, kind, code, vanSub, totSub) {
   const rad = radiologenMap()[radId];
   const radLabel = rad ? `${rad.code} · ${rad.achternaam}` : radId;
   const data = berekenActiviteit();
   const { datums, dienstDatums } = data;
+  const inSub = (d) => (!vanSub || d >= vanSub) && (!totSub || d <= totSub);
 
   let titel = '';
   let lijst = [];
@@ -413,6 +485,8 @@ window.actToonDrilldown = function(radId, kind, code) {
     });
     lijst = out;
   }
+  // Filter op sub-periode (bij split-kolom).
+  lijst = lijst.filter(it => inSub(it.datum));
   lijst.sort((a, b) => a.datum.localeCompare(b.datum));
 
   document.getElementById('sheetTitle').textContent = titel;
