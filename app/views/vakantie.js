@@ -213,8 +213,8 @@ export function renderVakView() {
   const radCount = allKolommen.length;
   const radColsCss = `repeat(${radCount}, minmax(28px, 1fr))`;
   const beheerCols = toonBeheer ? ' 24px 32px 64px 50px' : '';
-  const gridCols = `50px ${radColsCss} 38px${beheerCols}`;
-  const totaalKolommen = 1 + radCount + 1 + (toonBeheer ? 4 : 0);
+  const gridCols = `50px ${radColsCss}${beheerCols}`;
+  const totaalKolommen = 1 + radCount + (toonBeheer ? 4 : 0);
 
   const radHeads = allKolommen.map((k, i) => {
     const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
@@ -239,20 +239,25 @@ export function renderVakView() {
     return `<div class="vak-saldo-cell" style="${sep} ${kleur}" title="${titel}">${resterend}</div>`;
   }).join('');
 
-  // Ranking-balk: zoek de eerste X-dag in de zichtbare maand (of ervoor via lazy)
-  // en bereken de positie 1-8 per radioloog voor het zichtbare jaar.
+  // Ranking-balk: continu in beeld zolang er ergens een ranking bekend is.
+  // Pak de eerste expliciete rank in de zichtbare maand; valt terug op de
+  // meest recente eerdere rank zodat de balk ook getoond wordt op maanden
+  // zonder eigen X-dagen of expliciete rank.
   let rankingCells = '';
   let rankingActief = false;
   {
-    let eersteX = null;
+    let rankNaam = null;
     for (const iso of datums) {
-      if (state.indelingMap[iso]?.vakantie_x) { eersteX = iso; break; }
+      const r = state.indelingMap[iso]?.vakantie_rank;
+      if (r) { rankNaam = r; break; }
     }
-    const rankNaam = eersteX ? effectieveRank(eersteX) : null;
+    if (!rankNaam) {
+      rankNaam = vorigeRankWaarde(datums[0]);
+    }
     const rk = rankNaam ? rankingMap[rankNaam] : null;
-    if (rk && eersteX) {
+    if (rk) {
       rankingActief = true;
-      const jaar = parseInt(eersteX.slice(0, 4), 10);
+      const jaar = zichtbaarJaarNum;
       const volgorde = rankingVolgordeVoorJaar(rk, jaar);
       // posMap: radId -> positie 1..8
       const posMap = {};
@@ -260,7 +265,7 @@ export function renderVakView() {
       rankingCells = allKolommen.map((k, i) => {
         const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);padding-left:4px;' : '';
         const pos = posMap[k.id];
-        return `<div class="vak-rank-cell" style="${sep}">${pos != null ? pos : ''}</div>`;
+        return `<div class="vak-rank-cell" style="${sep}" title="${rk.label || rk.naam}">${pos != null ? pos : ''}</div>`;
       }).join('');
     }
   }
@@ -321,8 +326,6 @@ export function renderVakView() {
       }
     }).join('');
 
-    const saldoCel = `<div class="vak-saldo-cell" style="${rijStyle}"></div>`;
-
     let beheerCells = '';
     if (toonBeheer) {
       let xCel;
@@ -334,17 +337,26 @@ export function renderVakView() {
       }
 
       let mCel;
-      if (isBeheer && x && !geaccordeerd) {
-        const val = (typeof min === 'number') ? min : '';
+      if (isBeheer && !geaccordeerd) {
+        // Beheerder mag minimale bezetting altijd wijzigen, ook als X uit staat.
+        // Toon werkelijke opgeslagen waarde (geen default 5) zodat leeg blijft als
+        // er nog niets is gezet.
+        const val = (typeof dag.vakantie_min === 'number') ? dag.vakantie_min : '';
         mCel = `<div class="vak-cell-readonly" style="${rijStyle} padding: 2px;"><input type="number" min="0" max="${rads.length}" value="${val}" onchange="window.vakSetMin('${iso}', this.value)" style="width: 28px; border: 1px solid rgba(0,0,0,0.1); border-radius: 3px; padding: 2px; text-align: center; font-size: 11px; background: transparent;"></div>`;
       } else {
-        mCel = `<div class="vak-cell-readonly" style="${rijStyle}">${typeof min === 'number' ? min : ''}</div>`;
+        const toon = (typeof dag.vakantie_min === 'number') ? dag.vakantie_min : '';
+        mCel = `<div class="vak-cell-readonly" style="${rijStyle}">${toon}</div>`;
       }
 
       let rCel;
-      if (isBeheer && x && !geaccordeerd) {
+      if (isBeheer && !geaccordeerd) {
+        // Beheerder mag ranking altijd kiezen, onafhankelijk van X. Toon de
+        // effectieve rank (eigen of ge\u00ebrfd voor X-dagen) als selectie zodat
+        // duidelijk is welke ranking actief is. Een wijziging zet altijd een
+        // expliciete rank op deze dag.
+        const huidigeRank = rank || '';
         const opties = state.vakantieRankings.map(rk =>
-          `<option value="${rk.naam}" ${rk.naam === rank ? 'selected' : ''}>${rk.label || rk.naam}</option>`
+          `<option value="${rk.naam}" ${rk.naam === huidigeRank ? 'selected' : ''}>${rk.label || rk.naam}</option>`
         ).join('');
         rCel = `<div class="vak-cell-readonly" style="${rijStyle} padding: 2px;"><select onchange="window.vakSetRank('${iso}', this.value)" style="width:100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 3px; padding: 2px; font-size: 10px; background: transparent;"><option value="">\u2014</option>${opties}</select></div>`;
       } else {
@@ -361,7 +373,7 @@ export function renderVakView() {
       beheerCells += dagCellRechts;
     }
 
-    body += dagCell + radCells + saldoCel + beheerCells;
+    body += dagCell + radCells + beheerCells;
   });
 
   const html = `
@@ -390,25 +402,22 @@ export function renderVakView() {
         <div class="vak-sticky-row vak-head-row">
           <div class="grid-head"></div>
           ${radHeads}
-          <div class="grid-head" title="Saldo dit jaar (V minus dagen samenvallend met dienst)">\u2211</div>
           ${beheerHeads}
         </div>
         <div class="vak-sticky-row vak-saldo-row" id="vakSaldoRow">
           <div class="vak-saldo-label" id="vakSaldoLabel">Saldo</div>
           ${saldoCells}
-          <div></div>
           ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
         </div>
         ${rankingActief ? `<div class="vak-sticky-row vak-rank-row">
           <div class="vak-rank-label">Rang</div>
           ${rankingCells}
-          <div></div>
           ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
         </div>` : ''}
         <div class="vak-maand-nav" style="top: ${rankingActief ? '82px' : '56px'}; grid-column: 1 / span ${totaalKolommen};">
-          <button class="vak-maand-knop" onclick="window.vakNavMaand(-1)" title="Vorige maand">\u2039</button>
+          <button class="nav-btn" onclick="window.vakNavMaand(-1)" title="Vorige maand">\u2039</button>
           <span class="vak-maand-titel">${MAANDEN[zichtbaarMaandNum].toUpperCase()} ${zichtbaarJaarNum}</span>
-          <button class="vak-maand-knop" onclick="window.vakNavMaand(1)" title="Volgende maand">\u203a</button>
+          <button class="nav-btn" onclick="window.vakNavMaand(1)" title="Volgende maand">\u203a</button>
         </div>
         ${body}
       </div>
