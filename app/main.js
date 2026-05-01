@@ -17,7 +17,7 @@ import { renderAfdView } from './views/afdeling.js';
 import { renderDieView } from './views/dienst.js';
 import { renderActView } from './views/activiteit.js';
 import { renderWenView } from './views/wensen.js';
-import { renderVakView, patchVakDatums, flushVakWrites } from './views/vakantie.js';
+import { renderVakView } from './views/vakantie.js';
 import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
@@ -65,10 +65,7 @@ window.kopieerLink = async function(link) {
 
 // ==== Navigatie-handlers (gedeeld door alle views) ===========================
 
-window.showView = async function(v) {
-  if (state.huidigeView === 'vak' && v !== 'vak') {
-    await flushVakWrites();
-  }
+window.showView = function(v) {
   state.huidigeView = v;
   renderTabs();
   render();
@@ -219,25 +216,10 @@ function luisterNaarData() {
   }));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'indeling'), (snap) => {
-    const changes = snap.docChanges();
-    // Eerste snapshot: alle docs als 'added' → volledige map + render
-    if (changes.every(c => c.type === 'added') && changes.length === snap.docs.length) {
-      const map = {};
-      snap.docs.forEach(d => { map[d.id] = { datum: d.id, ...d.data() }; });
-      state.indelingMap = map;
-      render();
-      return;
-    }
-    // Latere updates op vakantie-tab: slim patchen (alleen gewijzigde cellen)
-    if (state.huidigeView === 'vak') {
-      patchVakDatums(changes);
-    } else {
-      // Andere views: gewone map-update + render
-      const map = {};
-      snap.docs.forEach(d => { map[d.id] = { datum: d.id, ...d.data() }; });
-      state.indelingMap = map;
-      render();
-    }
+    const map = {};
+    snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
+    state.indelingMap = map;
+    render();
   }));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'validatie_regels'), (snap) => {
