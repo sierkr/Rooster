@@ -968,26 +968,3 @@ window.vakVerwijderRanking = async function(naam) {
   }
 };
 
-    });
-    closeSheet();
-  } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
-  }
-};
-
-window.vakVerwijderRanking = async function(naam) {
-  if (!isBeheerder()) return;
-  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
-  try {
-    await deleteDoc(doc(db, 'vakantie_rankings', naam));
-  } catch (e) {
-    alert('Verwijderen mislukt: ' + (e.message || e.code));
-  }
-};
-eze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
-  try {
-    await deleteDoc(doc(db, 'vakantie_rankings', naam));
-  } catch (e) {
-    alert('Verwijderen mislukt: ' + (e.message || e.code));
-  }
-};
