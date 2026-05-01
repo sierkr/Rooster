@@ -3,7 +3,7 @@ import { collection, doc, getDocs, setDoc, updateDoc, writeBatch, deleteField } 
 import { db, fnGebruikerAanmaken, fnGebruikerVerwijderen, fnGebruikerResetWachtwoord } from '../firebase-init.js';
 import { state, SLOTS, VASTE_RAD_IDS, VASTE_BEHEERDER_EMAIL } from '../state.js';
 import {
-  vasteRads, radiologenMap, parttimeFactor, defaultPermissies,
+  vasteRads, actieveInvallers, radiologenMap, parttimeFactor, defaultPermissies,
   magGebruikersBeheren, genereerWachtwoord, bezettingOpDatum, vandaagIso, plusDagen, formatDatum,
 } from '../helpers.js';
 import { STANDAARD_WACHTWOORD } from '../helpers.js';
@@ -218,6 +218,7 @@ window.nieuweGebruiker = function() {
   document.getElementById('sheetTitle').textContent = 'Nieuwe gebruiker';
   document.getElementById('sheetSub').textContent = 'Vul de gegevens in';
   const rads = vasteRads();
+  const waarnemers = actieveInvallers();
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field"><label class="form-label">E-mail</label><input type="email" class="input" id="nuEmail" autocapitalize="off"></div>
     <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${STANDAARD_WACHTWOORD}"></div>
@@ -229,10 +230,15 @@ window.nieuweGebruiker = function() {
         <option value="technician">Technician</option>
       </select>
     </div>
-    <div class="form-field"><label class="form-label">Gekoppeld aan radioloog (optioneel)</label>
+    <div class="form-field"><label class="form-label">Gekoppeld aan (optioneel)</label>
       <select class="select" id="nuRadId">
         <option value="">— geen —</option>
-        ${rads.map(r => `<option value="${r.id}">${r.code} · ${r.achternaam}</option>`).join('')}
+        <optgroup label="Vaste radiologen">
+          ${rads.map(r => `<option value="${r.id}">${r.code} · ${r.achternaam}</option>`).join('')}
+        </optgroup>
+        ${waarnemers.length ? `<optgroup label="Waarnemers">
+          ${waarnemers.map(r => `<option value="${r.id}">${r.id} — ${r.code} · ${r.achternaam}</option>`).join('')}
+        </optgroup>` : ''}
       </select>
     </div>
     <div class="form-info" style="font-size: 12px;">De gebruiker logt de eerste keer in met dit wachtwoord en wordt dan gevraagd een eigen wachtwoord te kiezen.</div>
@@ -272,6 +278,14 @@ window.gebruikerBewerken = function(uid) {
   const g = state.gebruikers.find(x => x.id === uid);
   if (!g) return;
   const rads = vasteRads();
+  const waarnemers = actieveInvallers();
+  // Toon ook de huidige koppeling als die naar een inactieve W-stoel wijst
+  // of naar een onbekende slot — anders verdwijnt de selectie uit de lijst.
+  const huidigeId = g.radioloog_id || '';
+  if (huidigeId && !rads.some(r => r.id === huidigeId) && !waarnemers.some(r => r.id === huidigeId)) {
+    const stoel = state.radiologen.find(r => r.id === huidigeId);
+    if (stoel) waarnemers.push(stoel);
+  }
   const isEigenAccount = uid === state.user.uid;
   const isVasteBeheerder = (g.email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL;
 
@@ -299,10 +313,15 @@ window.gebruikerBewerken = function(uid) {
         <option value="technician" ${(g.rol==='technician' || g.rol==='lezer')?'selected':''}>Technician</option>
       </select>
     </div>
-    <div class="form-field"><label class="form-label">Gekoppeld aan radioloog${isVasteBeheerder?' 🔒':''}</label>
+    <div class="form-field"><label class="form-label">Gekoppeld aan${isVasteBeheerder?' 🔒':''}</label>
       <select class="select" id="wzRadId" ${isVasteBeheerder?'disabled':''}>
-        <option value="">— geen —</option>
-        ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${r.achternaam}</option>`).join('')}
+        <option value="" ${!g.radioloog_id?'selected':''}>— geen —</option>
+        <optgroup label="Vaste radiologen">
+          ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${r.achternaam}</option>`).join('')}
+        </optgroup>
+        ${waarnemers.length ? `<optgroup label="Waarnemers">
+          ${waarnemers.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.id} — ${r.code || ''} · ${r.achternaam || ''}</option>`).join('')}
+        </optgroup>` : ''}
       </select>
     </div>
     <div class="form-field">
