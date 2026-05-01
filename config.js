@@ -11,4 +11,4 @@ window.FIREBASE_CONFIG = {
 };
 
 // Versie van de app - wordt gebruikt voor cache-busting
-window.APP_VERSIE = "3.19.0";
+window.APP_VERSIE = "3.19.1";

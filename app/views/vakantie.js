@@ -955,4 +955,10 @@ window.vakOpslaanRanking = async function(origineelNaam) {
 
 window.vakVerwijderRanking = async function(naam) {
   if (!isBeheerder()) return;
-  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die d
+  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
+  try {
+    await deleteDoc(doc(db, 'vakantie_rankings', naam));
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + (e.message || e.code));
+  }
+};

@@ -431,4 +431,13 @@ window.actToonDrilldown = function(radId, kind, code) {
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span>${formatDatum(it.datum, 'kort')}</span>
             <span class="badge ${fclass(it.code)}">${it.code}</span>
-          
+          </div>
+        </div>
+      `;
+    });
+    body += `</div>`;
+  }
+  body += `<button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>`;
+  document.getElementById('sheetBody').innerHTML = body;
+  openSheet();
+};
