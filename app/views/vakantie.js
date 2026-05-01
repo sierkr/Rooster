@@ -35,20 +35,18 @@ import { openSheet, closeSheet } from '../sheets.js';
 // In scroll-modus worden geen cellen geactiveerd door tap.
 let _scrollModus = false;
 
-// ----- Write-queue (debounced + flush-on-leave) ---------------------------
-// Pendende writes: { [datum]: updateObject }
+// ----- Write-queue (flush-on-leave) ---------------------------------------
+// Zolang de vakantie-tab actief is worden geen writes naar Firebase gestuurd.
+// Alle wijzigingen worden gebufferd in _pendingWrites en weggeschreven zodra
+// de tab verlaten wordt (tabswitch, visibilitychange, pagehide).
+// Uitzondering: accorderen flusht altijd direct via flushVakWrites().
 const _pendingWrites = {};
-const _writeTimers = {};
 
 function _scheduleWrite(datum, update) {
-  // Merge met eventuele al openstaande pending write voor dit datum
   _pendingWrites[datum] = Object.assign(_pendingWrites[datum] || {}, update);
-  if (_writeTimers[datum]) clearTimeout(_writeTimers[datum]);
-  _writeTimers[datum] = setTimeout(() => _flushDatum(datum), 500);
 }
 
 async function _flushDatum(datum) {
-  if (_writeTimers[datum]) { clearTimeout(_writeTimers[datum]); delete _writeTimers[datum]; }
   const update = _pendingWrites[datum];
   if (!update) return;
   delete _pendingWrites[datum];
@@ -60,18 +58,18 @@ async function _flushDatum(datum) {
   }
 }
 
-async function _flushAll() {
+export async function flushVakWrites() {
   const datums = Object.keys(_pendingWrites);
   await Promise.all(datums.map(d => _flushDatum(d)));
 }
 
-// Flush bij verlaten pagina / tab-switch
+// Flush bij verlaten pagina
 if (!window._vakFlushHooked) {
   window._vakFlushHooked = true;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') _flushAll();
+    if (document.visibilityState === 'hidden') flushVakWrites();
   });
-  window.addEventListener('pagehide', _flushAll);
+  window.addEventListener('pagehide', flushVakWrites);
 }
 
 // ----- Helpers -------------------------------------------------------------
@@ -726,7 +724,7 @@ window.vakToggleX = function(datum) {
   if (nieuw) {
     if (typeof dag.vakantie_min !== 'number') {
       const vorige = vorigeMinWaarde(datum);
-      if (vorige !== null) update.vakantie_min = vorige;
+      update.vakantie_min = vorige !== null ? vorige : 5;
     }
     if (!dag.vakantie_rank) {
       const vorige = vorigeRankWaarde(datum);
@@ -916,7 +914,7 @@ window.vakAccordeer = async function(startISO, eindISO) {
   if (!isBeheerder()) return;
   if (!confirm('Periode accorderen en V-cellen doorzetten naar het hoofdrooster?')) return;
   // Flush pending writes eerst zodat state klopt voor accorderen
-  await _flushAll();
+  await flushVakWrites();
   closeSheet();
   await accordeerRange(startISO, eindISO, true);
 };
@@ -1030,7 +1028,7 @@ window.vakBevriezenUitvoeren = async function() {
   if (!start || !eind || start > eind) { alert('Kies een geldige periode.'); return; }
 
   if (!confirm(`Periode ${start} t/m ${eind} bevriezen en V-cellen doorzetten naar Overzicht?`)) return;
-  await _flushAll();
+  await flushVakWrites();
   closeSheet();
   await accordeerRange(start, eind, true);
 };

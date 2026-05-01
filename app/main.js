@@ -17,7 +17,7 @@ import { renderAfdView } from './views/afdeling.js';
 import { renderDieView } from './views/dienst.js';
 import { renderActView } from './views/activiteit.js';
 import { renderWenView } from './views/wensen.js';
-import { renderVakView, patchVakDatums } from './views/vakantie.js';
+import { renderVakView, patchVakDatums, flushVakWrites } from './views/vakantie.js';
 import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
@@ -65,7 +65,10 @@ window.kopieerLink = async function(link) {
 
 // ==== Navigatie-handlers (gedeeld door alle views) ===========================
 
-window.showView = function(v) {
+window.showView = async function(v) {
+  if (state.huidigeView === 'vak' && v !== 'vak') {
+    await flushVakWrites();
+  }
   state.huidigeView = v;
   renderTabs();
   render();
