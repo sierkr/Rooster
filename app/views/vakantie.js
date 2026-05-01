@@ -1,4 +1,5 @@
-// Vakantie-view (Fase 4: doorlopende kalender + dubbel-tik + bevries periode).
+// Vakantie-view: maand-per-maand kalender met V-toggle en code-keuze.
+// Enkel-tik = V toggle. Dubbel-tik = code-keuze sheet (V/K/Z of vrije code).
 //
 // Datamodel:
 //   indeling/{datum}.vakantie_x        bool
@@ -9,7 +10,7 @@
 //   vakantie_rankings/{naam} { naam, label, kleur, anker_jaar, anker_volgorde[8] }
 
 import {
-  setDoc, doc, deleteDoc, writeBatch
+  setDoc, updateDoc, doc, deleteDoc, writeBatch, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state, DAGEN_NL, MAANDEN } from '../state.js';
@@ -115,23 +116,23 @@ function dagenInBereik(startISO, eindISO) {
 
 // ----- Dubbel-tik detectie -------------------------------------------------
 //
-// Eerste tik: start een 300ms timer met de "kort"-actie. Als binnen die
+// Eerste tik: start een 300ms timer met de "enkel"-actie. Als binnen die
 // 300ms een tweede tik komt op dezelfde cel, annuleer de timer en doe de
-// "lang"-actie (sheet openen).
+// "dubbel"-actie (sheet openen).
 
 const DBL_TAP_MS = 300;
 let _dblTimer = null;
 let _dblTarget = null;
 
-function attachDblTap(el, key, onShort, onLong) {
+function attachDblTap(el, key, onEnkel, onDubbel) {
   el.addEventListener('click', (e) => {
     e.preventDefault();
     if (_dblTimer && _dblTarget === key) {
-      // Tweede tik binnen vertraging: annuleer V-toggle en open sheet
+      // Tweede tik binnen vertraging: annuleer enkel-actie en doe dubbel-actie
       clearTimeout(_dblTimer);
       _dblTimer = null;
       _dblTarget = null;
-      onLong();
+      onDubbel();
     } else {
       // Eerste tik: wacht of er een tweede komt
       if (_dblTimer) clearTimeout(_dblTimer);
@@ -139,7 +140,7 @@ function attachDblTap(el, key, onShort, onLong) {
       _dblTimer = setTimeout(() => {
         _dblTimer = null;
         _dblTarget = null;
-        onShort();
+        onEnkel();
       }, DBL_TAP_MS);
     }
   });
@@ -438,11 +439,22 @@ window.vakToggleV = async function(datum, radId) {
   if (dag.vakantie_geaccordeerd) return;
   const huidig = dag.vakantie_v || {};
   const huidigeCode = vCode(huidig[radId]);
-  const nieuw = { ...huidig };
-  if (huidigeCode) delete nieuw[radId];
-  else nieuw[radId] = true;
+
+  const docRef = doc(db, 'indeling', datum);
   try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
+    if (huidigeCode) {
+      // Weghalen: gebruik dot-path met deleteField, dan blijven andere
+      // radiologen' V's ongemoeid. Document moet bestaan voor updateDoc.
+      const veld = `vakantie_v.${radId}`;
+      await updateDoc(docRef, { [veld]: deleteField() });
+    } else {
+      // Toevoegen: dot-path zorgt voor merge per subveld zonder andere
+      // velden weg te gooien.
+      const veld = `vakantie_v.${radId}`;
+      // setDoc met merge zorgt dat het document wordt aangemaakt als het nog
+      // niet bestaat (anders zou updateDoc falen).
+      await setDoc(docRef, { datum, vakantie_v: { [radId]: true } }, { merge: true });
+    }
   } catch (e) {
     alert('Opslaan mislukt: ' + (e.message || e.code));
   }
@@ -525,14 +537,16 @@ window.openVakCelSheet = function(datum, radId) {
 };
 
 window.vakKiesCode = async function(datum, radId, code) {
-  const dag = state.indelingMap[datum] || {};
-  const huidig = dag.vakantie_v || {};
-  const nieuw = { ...huidig };
-  if (code) nieuw[radId] = (code === 'V') ? true : code;
-  else delete nieuw[radId];
   closeSheet();
+  const docRef = doc(db, 'indeling', datum);
+  const veld = `vakantie_v.${radId}`;
   try {
-    await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
+    if (code) {
+      const waarde = (code === 'V') ? true : code;
+      await setDoc(docRef, { datum, vakantie_v: { [radId]: waarde } }, { merge: true });
+    } else {
+      await updateDoc(docRef, { [veld]: deleteField() });
+    }
   } catch (e) {
     alert('Opslaan mislukt: ' + (e.message || e.code));
   }
