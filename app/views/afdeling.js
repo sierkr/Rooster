@@ -20,6 +20,7 @@ export function renderAfdView() {
           <p style="font-size: 17px; font-weight: 500; margin: 0;">Wie doet wat</p>
         </div>
         <div style="display: flex; gap: 6px;">
+          <button class="nav-btn" onclick="window.exportAfdWeek()" title="Exporteer hele week naar Excel">\uD83D\uDCC2</button>
           <button class="nav-btn" onclick="window.printAfdWeek()" title="Print hele week landscape">\uD83D\uDDA8</button>
           <button class="nav-btn" onclick="window.navigeerDag(-1)">\u2039</button>
           <button class="nav-btn" onclick="window.navigeerDag(1)">\u203a</button>
@@ -192,4 +193,112 @@ window.printAfdWeek = function() {
   w.document.open();
   w.document.write(printDoc);
   w.document.close();
+};
+
+// ----- Export hele week naar Excel ---------------------------------------
+
+let _xlsxExportPromise = null;
+function _laadXLSXVoorExport() {
+  if (_xlsxExportPromise) return _xlsxExportPromise;
+  _xlsxExportPromise = new Promise((resolve, reject) => {
+    if (window.XLSX) return resolve(window.XLSX);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => reject(new Error('Kon SheetJS niet laden (offline?).'));
+    document.head.appendChild(s);
+  });
+  return _xlsxExportPromise;
+}
+
+window.exportAfdWeek = async function() {
+  let XLSX;
+  try { XLSX = await _laadXLSXVoorExport(); }
+  catch (e) { alert(e.message); return; }
+
+  const datum = state.huidigeDatum || vandaagIso();
+  const maandag = mandagVanIso(datum);
+  const datums = datumsVanWeek(maandag);
+  const beperkt = !magBeheerLezen();
+  const VERBORGEN_CODES = ['V', 'Z', 'K'];
+  const fmap = functiesMap();
+  const rads = vasteRads();
+
+  const eersteDeel = (code) => {
+    const f = fmap[code];
+    const naam = f?.naam || functieNaam(code);
+    return naam.split('/')[0];
+  };
+
+  // Voor elke dag: lijst van regels (functienaam · radioloog) + extras.
+  const perDag = datums.map(iso => {
+    const d = new Date(iso + 'T12:00:00');
+    const dagLang = DAGEN_LANG[d.getDay() === 0 ? 6 : d.getDay() - 1];
+    const dagLabel = `${dagLang.charAt(0).toUpperCase() + dagLang.slice(1)} ${d.getDate()}-${d.getMonth()+1}`;
+    const dagData = state.indelingMap[iso];
+    const regels = [];
+
+    if (!dagData) {
+      regels.push('—');
+    } else {
+      const items = [];
+      rads.forEach(r => {
+        const codes = toewijzingVoor(iso, r.id);
+        if (codes.length === 0) return;
+        const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+        if (beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l))) return;
+        const hoofdCode = codes[0];
+        const isAfwezig = ['V','Z','A','K','Q','T'].includes(hoofdLetters[0]);
+        const naam = codes.length === 2
+          ? `${eersteDeel(codes[0])}/${eersteDeel(codes[1])}`
+          : (fmap[hoofdCode]?.naam || functieNaam(hoofdCode));
+        items.push({ rad: r, naam, isAfwezig });
+      });
+      items.sort((a, b) => {
+        if (a.isAfwezig !== b.isAfwezig) return a.isAfwezig ? 1 : -1;
+        return a.naam.localeCompare(b.naam);
+      });
+      items.forEach(it => {
+        regels.push(`${it.naam} — ${it.rad.code} · ${it.rad.achternaam}${it.isAfwezig ? ' (afw)' : ''}`);
+      });
+
+      const weekRads = SLOTS.map(s => ({ slot: s, codes: toewijzingVoor(iso, s) })).filter(x => x.codes.length > 0);
+      if (weekRads.length > 0) {
+        regels.push('');
+        regels.push('Waarnemers: ' + weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' · '));
+      }
+      if (dagData.bespreking)  regels.push('Bespreking: ' + dagData.bespreking);
+      if (dagData.interventie) regels.push('Interventie: ' + dagData.interventie);
+      if (dagData.opmerking)   regels.push('Opmerking: ' + dagData.opmerking);
+    }
+
+    return { label: dagLabel, regels };
+  });
+
+  // Bouw 2D array: 1 kop-rij + max-aantal regels rijen, kolommen per dag
+  const maxRijen = Math.max(...perDag.map(d => d.regels.length), 1);
+  const aoa = [perDag.map(d => d.label)];
+  for (let i = 0; i < maxRijen; i++) {
+    aoa.push(perDag.map(d => d.regels[i] || ''));
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  // Kolombreedte zetten voor leesbaarheid
+  ws['!cols'] = perDag.map(() => ({ wch: 32 }));
+  // Header-rij vetdruk
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cellAddr = XLSX.utils.encode_cell({ r: 0, c });
+    if (ws[cellAddr]) ws[cellAddr].s = { font: { bold: true } };
+  }
+
+  const eindDatum = datums[datums.length - 1];
+  const eind = new Date(eindDatum + 'T12:00:00');
+  const start = new Date(maandag + 'T12:00:00');
+  const sheetNaam = `Week ${start.getDate()}-${start.getMonth()+1}`;
+  const bestandsnaam = `Weekoverzicht_${maandag}_tm_${eindDatum}.xlsx`;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetNaam.slice(0, 31));
+  XLSX.writeFile(wb, bestandsnaam);
 };
