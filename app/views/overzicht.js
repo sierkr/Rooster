@@ -170,12 +170,11 @@ export function renderBehView() {
               const wensTitels = { open: 'Wens: nog niet behandeld', verwerkt: 'Wens: goedgekeurd', afgewezen: 'Wens: afgewezen' };
               const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="${wensTitels[wens] || wens}"></span>` : '';
               const opmMarker = celOpm ? `<span class="opm-marker" title="${(celOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
-              // Duo-weergave: code1 linksboven, code2 rechtsonder, diagonale streep
+              // Duo-weergave: codes met ' / ' tussen, bv. "B / M".
               const inhoud = isDuo
-                ? `<span class="cel-duo-1">${code1}</span><span class="cel-duo-2 ${fclass(code2)}">${code2}</span><span class="cel-duo-streep"></span>`
+                ? `${code1} / ${code2}`
                 : (code1 || '·');
-              const duoCls = isDuo ? 'grid-cell-duo' : '';
-              return `<div class="grid-cell ${cls} ${readonly} ${statusCls} ${duoCls}" style="${sep}" ${onclick}>${inhoud}${wensMarker}${opmMarker}</div>`;
+              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${inhoud}${wensMarker}${opmMarker}</div>`;
             }).join('')}
             ${toonW ? (() => {
               const n = telPerDag(datum);
@@ -432,3 +431,4 @@ window.opslaanOpmerking = async function(datum) {
   window.closeSheet();
   await slaOpmerkingOp(datum, nieuw);
 };
+                                                                                                                                                                                                      
