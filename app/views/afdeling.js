@@ -1,7 +1,7 @@
 // Afdeling-view: per dag wie wat doet, gesorteerd op functie/aanwezigheid.
-import { state, SLOTS, DAGEN_LANG } from '../state.js';
+import { state, SLOTS, DAGEN_LANG, DAGEN_NL } from '../state.js';
 import {
-  vasteRads, functiesMap, vandaagIso, formatDatum, functieNaam,
+  vasteRads, vasteRadsOpDatum, functiesMap, vandaagIso, formatDatum, functieNaam,
   toewijzingVoor, huidigKalenderJaar, magBeheerLezen,
   mandagVanIso, datumsVanWeek,
 } from '../helpers.js';
@@ -211,6 +211,9 @@ function _laadXLSXVoorExport() {
   return _xlsxExportPromise;
 }
 
+// Layout: kolommen = vaste rads (8) + Dienst + Opmerking. Per dag een blok
+// van 6 rijen: dag-rij (ochtend-codes), middag-rij, cel-opmerking-rij, en 3
+// blanke rijen voor handmatige time-stamped notities (bv "12:00 Vaatbes").
 window.exportAfdWeek = async function() {
   let XLSX;
   try { XLSX = await _laadXLSXVoorExport(); }
@@ -222,78 +225,84 @@ window.exportAfdWeek = async function() {
   const beperkt = !magBeheerLezen();
   const VERBORGEN_CODES = ['V', 'Z', 'K'];
   const fmap = functiesMap();
-  const rads = vasteRads();
+  // Datum-aware bezetting: kolomtitels reflecteren de bezetting van deze week.
+  const rads = vasteRadsOpDatum(maandag);
 
-  const eersteDeel = (code) => {
+  const codeNaam = (code) => {
+    if (!code) return '';
     const f = fmap[code];
     const naam = f?.naam || functieNaam(code);
     return naam.split('/')[0];
   };
 
-  // Voor elke dag: lijst van regels (functienaam · radioloog) + extras.
-  const perDag = datums.map(iso => {
+  // Helper om een rad-naam te bouwen (voor Dienst-cel)
+  const radLabel = (radId) => {
+    if (!radId) return '';
+    const r = state.radiologen.find(x => x.id === radId);
+    if (!r) return radId;
+    return [r.code, r.achternaam].filter(Boolean).join(' · ');
+  };
+
+  const N_RAD = rads.length;
+  const lege = (n) => Array.from({ length: n }, () => '');
+  const BLANK_ROWS_PER_DAG = 3;
+
+  const aoa = [];
+
+  // Twee header-rijen: codes + achternamen, naar voorbeeld van de bestaande
+  // Excel-layout van de afdeling.
+  aoa.push(['', ...rads.map(r => r.code || r.id), 'Dienst', 'Opmerking']);
+  aoa.push(['', ...rads.map(r => r.achternaam || ''), '', '']);
+
+  datums.forEach(iso => {
     const d = new Date(iso + 'T12:00:00');
-    const dagLang = DAGEN_LANG[d.getDay() === 0 ? 6 : d.getDay() - 1];
-    const dagLabel = `${dagLang.charAt(0).toUpperCase() + dagLang.slice(1)} ${d.getDate()}-${d.getMonth()+1}`;
+    const dagKort = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
+    const dagLabel = `${dagKort} ${d.getDate()}-${d.getMonth()+1}`;
     const dagData = state.indelingMap[iso];
-    const regels = [];
 
     if (!dagData) {
-      regels.push('—');
-    } else {
-      const items = [];
-      rads.forEach(r => {
-        const codes = toewijzingVoor(iso, r.id);
-        if (codes.length === 0) return;
-        const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
-        if (beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l))) return;
-        const hoofdCode = codes[0];
-        const isAfwezig = ['V','Z','A','K','Q','T'].includes(hoofdLetters[0]);
-        const naam = codes.length === 2
-          ? `${eersteDeel(codes[0])}/${eersteDeel(codes[1])}`
-          : (fmap[hoofdCode]?.naam || functieNaam(hoofdCode));
-        items.push({ rad: r, naam, isAfwezig });
-      });
-      items.sort((a, b) => {
-        if (a.isAfwezig !== b.isAfwezig) return a.isAfwezig ? 1 : -1;
-        return a.naam.localeCompare(b.naam);
-      });
-      items.forEach(it => {
-        regels.push(`${it.naam} — ${it.rad.code} · ${it.rad.achternaam}${it.isAfwezig ? ' (afw)' : ''}`);
-      });
-
-      const weekRads = SLOTS.map(s => ({ slot: s, codes: toewijzingVoor(iso, s) })).filter(x => x.codes.length > 0);
-      if (weekRads.length > 0) {
-        regels.push('');
-        regels.push('Waarnemers: ' + weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' · '));
-      }
-      if (dagData.bespreking)  regels.push('Bespreking: ' + dagData.bespreking);
-      if (dagData.interventie) regels.push('Interventie: ' + dagData.interventie);
-      if (dagData.opmerking)   regels.push('Opmerking: ' + dagData.opmerking);
+      aoa.push([dagLabel, ...lege(N_RAD), '', '']);
+      // 5 blanke rijen voor handmatige toevoegingen
+      for (let i = 0; i < 2 + BLANK_ROWS_PER_DAG; i++) aoa.push(['', ...lege(N_RAD), '', '']);
+      return;
     }
 
-    return { label: dagLabel, regels };
+    // Per rad: ochtend-code, middag-code (alleen bij duo), en cel-opmerking.
+    const radInfo = rads.map(r => {
+      const codes = toewijzingVoor(iso, r.id);
+      const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+      const verborgen = codes.length > 0 && beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l));
+      let ochtend = '', middag = '';
+      if (codes.length > 0 && !verborgen) {
+        ochtend = codeNaam(codes[0]);
+        if (codes.length === 2) middag = codeNaam(codes[1]);
+      }
+      const opm = (!verborgen && dagData.cel_opmerkingen?.[r.id]) || '';
+      return { ochtend, middag, opm };
+    });
+
+    const dienstStr = radLabel(dagData.dienst?.dag);
+
+    // Rij 1: dag-label + ochtend-codes + dienst + dag-opmerking
+    aoa.push([dagLabel, ...radInfo.map(ri => ri.ochtend), dienstStr, dagData.opmerking || '']);
+    // Rij 2: middag-codes (alleen waar duo) + bespreking
+    aoa.push(['', ...radInfo.map(ri => ri.middag), '', dagData.bespreking ? `Besp: ${dagData.bespreking}` : '']);
+    // Rij 3: cel-opmerkingen per rad + interventie
+    aoa.push(['', ...radInfo.map(ri => ri.opm), '', dagData.interventie ? `Interv: ${dagData.interventie}` : '']);
+    // Rij 4-6: blanke rijen voor handmatige notities (bv. "12:00 Vaatbes")
+    for (let i = 0; i < BLANK_ROWS_PER_DAG; i++) {
+      aoa.push(['', ...lege(N_RAD), '', '']);
+    }
   });
 
-  // Bouw 2D array: 1 kop-rij + max-aantal regels rijen, kolommen per dag
-  const maxRijen = Math.max(...perDag.map(d => d.regels.length), 1);
-  const aoa = [perDag.map(d => d.label)];
-  for (let i = 0; i < maxRijen; i++) {
-    aoa.push(perDag.map(d => d.regels[i] || ''));
-  }
-
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  // Kolombreedte zetten voor leesbaarheid
-  ws['!cols'] = perDag.map(() => ({ wch: 32 }));
-  // Header-rij vetdruk
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cellAddr = XLSX.utils.encode_cell({ r: 0, c });
-    if (ws[cellAddr]) ws[cellAddr].s = { font: { bold: true } };
-  }
+  ws['!cols'] = [
+    { wch: 10 },                          // Datum
+    ...rads.map(() => ({ wch: 14 })),     // per rad    { wch: 18 },                          // Dienst
+    { wch: 36 },                          // Opmerking
+  ];
 
   const eindDatum = datums[datums.length - 1];
-  const eind = new Date(eindDatum + 'T12:00:00');
   const start = new Date(maandag + 'T12:00:00');
   const sheetNaam = `Week ${start.getDate()}-${start.getMonth()+1}`;
   const bestandsnaam = `Weekoverzicht_${maandag}_tm_${eindDatum}.xlsx`;
