@@ -3,28 +3,46 @@ import { state } from '../state.js';
 import {
   vasteRads, radiologenMap, vandaagIso, isoWeekVan, datumsVanWeek,
   weekRange, formatDatum, fclass, functieNaam, toewijzingVoor, magOpmerkingen,
+  magBeheerLezen,
 } from '../helpers.js';
-import { openSheet } from '../sheets.js';
+import { openSheet, closeSheet } from '../sheets.js';
+import { auth, db } from '../firebase-init.js';
+import { reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 export function renderRadView() {
   const container = document.getElementById('view-rad');
   const rads = vasteRads();
   if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Nog geen radiologen geladen…</div>'; return; }
-  const rad = radiologenMap()[state.huidigeRadId] || rads[0];
+
+  const eigenRadId = state.profiel?.radioloog_id;
+  const isBeheer = magBeheerLezen();
+
+  // Gewone radioloog ziet alleen zichzelf
+  const zichtbareRads = isBeheer ? rads : rads.filter(r => r.id === eigenRadId);
+
+  // Zorg dat huidigeRadId altijd geldig is voor deze gebruiker
+  if (!isBeheer && eigenRadId) state.huidigeRadId = eigenRadId;
+
+  const rad = radiologenMap()[state.huidigeRadId] || zichtbareRads[0];
+  if (!rad) { container.innerHTML = '<div class="empty-state">Geen gekoppeld radioloog-profiel gevonden.</div>'; return; }
+
   const wkMa = state.weekMaandag;
   const datums = datumsVanWeek(wkMa);
   const vandaag = vandaagIso();
   const wkNr = isoWeekVan(wkMa);
 
+  const radSelector = isBeheer
+    ? `<select class="select" style="font-weight: 500; font-size: 15px; padding: 4px 8px;" onchange="window.zetRadId(this.value)">
+        ${zichtbareRads.map(r => `<option value="${r.id}" ${r.id===rad.id?'selected':''}>${r.achternaam}</option>`).join('')}
+       </select>`
+    : `<span style="font-weight: 500; font-size: 15px;">${rad.achternaam}</span>`;
+
   let html = `
     <div class="card">
       <div class="row">
         <div class="avatar">${rad.code}</div>
-        <div style="flex: 1; min-width: 0;">
-          <select class="select" style="font-weight: 500; font-size: 15px; padding: 4px 8px;" onchange="window.zetRadId(this.value)">
-            ${rads.map(r => `<option value="${r.id}" ${r.id===rad.id?'selected':''}>${r.achternaam}</option>`).join('')}
-          </select>
-        </div>
+        <div style="flex: 1; min-width: 0;">${radSelector}</div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>
@@ -36,6 +54,9 @@ export function renderRadView() {
         <button class="nav-btn" onclick="window.navigeerWeek(1)">›</button>
         <button class="nav-btn today" onclick="window.naarVandaag()">Nu</button>
       </div>
+      ${eigenRadId === rad.id ? `<div style="margin-top: 10px; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 10px;">
+        <button class="btn" style="width: 100%; font-size: 13px;" onclick="window.agendaLinkGenereren()">🔗 Agenda-link</button>
+      </div>` : ''}
     </div>
   `;
 
@@ -97,4 +118,97 @@ window.toonDagDetail = function(datum, radId) {
 
   document.getElementById('sheetBody').innerHTML = body;
   openSheet();
+};
+
+// ==== Agenda-link ============================================================
+
+window.agendaLinkGenereren = async function() {
+  const uid = state.user?.uid;
+  const email = state.profiel?.email || state.user?.email;
+  if (!uid) return;
+
+  // Stap 1: wachtwoord verificatie via sheet
+  document.getElementById('sheetTitle').textContent = 'Agenda-link';
+  document.getElementById('sheetSub').textContent = 'Verifieer je identiteit';
+  document.getElementById('sheetBody').innerHTML = `
+    <p style="font-size: 13px; color: #3a3a38; margin: 0 0 1rem;">Voer je wachtwoord in om door te gaan.</p>
+    <div class="form-field">
+      <label class="form-label">Wachtwoord</label>
+      <input type="password" class="input" id="agendaPw" autocomplete="current-password">
+    </div>
+    <div id="agendaPwFout" class="form-error" style="display:none;"></div>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex:1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="window.agendaLinkVerifieer('${uid}', '${email}')">Verifiëren</button>
+    </div>
+  `;
+  openSheet();
+};
+
+window.agendaLinkVerifieer = async function(uid, email) {
+  const pw = document.getElementById('agendaPw')?.value;
+  const fout = document.getElementById('agendaPwFout');
+  if (!pw) { fout.textContent = 'Voer je wachtwoord in'; fout.style.display = 'block'; return; }
+
+  try {
+    const credential = EmailAuthProvider.credential(email, pw);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+  } catch (e) {
+    const foutEl = document.getElementById('agendaPwFout');
+    if (foutEl) { foutEl.textContent = 'Wachtwoord onjuist'; foutEl.style.display = 'block'; }
+    return;
+  }
+
+  // Stap 2: waarschuwing tonen
+  document.getElementById('sheetTitle').textContent = 'Agenda-link — waarschuwing';
+  document.getElementById('sheetSub').textContent = '';
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-error" style="display:block; margin-bottom: 1rem;">
+      ⚠️ Deze link geeft <strong>iedereen</strong> die toegang heeft tot de link direct toegang tot jouw rooster.<br><br>
+      Deel de link nooit met anderen. Gebruik de link alleen in je eigen privé-agenda-app.
+    </div>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex:1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="window.agendaLinkMaken('${uid}')">Ik begrijp het, genereer link</button>
+    </div>
+  `;
+};
+
+window.agendaLinkMaken = async function(uid) {
+  try {
+    // Haal bestaand token op of maak nieuw aan
+    const snap = await getDoc(doc(db, 'gebruikers', uid));
+    let token = snap.data()?.agenda_token;
+    if (!token) {
+      token = crypto.randomUUID();
+      await setDoc(doc(db, 'gebruikers', uid), { agenda_token: token }, { merge: true });
+    }
+
+    const link = `https://europe-west1-rooster-radiologie.cloudfunctions.net/agendaFeed?token=${token}`;
+
+    document.getElementById('sheetTitle').textContent = 'Agenda-link';
+    document.getElementById('sheetSub').textContent = 'Kopieer en plak in je agenda-app';
+    document.getElementById('sheetBody').innerHTML = `
+      <p class="muted" style="font-size: 12px; margin: 0 0 8px;">Gebruik deze link als <strong>webcal/iCal-abonnement</strong> in bijv. Google Agenda, Outlook of Apple Agenda.</p>
+      <div class="form-info" style="font-size: 12px; word-break: break-all; margin-bottom: 1rem;">${link}</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" style="flex:1;" onclick="window.kopieerLink('${link}')">Kopiëren</button>
+        <button class="btn" style="flex:1;" onclick="window.agendaLinkIntrekken('${uid}')">Link intrekken</button>
+      </div>
+      <button class="btn" style="width:100%; margin-top: 8px;" onclick="window.closeSheet()">Sluiten</button>
+    `;
+  } catch (e) {
+    alert('Genereren mislukt: ' + e.message);
+  }
+};
+
+window.agendaLinkIntrekken = async function(uid) {
+  if (!confirm('Huidige agenda-link ongeldig maken?\n\nAgenda-apps die de link gebruiken zullen geen updates meer ontvangen.')) return;
+  try {
+    await setDoc(doc(db, 'gebruikers', uid), { agenda_token: null }, { merge: true });
+    alert('Link ingetrokken. Genereer een nieuwe link als je de koppeling wilt herstellen.');
+    closeSheet();
+  } catch (e) {
+    alert('Intrekken mislukt: ' + e.message);
+  }
 };
