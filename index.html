@@ -421,8 +421,28 @@
   <div id="sheetBody"></div>
 </div>
 
-<script src="config.js?v=3.27.7"></script>
-<script type="module" src="app/main.js?v=3.27.7"></script>
+<script src="config.js"></script>
+<script type="module" src="app/main.js"></script>
 
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'activated') {
+            // Nieuwe versie actief — pagina herladen voor verse bestanden
+            window.location.reload();
+          }
+        });
+      });
+    });
+
+    // Als een wachtende SW klaar staat, activeer direct
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
+  }
+</script>
 </body>
 </html>

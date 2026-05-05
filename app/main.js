@@ -12,15 +12,15 @@ import {
 import { openSheet, closeSheet } from './sheets.js';
 
 // Importeer alle render-functies (modules registreren ook hun window-handlers)
-import { renderRadView } from './views/radioloog.js?v=3.27.7';
-import { renderAfdView } from './views/afdeling.js?v=3.27.7';
-import { renderDieView } from './views/dienst.js?v=3.27.7';
-import { renderActView } from './views/activiteit.js?v=3.27.7';
-import { renderWenView } from './views/wensen.js?v=3.27.7';
-import { renderVakView } from './views/vakantie.js?v=3.27.7';
-import { renderBehView } from './views/overzicht.js?v=3.27.7';
-import { renderRegView } from './views/regels.js?v=3.27.7';
-import { renderGebView } from './views/gebruikers.js?v=3.27.7';
+import { renderRadView } from './views/radioloog.js';
+import { renderAfdView } from './views/afdeling.js';
+import { renderDieView } from './views/dienst.js';
+import { renderActView } from './views/activiteit.js';
+import { renderWenView } from './views/wensen.js';
+import { renderVakView } from './views/vakantie.js';
+import { renderBehView } from './views/overzicht.js';
+import { renderRegView } from './views/regels.js';
+import { renderGebView } from './views/gebruikers.js';
 
 // ==== Sheet helpers op window (voor inline onclick="window.closeSheet()") ====
 
