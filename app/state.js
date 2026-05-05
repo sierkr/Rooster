@@ -26,6 +26,7 @@ export const state = {
   // Activiteit-tab
   actModus: 'aantal',     // 'aantal' | 'ratio' | 'verdeling' | 'belasting'
   actPeriode: 'jaar',     // 'jaar' | 'q1'..'q4' | 'maand' | 'custom'
+  jaaRadId: null,         // geselecteerde radioloog in jaaroverzicht
   actVanaf: '',
   actTot: '',
   actInvallers: false,    // W-slots zichtbaar in matrix

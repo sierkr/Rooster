@@ -188,6 +188,22 @@ export async function renderGebView() {
 
   // Gegevensbeheer sectie (alleen beheerder)
   if (magGebruikersBeheren()) {
+    html += `
+      <div style="margin-top: 1rem;">
+        <div class="summary-label" style="margin-bottom: 6px;">App-instellingen</div>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 13px; font-weight: 500;">Jaaroverzicht-tab</div>
+              <div class="muted" style="font-size: 12px;">Compact weekraster per radioloog voor het hele jaar</div>
+            </div>
+            <span class="toggle-switch ${window.TOON_JAAROVERZICHT ? 'aan' : ''}" onclick="window.toggleJaaroverzicht()"></span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  if (magGebruikersBeheren()) {
     const tweeJaarGeleden = new Date();
     tweeJaarGeleden.setFullYear(tweeJaarGeleden.getFullYear() - 2);
     const grensdatum = tweeJaarGeleden.toISOString().slice(0, 10);
@@ -793,6 +809,17 @@ async function migreerBezetting(vanSlot, naarSlot, datum) {
     await updateDoc(doc(db, 'gebruikers', g.id), { radioloog_id: naarSlot });
   }
 }
+// ==== App-instellingen handlers =============================================
+
+window.toggleJaaroverzicht = async function() {
+  const nieuw = !window.TOON_JAAROVERZICHT;
+  try {
+    await setDoc(doc(db, 'instellingen', 'ui'), { toon_jaaroverzicht: nieuw }, { merge: true });
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
+};
+
 // ==== Gegevensbeheer handlers ================================================
 
 window.verwijderVerlopenWensen = async function() {

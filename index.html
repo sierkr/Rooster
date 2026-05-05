@@ -255,6 +255,9 @@
   .act-zone-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11px; align-items: center; }
   .act-zone-swatch { display: inline-block; padding: 3px 10px; border-radius: 10px; font-weight: 500; font-size: 11px; }
 
+  /* Jaaroverzicht */
+  .jaa-cel { width: 22px; height: 14px; display: flex; align-items: center; justify-content: center; border-radius: 2px; flex-shrink: 0; }
+
   /* Dienst-view */
   .dienst-dag { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: transform 0.05s; }
   .dienst-dag:active { transform: scale(0.99); }
@@ -403,6 +406,7 @@
   </div>
 
   <div id="view-rad" class="view"></div>
+  <div id="view-jaa" class="view" style="display: none;"></div>
   <div id="view-afd" class="view" style="display: none;"></div>
   <div id="view-die" class="view" style="display: none;"></div>
   <div id="view-act" class="view" style="display: none;"></div>

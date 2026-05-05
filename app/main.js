@@ -13,6 +13,7 @@ import { openSheet, closeSheet } from './sheets.js';
 
 // Importeer alle render-functies (modules registreren ook hun window-handlers)
 import { renderRadView } from './views/radioloog.js';
+import { renderJaaView } from './views/jaaroverzicht.js';
 import { renderAfdView } from './views/afdeling.js';
 import { renderDieView } from './views/dienst.js';
 import { renderActView } from './views/activiteit.js';
@@ -176,9 +177,10 @@ function renderTabs() {
   const tabs = [
     { id: 'beh', label: 'Overzicht' },
     { id: 'rad', label: 'Radioloog' },
-    { id: 'afd', label: 'Afdeling' },
-    { id: 'die', label: 'Dienst' },
   ];
+  if (window.TOON_JAAROVERZICHT) tabs.push({ id: 'jaa', label: 'Jaaroverzicht' });
+  tabs.push({ id: 'afd', label: 'Afdeling' });
+  tabs.push({ id: 'die', label: 'Dienst' });
   const rol = state.profiel?.rol;
   tabs.push({ id: 'act', label: 'Activiteit' });
   if (rol === 'radioloog' || magAlleWensenZien()) {
@@ -198,7 +200,7 @@ function renderTabs() {
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  ['rad', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'jaa', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'reg', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -219,6 +221,7 @@ function render() {
   renderUserChip();
   renderTabs();
   if      (state.huidigeView === 'rad') renderRadView();
+  else if (state.huidigeView === 'jaa') renderJaaView();
   else if (state.huidigeView === 'afd') renderAfdView();
   else if (state.huidigeView === 'die') renderDieView();
   else if (state.huidigeView === 'act') renderActView();
@@ -277,9 +280,10 @@ function luisterNaarData() {
   state.unsubscribers.push(onSnapshot(collection(db, 'instellingen'), (snap) => {
     snap.docs.forEach(d => {
       const data = d.data();
-      if (data.dect_speciaal)  window.DECT_SPECIAAL = data.dect_speciaal;
-      if (data.tellen_codes)   window.TELLEN_CODES = data.tellen_codes;
-      if (data.mtsdagen_codes) window.MTSDAGEN_CODES = data.mtsdagen_codes;
+      if (data.dect_speciaal)      window.DECT_SPECIAAL = data.dect_speciaal;
+      if (data.tellen_codes)       window.TELLEN_CODES = data.tellen_codes;
+      if (data.mtsdagen_codes)     window.MTSDAGEN_CODES = data.mtsdagen_codes;
+      if (data.toon_jaaroverzicht !== undefined) window.TOON_JAAROVERZICHT = data.toon_jaaroverzicht;
     });
     render();
   }));
