@@ -17,8 +17,10 @@ export function renderRadView() {
   const eigenRadId = state.profiel?.radioloog_id;
   const isBeheer = magWijzigen();
 
-  // Gewone radioloog ziet alleen zichzelf
-  const zichtbareRads = isBeheer ? rads : rads.filter(r => r.id === eigenRadId);
+  // Gewone radioloog ziet alleen zichzelf; beheerder ziet allen met achternaam
+  const zichtbareRads = isBeheer
+    ? rads.filter(r => r.achternaam)
+    : rads.filter(r => r.id === eigenRadId);
 
   // Zorg dat huidigeRadId altijd geldig is voor deze gebruiker
   if (!isBeheer && eigenRadId) state.huidigeRadId = eigenRadId;
