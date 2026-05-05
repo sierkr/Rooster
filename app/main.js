@@ -328,7 +328,7 @@ onAuthStateChanged(auth, async (user) => {
     state.user = user;
     state.profiel = profiel;
 
-    if (!profiel.wachtwoord_gewijzigd) {
+    if (profiel.wachtwoord_gewijzigd === false) {
       // Eerste aanmelding: wachtwoord wijzigen + akkoord
       document.getElementById('login').style.display = 'none';
       document.getElementById('app').style.display = 'none';
