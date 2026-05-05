@@ -6,8 +6,7 @@ import {
   magBeheerLezen,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
-import { auth, db } from '../firebase-init.js';
-import { reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { auth, db, reauthenticateWithCredential, EmailAuthProvider } from '../firebase-init.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 export function renderRadView() {
