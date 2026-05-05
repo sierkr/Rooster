@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import {
   vasteRads, radiologenMap, vandaagIso, isoWeekVan, datumsVanWeek,
   weekRange, formatDatum, fclass, functieNaam, toewijzingVoor, magOpmerkingen,
-  magBeheerLezen,
+  magBeheerLezen, magWijzigen,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { auth, db, reauthenticateWithCredential, EmailAuthProvider } from '../firebase-init.js';
@@ -15,7 +15,7 @@ export function renderRadView() {
   if (rads.length === 0) { container.innerHTML = '<div class="empty-state">Nog geen radiologen geladen…</div>'; return; }
 
   const eigenRadId = state.profiel?.radioloog_id;
-  const isBeheer = magBeheerLezen();
+  const isBeheer = magWijzigen();
 
   // Gewone radioloog ziet alleen zichzelf
   const zichtbareRads = isBeheer ? rads : rads.filter(r => r.id === eigenRadId);
