@@ -3,7 +3,7 @@ import { state, SLOTS, DAGEN_LANG, DAGEN_NL } from '../state.js';
 import {
   vasteRads, vasteRadsOpDatum, functiesMap, vandaagIso, formatDatum, functieNaam,
   toewijzingVoor, huidigKalenderJaar, magBeheerLezen,
-  mandagVanIso, datumsVanWeek,
+  mandagVanIso, datumsVanWeek, isoWeekVan, plusDagen,
 } from '../helpers.js';
 
 export function renderAfdView() {
@@ -214,23 +214,21 @@ function _laadXLSXStyle() {
   return _xlsxStylePromise;
 }
 
-// Layout: kolommen = vaste rads (8) + Dienst + Opmerking. Per dag een blok
-// van 6 rijen: dag-rij (ochtend-codes), middag-rij, cel-opmerking-rij, en 3
-// blanke rijen voor handmatige time-stamped notities (bv "12:00 Vaatbes").
-// Met opmaak: bold headers, alternerende lichte achtergrond per dag, dikke
-// rand rond elk dag-blok, kolom-kleuren voor Dienst/Opmerking.
+// Layout per week: 3 header-rijen (DECT / code / achternaam) + 7 dag-blokken
+// van elk 6 rijen (dag + middag + cel-opm + 3 blanke rijen). Het weeknummer
+// staat in de eerste kolom van de eerste header-rij. Twee opeenvolgende
+// weken in één sheet.
 window.exportAfdWeek = async function() {
   let XLSX;
   try { XLSX = await _laadXLSXStyle(); }
   catch (e) { alert(e.message); return; }
 
   const datum = state.huidigeDatum || vandaagIso();
-  const maandag = mandagVanIso(datum);
-  const datums = datumsVanWeek(maandag);
+  const wkMa1 = mandagVanIso(datum);
+  const wkMa2 = plusDagen(wkMa1, 7);
   const beperkt = !magBeheerLezen();
   const VERBORGEN_CODES = ['V', 'Z', 'K'];
   const fmap = functiesMap();
-  const rads = vasteRadsOpDatum(maandag);
 
   const codeNaam = (code) => {
     if (!code) return '';
@@ -245,72 +243,96 @@ window.exportAfdWeek = async function() {
     return [r.code, r.achternaam].filter(Boolean).join(' · ');
   };
 
-  const N_RAD = rads.length;
-  const N_KOL = 1 + N_RAD + 2; // datum + rads + dienst + opmerking
+  // Eerste week bepaalt aantal rad-kolommen (we gaan ervan uit dat dat
+  // tussen week 1 en 2 niet verandert; in praktijk altijd 8 vaste stoelen).
+  const radsW1 = vasteRadsOpDatum(wkMa1);
+  const N_RAD = radsW1.length;
+  const N_KOL = 1 + N_RAD + 2;
   const lege = (n) => Array.from({ length: n }, () => '');
   const BLANK_ROWS_PER_DAG = 3;
-  const ROWS_PER_DAG = 3 + BLANK_ROWS_PER_DAG; // dag + middag + celopm + blanks
-  const HEADER_ROWS = 2;
+  const ROWS_PER_DAG = 3 + BLANK_ROWS_PER_DAG;
+  const HEADER_ROWS_PER_WEEK = 3;
+  const ROWS_PER_WEEK = HEADER_ROWS_PER_WEEK + 7 * ROWS_PER_DAG;
 
   const aoa = [];
-  aoa.push(['', ...rads.map(r => r.code || r.id), 'Dienst', 'Opmerking']);
-  aoa.push(['', ...rads.map(r => r.achternaam || ''), '', '']);
 
-  datums.forEach(iso => {
-    const d = new Date(iso + 'T12:00:00');
-    const dagKort = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
-    const dagLabel = `${dagKort} ${d.getDate()}-${d.getMonth()+1}`;
-    const dagData = state.indelingMap[iso];
+  const weken = [
+    { wkMa: wkMa1, wkNr: isoWeekVan(wkMa1), datums: datumsVanWeek(wkMa1), rads: radsW1 },
+    { wkMa: wkMa2, wkNr: isoWeekVan(wkMa2), datums: datumsVanWeek(wkMa2), rads: vasteRadsOpDatum(wkMa2) },
+  ];
 
-    if (!dagData) {
-      aoa.push([dagLabel, ...lege(N_RAD), '', '']);
-      for (let i = 0; i < ROWS_PER_DAG - 1; i++) aoa.push(['', ...lege(N_RAD), '', '']);
-      return;
-    }
+  weken.forEach(wk => {
+    const rads = wk.rads;
+    // Header rij 1: weeknummer + DECT-nummers + 'Dienst' + 'Opmerking'
+    aoa.push([wk.wkNr, ...rads.map(r => r.dect || ''), 'Dienst', 'Opmerking']);
+    // Header rij 2: '' + codes
+    aoa.push(['', ...rads.map(r => r.code || r.id), '', '']);
+    // Header rij 3: '' + achternamen
+    aoa.push(['', ...rads.map(r => r.achternaam || ''), '', '']);
 
-    const radInfo = rads.map(r => {
-      const codes = toewijzingVoor(iso, r.id);
-      const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
-      const verborgen = codes.length > 0 && beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l));
-      let ochtend = '', middag = '';
-      if (codes.length > 0 && !verborgen) {
-        ochtend = codeNaam(codes[0]);
-        if (codes.length === 2) middag = codeNaam(codes[1]);
+    wk.datums.forEach(iso => {
+      const d = new Date(iso + 'T12:00:00');
+      const dagKort = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
+      const dagLabel = `${dagKort} ${d.getDate()}-${d.getMonth()+1}`;
+      const dagData = state.indelingMap[iso];
+
+      if (!dagData) {
+        aoa.push([dagLabel, ...lege(N_RAD), '', '']);
+        for (let i = 0; i < ROWS_PER_DAG - 1; i++) aoa.push(['', ...lege(N_RAD), '', '']);
+        return;
       }
-      const opm = (!verborgen && dagData.cel_opmerkingen?.[r.id]) || '';
-      return { ochtend, middag, opm };
-    });
 
-    const dienstStr = radLabel(dagData.dienst?.dag);
-    aoa.push([dagLabel, ...radInfo.map(ri => ri.ochtend), dienstStr, dagData.opmerking || '']);
-    aoa.push(['', ...radInfo.map(ri => ri.middag), '', dagData.bespreking ? `Besp: ${dagData.bespreking}` : '']);
-    aoa.push(['', ...radInfo.map(ri => ri.opm), '', dagData.interventie ? `Interv: ${dagData.interventie}` : '']);
-    for (let i = 0; i < BLANK_ROWS_PER_DAG; i++) {
-      aoa.push(['', ...lege(N_RAD), '', '']);
-    }
+      const radInfo = rads.map(r => {
+        const codes = toewijzingVoor(iso, r.id);
+        const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+        const verborgen = codes.length > 0 && beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l));
+        let ochtend = '', middag = '';
+        if (codes.length > 0 && !verborgen) {
+          ochtend = codeNaam(codes[0]);
+          if (codes.length === 2) middag = codeNaam(codes[1]);
+        }
+        const opm = (!verborgen && dagData.cel_opmerkingen?.[r.id]) || '';
+        return { ochtend, middag, opm };
+      });
+
+      const dienstStr = radLabel(dagData.dienst?.dag);
+      aoa.push([dagLabel, ...radInfo.map(ri => ri.ochtend), dienstStr, dagData.opmerking || '']);
+      aoa.push(['', ...radInfo.map(ri => ri.middag), '', dagData.bespreking ? `Besp: ${dagData.bespreking}` : '']);
+      aoa.push(['', ...radInfo.map(ri => ri.opm), '', dagData.interventie ? `Interv: ${dagData.interventie}` : '']);
+      for (let i = 0; i < BLANK_ROWS_PER_DAG; i++) {
+        aoa.push(['', ...lege(N_RAD), '', '']);
+      }
+    });
   });
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [
     { wch: 10 },
-    ...rads.map(() => ({ wch: 14 })),
+    ...radsW1.map(() => ({ wch: 14 })),
     { wch: 18 },
     { wch: 36 },
   ];
-  // Rijhoogte: header iets hoger
-  ws['!rows'] = [{ hpx: 22 }, { hpx: 18 }];
+  // Iets ruimere rijhoogte voor headers
+  ws['!rows'] = [];
+  weken.forEach((wk, idx) => {
+    const offset = idx * ROWS_PER_WEEK;
+    ws['!rows'][offset]     = { hpx: 22 };
+    ws['!rows'][offset + 1] = { hpx: 18 };
+    ws['!rows'][offset + 2] = { hpx: 18 };
+  });
 
   // ---- Stijl-helpers --------------------------------------------------
-  const KLEUR_HEADER     = 'D7EAF0'; // cyaan-grijs voor header (codes/namen)
-  const KLEUR_DAG_EVEN   = 'E0F0EA'; // licht teal-groen
-  const KLEUR_DAG_ODD    = 'FFFFFF'; // wit
-  const KLEUR_DATUM      = 'F0F0EE'; // grijs voor datum-kolom
-  const KLEUR_DIENST     = 'F2EFE6'; // licht beige voor Dienst
-  const KLEUR_OPMERKING  = 'FFF7E5'; // licht crème voor Opmerking
-  const ZWART            = '000000';  const GRIJS            = '999999';
+  const KLEUR_HEADER     = 'D7EAF0';
+  const KLEUR_DAG_EVEN   = 'E0F0EA';
+  const KLEUR_DAG_ODD    = 'FFFFFF';
+  const KLEUR_DATUM      = 'F0F0EE';
+  const KLEUR_DIENST     = 'F2EFE6';
+  const KLEUR_OPMERKING  = 'FFF7E5';
+  const ZWART            = '000000';
+  const GRIJS            = '999999';
 
-  const dun  = { style: 'thin', color: { rgb: GRIJS } };
-  const dik  = { style: 'medium', color: { rgb: ZWART } };
+  const dun = { style: 'thin', color: { rgb: GRIJS } };
+  const dik = { style: 'medium', color: { rgb: ZWART } };
 
   const setCel = (r, c, style) => {
     const addr = XLSX.utils.encode_cell({ r, c });
@@ -326,63 +348,74 @@ window.exportAfdWeek = async function() {
     };
   };
 
-  // ---- Header-rijen ---------------------------------------------------
-  for (let c = 0; c < N_KOL; c++) {
-    setCel(0, c, {
-      font: { bold: true, sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      fill: { fgColor: { rgb: KLEUR_HEADER }, patternType: 'solid' },
-      border: { top: dik, left: dun, right: dun, bottom: dun },
-    });
-    setCel(1, c, {
-      font: { bold: false, sz: 10, italic: true },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      fill: { fgColor: { rgb: KLEUR_HEADER }, patternType: 'solid' },
-      border: { top: dun, left: dun, right: dun, bottom: dik },
-    });
-  }
+  weken.forEach((wk, weekIdx) => {
+    const wkOffset = weekIdx * ROWS_PER_WEEK;
 
-  // ---- Dag-blokken ----------------------------------------------------
-  datums.forEach((iso, dagIdx) => {
-    const startRij = HEADER_ROWS + dagIdx * ROWS_PER_DAG;
-    const eindRij  = startRij + ROWS_PER_DAG - 1;
-    const bgDag    = (dagIdx % 2 === 0) ? KLEUR_DAG_EVEN : KLEUR_DAG_ODD;
-
-    for (let r = startRij; r <= eindRij; r++) {
-      for (let c = 0; c < N_KOL; c++) {
-        let bg = bgDag;
-        if (c === 0) bg = KLEUR_DATUM;
-        else if (c === N_KOL - 2) bg = KLEUR_DIENST;
-        else if (c === N_KOL - 1) bg = KLEUR_OPMERKING;
-
-        const isFirstRow = (r === startRij);
-        const isLastRow  = (r === eindRij);
-        const isFirstCol = (c === 0);
-        const isLastCol  = (c === N_KOL - 1);
-
-        setCel(r, c, {
-          font: isFirstRow && c === 0
-            ? { bold: true, sz: 11 }
-            : { sz: 10 },
-          alignment: c === N_KOL - 1
-            ? { horizontal: 'left', vertical: 'top', wrapText: true }
-            : { horizontal: 'center', vertical: 'center', wrapText: true },
-          fill: { fgColor: { rgb: bg }, patternType: 'solid' },
-          border: {
-            top:    isFirstRow ? dik : dun,
-            bottom: isLastRow  ? dik : dun,
-            left:   isFirstCol ? dik : dun,
-            right:  isLastCol  ? dik : dun,
-          },
-        });
-      }
+    // ---- Header-rijen (3) ---------------------------------------------
+    for (let c = 0; c < N_KOL; c++) {
+      // Rij 1: DECT (en weeknummer in kolom 0)
+      setCel(wkOffset + 0, c, {
+        font: { bold: true, sz: c === 0 ? 14 : 11 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        fill: { fgColor: { rgb: KLEUR_HEADER }, patternType: 'solid' },
+        border: { top: dik, left: c === 0 ? dik : dun, right: c === N_KOL - 1 ? dik : dun, bottom: dun },
+      });
+      // Rij 2: code
+      setCel(wkOffset + 1, c, {
+        font: { bold: true, sz: 11 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        fill: { fgColor: { rgb: KLEUR_HEADER }, patternType: 'solid' },
+        border: { top: dun, left: c === 0 ? dik : dun, right: c === N_KOL - 1 ? dik : dun, bottom: dun },
+      });
+      // Rij 3: achternaam
+      setCel(wkOffset + 2, c, {
+        font: { sz: 10, italic: true },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        fill: { fgColor: { rgb: KLEUR_HEADER }, patternType: 'solid' },
+        border: { top: dun, left: c === 0 ? dik : dun, right: c === N_KOL - 1 ? dik : dun, bottom: dik },
+      });
     }
+
+    // ---- Dag-blokken --------------------------------------------------
+    wk.datums.forEach((iso, dagIdx) => {
+      const startRij = wkOffset + HEADER_ROWS_PER_WEEK + dagIdx * ROWS_PER_DAG;
+      const eindRij  = startRij + ROWS_PER_DAG - 1;
+      const bgDag    = (dagIdx % 2 === 0) ? KLEUR_DAG_EVEN : KLEUR_DAG_ODD;
+
+      for (let r = startRij; r <= eindRij; r++) {
+        for (let c = 0; c < N_KOL; c++) {
+          let bg = bgDag;
+          if (c === 0) bg = KLEUR_DATUM;
+          else if (c === N_KOL - 2) bg = KLEUR_DIENST;
+          else if (c === N_KOL - 1) bg = KLEUR_OPMERKING;
+
+          const isFirstRow = (r === startRij);
+          const isLastRow  = (r === eindRij);
+          const isFirstCol = (c === 0);
+          const isLastCol  = (c === N_KOL - 1);
+
+          setCel(r, c, {
+            font: isFirstRow && c === 0 ? { bold: true, sz: 11 } : { sz: 10 },
+            alignment: c === N_KOL - 1
+              ? { horizontal: 'left', vertical: 'top', wrapText: true }
+              : { horizontal: 'center', vertical: 'center', wrapText: true },
+            fill: { fgColor: { rgb: bg }, patternType: 'solid' },
+            border: {
+              top:    isFirstRow ? dik : dun,
+              bottom: isLastRow  ? dik : dun,
+              left:   isFirstCol ? dik : dun,
+              right:  isLastCol  ? dik : dun,
+            },
+          });
+        }
+      }
+    });
   });
 
-  const eindDatum = datums[datums.length - 1];
-  const start = new Date(maandag + 'T12:00:00');
-  const sheetNaam = `Week ${start.getDate()}-${start.getMonth()+1}`;
-  const bestandsnaam = `Weekoverzicht_${maandag}_tm_${eindDatum}.xlsx`;
+  const eindDatum = weken[1].datums[6];
+  const start = new Date(wkMa1 + 'T12:00:00');
+  const sheetNaam = `Wk ${weken[0].wkNr}-${weken[1].wkNr}`;
+  const bestandsnaam = `Weekoverzicht_${wkMa1}_tm_${eindDatum}.xlsx`;
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetNaam.slice(0, 31));
