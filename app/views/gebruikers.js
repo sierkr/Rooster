@@ -392,22 +392,12 @@ window.opslaanGebruikerUpdate = async function(uid) {
 };
 
 window.gebruikerWachtwoordReset = async function(uid, email) {
-  if (!confirm(`Wachtwoord-reset-link genereren voor ${email}?`)) return;
+  if (!confirm(`Wachtwoord van ${email} terugzetten naar het standaard wachtwoord?\n\nDe gebruiker moet daarna opnieuw inloggen en een nieuw wachtwoord kiezen.`)) return;
   try {
-    const result = await fnGebruikerResetWachtwoord({ uid });
-    const link = result.data.link;
-    document.getElementById('sheetTitle').textContent = 'Reset-link voor ' + email;
-    document.getElementById('sheetSub').textContent = 'Deel deze link met de gebruiker. Hij is enkele dagen geldig.';
-    document.getElementById('sheetBody').innerHTML = `
-      <div class="form-info" style="font-size: 12px; word-break: break-all;">${link}</div>
-      <div style="display: flex; gap: 8px; margin-top: 1rem;">
-        <button class="btn" style="flex: 1;" onclick="window.kopieerLink('${link.replace(/'/g, "\\'")}')">Kopiëren</button>
-        <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Sluiten</button>
-      </div>
-    `;
-    openSheet();
+    await fnGebruikerResetWachtwoord({ uid });
+    alert(`Wachtwoord van ${email} is teruggezet naar het standaard wachtwoord.`);
   } catch (e) {
-    alert('Versturen mislukt: ' + (e.message || 'onbekende fout'));
+    alert('Reset mislukt: ' + (e.message || 'onbekende fout'));
   }
 };
 
