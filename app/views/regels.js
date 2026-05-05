@@ -120,7 +120,17 @@ export function renderRegView() {
 
 function renderFunctiesEditor() {
   const container = document.getElementById('view-reg');
+  // Toon alleen hoofdfuncties — geen varianten (.WB, 5W, YYB1 etc.)
+  const isHoofdFunctie = f => {
+    const code = f.code || f.id || '';
+    return !code.startsWith('.') &&
+           !code.startsWith('YY') &&
+           !/^\d/.test(code) &&
+           code !== '-';
+  };
+
   const functies = (state.functies || [])
+    .filter(isHoofdFunctie)
     .sort((a, b) => (a.volgorde || 99) - (b.volgorde || 99));
 
   const editorHtml = `
