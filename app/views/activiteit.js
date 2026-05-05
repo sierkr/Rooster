@@ -181,7 +181,6 @@ export function renderActView() {
     { id: 'q2',     label: 'Q2' },
     { id: 'q3',     label: 'Q3' },
     { id: 'q4',     label: 'Q4' },
-    { id: 'maand',  label: 'Maand' },
     { id: 'custom', label: 'Aangepast' },
   ];
 
@@ -371,19 +370,17 @@ export function renderActView() {
 
   let html = `
     <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <p style="font-size: 17px; font-weight: 500; margin: 0;">Activiteit</p>
-          <p class="muted" style="margin: 2px 0 0;">${formatDatum(vanaf,'kort')} – ${formatDatum(tot,'kort')}</p>
-        </div>
-        <div class="seg">
-          <button class="seg-btn ${state.actModus==='aantal' ? 'actief' : ''}" onclick="window.actZetModus('aantal')">Aantallen</button>
-          <button class="seg-btn ${state.actModus==='ratio' ? 'actief' : ''}" onclick="window.actZetModus('ratio')">Ratio's</button>
-          <button class="seg-btn ${state.actModus==='verdeling' ? 'actief' : ''}" onclick="window.actZetModus('verdeling')">Verdeling</button>
-          <button class="seg-btn ${state.actModus==='belasting' ? 'actief' : ''}" onclick="window.actZetModus('belasting')">Belasting</button>
-        </div>
+      <div class="seg" style="width: 100%;">
+        <button class="seg-btn ${state.actModus==='aantal' ? 'actief' : ''}" onclick="window.actZetModus('aantal')">Aantallen</button>
+        <button class="seg-btn ${state.actModus==='ratio' ? 'actief' : ''}" onclick="window.actZetModus('ratio')">Ratio's</button>
+        <button class="seg-btn ${state.actModus==='verdeling' ? 'actief' : ''}" onclick="window.actZetModus('verdeling')">Verdeling</button>
+        <button class="seg-btn ${state.actModus==='belasting' ? 'actief' : ''}" onclick="window.actZetModus('belasting')">Belasting</button>
       </div>
-      <div class="act-controls">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px;">
+        <p style="font-size: 15px; font-weight: 500; margin: 0;">Activiteit</p>
+        <p class="muted" style="margin: 0; font-size: 13px;">${formatDatum(vanaf,'kort')} – ${formatDatum(tot,'kort')}</p>
+      </div>
+      <div class="act-controls" style="margin-top: 8px;">
         ${periodes.map(p => `
           <button class="seg-btn ${state.actPeriode===p.id?'actief':''}" style="background: ${state.actPeriode===p.id?'#fff':'rgba(0,0,0,0.05)'}; box-shadow: ${state.actPeriode===p.id?'0 1px 2px rgba(0,0,0,0.04)':'none'};" onclick="window.actZetPeriode('${p.id}')">${p.label}</button>
         `).join('')}
