@@ -1,13 +1,13 @@
 // Entry point van de app. Laadt alle modules in juiste volgorde, registreert
 // algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, doc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
   vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
   magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien,
-  magVakantieZien,
+  magVakantieZien, valideerWachtwoord,
 } from './helpers.js';
 import { openSheet, closeSheet } from './sheets.js';
 
@@ -52,6 +52,53 @@ window.doLogout = async function() {
   state.unsubscribers.forEach(fn => fn());
   state.unsubscribers = [];
   await signOut(auth);
+};
+
+// ==== Eerste aanmelding: wachtwoord wijzigen ================================
+
+window.cpValideer = function() {
+  const nieuw    = document.getElementById('cpNieuw')?.value || '';
+  const herhaal  = document.getElementById('cpHerhaal')?.value || '';
+  const akkoord  = document.getElementById('cpAkkoord')?.checked || false;
+  const btn      = document.getElementById('cpBtn');
+  const fout     = valideerWachtwoord(nieuw);
+  const geldig   = !fout && nieuw === herhaal && akkoord;
+  if (btn) btn.disabled = !geldig;
+};
+
+window.toonVoorwaarden = function() {
+  document.getElementById('voorwaardenModal').style.display = 'flex';
+};
+
+window.sluitVoorwaarden = function() {
+  document.getElementById('voorwaardenModal').style.display = 'none';
+};
+
+window.doChangePassword = async function() {
+  const nieuw   = document.getElementById('cpNieuw').value;
+  const herhaal = document.getElementById('cpHerhaal').value;
+  const err     = document.getElementById('cpError');
+  err.style.display = 'none';
+
+  const fout = valideerWachtwoord(nieuw);
+  if (fout) { err.textContent = fout; err.style.display = 'block'; return; }
+  if (nieuw !== herhaal) { err.textContent = 'Wachtwoorden komen niet overeen'; err.style.display = 'block'; return; }
+
+  const btn = document.getElementById('cpBtn');
+  btn.disabled = true;
+  btn.textContent = 'Bezig…';
+
+  try {
+    await updatePassword(state.user, nieuw);
+    await updateDoc(doc(db, 'gebruikers', state.user.uid), { wachtwoord_gewijzigd: true });
+    document.getElementById('change-password').style.display = 'none';
+    startApp();
+  } catch (e) {
+    err.textContent = vertalFirebaseFout(e.code) || e.message;
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Opslaan en doorgaan';
+  }
 };
 
 window.kopieerLink = async function(link) {
@@ -248,14 +295,30 @@ function luisterNaarData() {
   }));
 }
 
+// ==== App starten (na eventuele wachtwoord-wissel) ===========================
+
+function startApp() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('change-password').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  state.huidigeDatum = vandaagIso();
+  state.weekMaandag = mandagVanIso(state.huidigeDatum);
+  state.huidigeView = 'beh';
+  renderTabs();
+  luisterNaarData();
+}
+
 // ==== Boot ===================================================================
 
 document.getElementById('versieLabel').textContent = window.APP_VERSIE;
+// Versielabel ook in het change-password scherm
+document.querySelectorAll('.versieLabel2').forEach(el => el.textContent = window.APP_VERSIE);
 
 onAuthStateChanged(auth, async (user) => {
   document.getElementById('loading').style.display = 'none';
   if (!user) {
     document.getElementById('app').style.display = 'none';
+    document.getElementById('change-password').style.display = 'none';
     document.getElementById('login').style.display = 'flex';
     return;
   }
@@ -265,16 +328,15 @@ onAuthStateChanged(auth, async (user) => {
     state.user = user;
     state.profiel = profiel;
 
-    state.huidigeDatum = vandaagIso();
-    state.weekMaandag = mandagVanIso(state.huidigeDatum);
-
-    state.huidigeView = 'beh';
-
-    document.getElementById('login').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-
-    renderTabs();
-    luisterNaarData();
+    if (!profiel.wachtwoord_gewijzigd) {
+      // Eerste aanmelding: wachtwoord wijzigen + akkoord
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('change-password').style.display = 'flex';
+      window.cpValideer();
+    } else {
+      startApp();
+    }
   } catch (e) {
     document.getElementById('login').style.display = 'flex';
     const err = document.getElementById('loginError');
