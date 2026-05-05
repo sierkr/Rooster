@@ -21,7 +21,7 @@ export function renderAfdView() {
         </div>
         <div style="display: flex; gap: 6px;">
           <button class="nav-btn" onclick="window.exportAfdWeek()" title="Exporteer hele week naar Excel">\uD83D\uDCC2</button>
-          <button class="nav-btn" onclick="window.printAfdWeek()" title="Print hele week landscape">\uD83D\uDDA8</button>
+          <button class="nav-btn" onclick="window.printAfdWeek()" title="Print hele week landscape" style="display:none">\uD83D\uDDA8</button>
           <button class="nav-btn" onclick="window.navigeerDag(-1)">\u2039</button>
           <button class="nav-btn" onclick="window.navigeerDag(1)">\u203a</button>
         </div>

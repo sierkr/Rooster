@@ -1,5 +1,5 @@
 // Gebruikers-view: gebruikers beheren, parttime, waarnemers, Excel-import.
-import { collection, doc, getDocs, setDoc, updateDoc, writeBatch, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, getDocs, query, where, setDoc, updateDoc, writeBatch, deleteField, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, fnGebruikerAanmaken, fnGebruikerVerwijderen, fnGebruikerResetWachtwoord } from '../firebase-init.js';
 import { state, SLOTS, VASTE_RAD_IDS, VASTE_BEHEERDER_EMAIL } from '../state.js';
 import {
@@ -9,6 +9,7 @@ import {
 import { STANDAARD_WACHTWOORD } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { IMPORT_SHEET, actImportFile, actImportSchrijven, actImportAnnuleren, actZetImportJaar } from '../import.js';
+import { actExportJaar } from '../export.js';
 
 export async function laadGebruikers() {
   if (!magGebruikersBeheren()) return;
@@ -168,6 +169,55 @@ export async function renderGebView() {
       </div>
     </div>
   `;
+
+  // Excel-export sectie
+  html += `
+    <div style="margin-top: 1rem;">
+      <div class="summary-label" style="margin-bottom: 6px;">Excel-export</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Exporteer de Firestore-indeling van een jaar naar een <code>.xlsx</code> in hetzelfde formaat als de import.</p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <select class="select" id="expJaar" style="width: auto; padding: 6px 8px; font-size: 13px;">
+            ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${j===new Date().getFullYear()?'selected':''}>${j}</option>`).join('')}
+          </select>
+          <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value)">⬇ Exporteer</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Gegevensbeheer sectie (alleen beheerder)
+  if (magGebruikersBeheren()) {
+    const tweeJaarGeleden = new Date();
+    tweeJaarGeleden.setFullYear(tweeJaarGeleden.getFullYear() - 2);
+    const grensdatum = tweeJaarGeleden.toISOString().slice(0, 10);
+    const vandaag = vandaagIso();
+
+    html += `
+      <div style="margin-top: 1rem;">
+        <div class="summary-label" style="margin-bottom: 6px;">Gegevensbeheer</div>
+        <div class="card">
+          <p class="muted" style="margin: 0 0 12px;">Verwijder verlopen of verouderde gegevens conform de gebruikersovereenkomst.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+              <div>
+                <div style="font-size: 13px; font-weight: 500;">Verlopen wensen</div>
+                <div class="muted" style="font-size: 12px;">Wensen met datum vóór vandaag (${formatDatum(vandaag, 'kort')})</div>
+              </div>
+              <button class="btn" style="white-space: nowrap; flex-shrink: 0;" onclick="window.verwijderVerlopenWensen()">Opruimen</button>
+            </div>
+            <div style="border-top: 1px solid rgba(0,0,0,0.06); padding-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+              <div>
+                <div style="font-size: 13px; font-weight: 500;">Gegevens ouder dan 2 jaar</div>
+                <div class="muted" style="font-size: 12px;">Indeling en wensen vóór ${formatDatum(grensdatum, 'kort')} — conform AVG-bewaarplicht</div>
+              </div>
+              <button class="btn" style="white-space: nowrap; flex-shrink: 0; color: #501313;" onclick="window.verwijderOudeGegevens()">Verwijderen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   container.innerHTML = html;
 }
@@ -430,6 +480,7 @@ window.actImportFile        = (input) => actImportFile(input, renderGebView);
 window.actImportSchrijven   = ()      => actImportSchrijven(renderGebView);
 window.actImportAnnuleren   = ()      => actImportAnnuleren(renderGebView);
 window.actZetImportJaar     = (jaar)  => actZetImportJaar(jaar);
+window.actExportJaar        = (jaar)  => actExportJaar(jaar);
 
 // ==== Bezetting wisselen (zelfde stoel, nieuwe persoon) =====================
 
@@ -742,3 +793,75 @@ async function migreerBezetting(vanSlot, naarSlot, datum) {
     await updateDoc(doc(db, 'gebruikers', g.id), { radioloog_id: naarSlot });
   }
 }
+// ==== Gegevensbeheer handlers ================================================
+
+window.verwijderVerlopenWensen = async function() {
+  const vandaag = vandaagIso();
+  try {
+    const snap = await getDocs(query(collection(db, 'wensen'), where('datum', '<', vandaag)));
+    if (snap.empty) { alert('Geen verlopen wensen gevonden.'); return; }
+    if (!confirm(`${snap.size} verlopen wens(en) gevonden (datum vóór ${formatDatum(vandaag, 'kort')}).\n\nVerwijderen?`)) return;
+    const BATCH = 400;
+    let verwijderd = 0;
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += BATCH) {
+      const batch = writeBatch(db);
+      docs.slice(i, i + BATCH).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      verwijderd += Math.min(BATCH, docs.length - i);
+    }
+    alert(`${verwijderd} verlopen wens(en) verwijderd.`);
+  } catch (e) {
+    alert('Mislukt: ' + e.message);
+  }
+};
+
+window.verwijderOudeGegevens = async function() {
+  const grens = new Date();
+  grens.setFullYear(grens.getFullYear() - 2);
+  const grensdatum = grens.toISOString().slice(0, 10);
+
+  const bevestig = confirm(
+    `Gegevens ouder dan 2 jaar verwijderen?\n\n` +
+    `Alles vóór ${formatDatum(grensdatum, 'kort')} wordt permanent gewist:\n` +
+    `• Indeling-data\n• Wensen\n\n` +
+    `Dit kan niet ongedaan worden gemaakt.`
+  );
+  if (!bevestig) return;
+
+  try {
+    let totaal = 0;
+
+    // Indeling
+    const indelingSnap = await getDocs(query(collection(db, 'indeling'), where('datum', '<', grensdatum)));
+    if (!indelingSnap.empty) {
+      const docs = indelingSnap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        totaal += Math.min(400, docs.length - i);
+      }
+    }
+
+    // Wensen
+    const wensenSnap = await getDocs(query(collection(db, 'wensen'), where('datum', '<', grensdatum)));
+    if (!wensenSnap.empty) {
+      const docs = wensenSnap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        totaal += Math.min(400, docs.length - i);
+      }
+    }
+
+    if (totaal === 0) {
+      alert('Geen gegevens gevonden ouder dan 2 jaar.');
+    } else {
+      alert(`${totaal} document(en) verwijderd (indeling + wensen vóór ${formatDatum(grensdatum, 'kort')}).`);
+    }
+  } catch (e) {
+    alert('Mislukt: ' + e.message);
+  }
+};

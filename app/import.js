@@ -7,11 +7,11 @@ import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, magGebruikersBeheren } from './helpers.js';
 
 export const IMPORT_SHEET = 'Indeling 2026';
-const IMPORT_KOL_DIENST = 'P';
-const IMPORT_KOL_BESPR  = 'Q';
-const IMPORT_KOL_INTERV = 'R';
-const IMPORT_KOL_OPM    = 'S';
-const IMPORT_KOLOM_NAAR_RADID = {
+export const IMPORT_KOL_DIENST = 'P';
+export const IMPORT_KOL_BESPR  = 'Q';
+export const IMPORT_KOL_INTERV = 'R';
+export const IMPORT_KOL_OPM    = 'S';
+export const IMPORT_KOLOM_NAAR_RADID = {
   'BL': 'L', 'KdP': 'P', 'HvV': 'V', 'GF': 'F',
   'SK': 'K', 'FvH': 'H', 'SF': 'S', 'BJ': 'J',
   'W5': 'W5', 'W4': 'W4', 'W3': 'W3', 'W2': 'W2', 'W1': 'W1',
