@@ -24,7 +24,7 @@ export const state = {
   unsubscribers: [],      // voor realtime listeners
   gebruikers: [],
   // Activiteit-tab
-  actModus: 'aantal',     // 'aantal' | 'ratio' | 'verdeling'
+  actModus: 'aantal',     // 'aantal' | 'ratio' | 'verdeling' | 'belasting'
   actPeriode: 'jaar',     // 'jaar' | 'q1'..'q4' | 'maand' | 'custom'
   actVanaf: '',
   actTot: '',
@@ -71,3 +71,16 @@ export const HOOFD_FUNCTIES = [
 
 export const AFWEZIG_CODES = ['V', 'Z', 'K', 'Q'];
 export const WERK_CODES    = ['B', 'E', 'M', 'D', 'O', 'C', 'S', 'A', 'X'];
+
+// Belastingsgrens per hoofdfunctie (uit Excel-Advies sheet).
+// Waarde = max verhouding t.o.v. de hoogst-belaste radioloog (parttime-gecorrigeerd).
+// Boven de grens = overbelast.
+export const BELASTING_GRENS = {
+  W: 0.50,
+  O: 0.50,
+  B: 0.50,
+  E: 0.90,
+  M: 0.90,
+  D: 1.00,
+  S: 1.00,
+};

@@ -1,6 +1,6 @@
 // Activiteit-view: matrix met counts/ratios/verdeling per radioloog × functie.
 // Groot bestand omdat alle berekeningen, helpers en handlers hier samenkomen.
-import { state, VASTE_RAD_IDS, DAGEN_NL, HOOFD_FUNCTIES } from '../state.js';
+import { state, VASTE_RAD_IDS, DAGEN_NL, HOOFD_FUNCTIES, BELASTING_GRENS } from '../state.js';
 import {
   vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
   bezettingenInRange,
@@ -187,6 +187,7 @@ export function renderActView() {
 
   const ratio = state.actModus === 'ratio';
   const verdeling = state.actModus === 'verdeling';
+  const belasting = state.actModus === 'belasting';
 
   const aantalKol = kolommen.length;
   const labelBreedte = '110px';
@@ -315,6 +316,25 @@ export function renderActView() {
               <div class="act-bar-fg act-pct">${pct}</div>
             </div>`;
         }
+      } else if (belasting && rij.kind === 'hoofd' && BELASTING_GRENS[rij.code] !== undefined) {
+        // Belasting: waarde / max(kolom) / parttime → vergelijk met grens
+        const pf = pfVan(k);
+        const maxWaarde = Math.max(1, ...kolommen.filter(kk => !kk.isSlot).map(kk => celWaarde(rij, kk)));
+        const rel = pf > 0 ? (waarde / pf) / maxWaarde : 0;
+        const grens = BELASTING_GRENS[rij.code];
+        const pct = fmtPct(rel);
+        const overGrens = rel > grens;
+        const dichtBijGrens = !overGrens && rel > grens * 0.85;
+        const kleur = overGrens
+          ? 'rgba(220,53,69,0.15)'
+          : dichtBijGrens
+            ? 'rgba(255,165,0,0.15)'
+            : 'rgba(40,167,69,0.10)';
+        const tekstKleur = overGrens ? '#a01020' : dichtBijGrens ? '#7a4f00' : '#1a6b2f';
+        inhoud = `<span style="color:${tekstKleur}; font-weight: ${overGrens ? '600' : '400'};">${pct}</span>`;
+        // Overschrijf zone-achtergrond via inline style op de cel — zie hieronder
+      } else if (belasting) {
+        inhoud = `<span class="act-cell-zero">${waarde || '—'}</span>`;
       } else {
         inhoud = `<span class="${zero}">${waarde}</span>`;
       }
@@ -323,7 +343,18 @@ export function renderActView() {
         ? `onclick="window.actToonDrilldown('${k.slotId}','${rij.kind}','${(rij.code||rij.dagNl||'')}','${k.vanSub||''}','${k.totSub||''}')"`
         : '';
       const zone = kleurDezeRij ? zoneClass(waarde, gemPt, k) : '';
-      html += `<div class="act-cell ${cls} ${sep} ${klikbaar} ${zone}" ${klikAttr}>${inhoud}</div>`;
+
+      // Belasting: achtergrondkleur op celniveau voor hoofdfuncties met grens
+      let belastingStyle = '';
+      if (belasting && rij.kind === 'hoofd' && BELASTING_GRENS[rij.code] !== undefined) {
+        const pf = pfVan(k);
+        const maxWaarde = Math.max(1, ...kolommen.filter(kk => !kk.isSlot).map(kk => celWaarde(rij, kk)));
+        const rel = pf > 0 ? (waarde / pf) / maxWaarde : 0;
+        const grens = BELASTING_GRENS[rij.code];
+        belastingStyle = `background: ${rel > grens ? 'rgba(220,53,69,0.12)' : rel > grens * 0.85 ? 'rgba(255,165,0,0.12)' : 'rgba(40,167,69,0.08)'};`;
+      }
+
+      html += `<div class="act-cell ${cls} ${sep} ${klikbaar} ${zone}" ${klikAttr} style="${belastingStyle}">${inhoud}</div>`;
     });
 
     const gemCelInhoud = gem
@@ -349,6 +380,7 @@ export function renderActView() {
           <button class="seg-btn ${state.actModus==='aantal' ? 'actief' : ''}" onclick="window.actZetModus('aantal')">Aantallen</button>
           <button class="seg-btn ${state.actModus==='ratio' ? 'actief' : ''}" onclick="window.actZetModus('ratio')">Ratio's</button>
           <button class="seg-btn ${state.actModus==='verdeling' ? 'actief' : ''}" onclick="window.actZetModus('verdeling')">Verdeling</button>
+          <button class="seg-btn ${state.actModus==='belasting' ? 'actief' : ''}" onclick="window.actZetModus('belasting')">Belasting</button>
         </div>
       </div>
       <div class="act-controls">
@@ -372,7 +404,9 @@ export function renderActView() {
           ? 'Ratio = aantal / rij-gemiddelde / parttime-factor (100% = gemiddelde)'
           : verdeling
             ? 'Kleur = afwijking t.o.v. rij-gemiddelde (parttime-gecorrigeerd, vaste 8 als basis).'
-            : 'Tik een hoofdfunctie om varianten in/uit te klappen. Tik een cel voor de datums.'
+            : belasting
+              ? 'Belasting = aandeel t.o.v. hoogst-belaste radioloog (parttime-gecorrigeerd). Groen = onder grens, oranje = dichtbij, rood = over grens.'
+              : 'Tik een hoofdfunctie om varianten in/uit te klappen. Tik een cel voor de datums.'
       }</p>
       ${verdeling ? `
         <div class="act-zone-legend">
@@ -380,6 +414,14 @@ export function renderActView() {
           <span class="act-zone-swatch" style="background: rgba(0,0,0,0.04);">85 – 115%</span>
           <span class="act-zone-swatch act-zone-hoog">&gt; 115%</span>
           <span class="muted" style="margin-left: auto; font-size: 11px;">100% = rij-gemiddelde</span>
+        </div>
+      ` : ''}
+      ${belasting ? `
+        <div class="act-zone-legend">
+          <span class="act-zone-swatch" style="background: rgba(40,167,69,0.15); color:#1a6b2f;">✓ Onder grens</span>
+          <span class="act-zone-swatch" style="background: rgba(255,165,0,0.15); color:#7a4f00;">⚠ Dichtbij grens</span>
+          <span class="act-zone-swatch" style="background: rgba(220,53,69,0.15); color:#a01020;">✗ Over grens</span>
+          <span class="muted" style="margin-left: auto; font-size: 11px;">Grens per functie: W/O/B=50% · E/M=90% · D/S=100%</span>
         </div>
       ` : ''}
     </div>
