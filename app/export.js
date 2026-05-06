@@ -1,13 +1,12 @@
 // Excel-export: lees Firestore-indeling voor een gekozen jaar en schrijf een .xlsx
-// dat zoveel mogelijk lijkt op het bestaande handmatige werkblad:
-//  - Kolomvolgorde: Dag | Datum | radiologen | Dienst | Bespr | Interventie | Opmerking
-//  - Datum als echte Excel-datumcel (niet als tekst)
-//  - Kleurcodering per functiecode (W/B/E/M/D/O/S/A/R/V/Q/Z/K/T/X)
-//  - Weekend-rijen (za/zo) lichtgrijs
-//  - Header-rij vetgedrukt met donkerblauwe achtergrond (zoals origineel)
+// met volledige opmaak via ExcelJS (gratis, ondersteunt stijlen in browser):
+//  - Datum als echte Excel-datumcel (DD-MM-YYYY)
+//  - Kleurcodering per functiecode vanuit state.functies (+ fallback-map)
+//  - Weekend-rijen lichtgrijs
+//  - Header-rij vetgedrukt met donkerblauwe achtergrond
 //  - Bevroren header-rij + kolommen Dag+Datum
 //  - Kolombreedte passend bij het origineel
-//  - Cel-opmerkingen (cel_opmerkingen) als Excel cell comments
+//  - Cel-opmerkingen (cel_opmerkingen) als Excel cell notes
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
@@ -15,90 +14,69 @@ import { state } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
-// Fallback-map; wordt aangevuld/overschreven met kleuren uit state.functies.
 const FALLBACK_KLEUREN = {
-  W: '#dce6f1', // weekradioloog – lichtblauw
-  B: '#e2efda', // bucky/echo – lichtgroen
-  E: '#fff2cc', // echo – lichtgeel
-  M: '#fce4d6', // mammo/CT – licht oranje-roze
-  D: '#ede9f8', // DSI/SD – lichtpaars
-  O: '#d9ead3', // omnipotent – groen
-  S: '#fce4d6', // S-dienst
-  A: '#f4f4f4', // admin/trans/ziek – lichtgrijs
-  R: '#fafafa', // roostervrij – heel licht
-  V: '#ffffc0', // verlof/vakantie – lichtgeel
-  Z: '#ffe0b2', // ziek – licht amber
-  K: '#e8f0fe', // klinische les
-  T: '#f3e5f5', // transport
-  X: '#ffebee', // boventallig
-  Q: '#e0f7fa', // deeltijd zonder dienst
+  W: 'DCE6F1', B: 'E2EFDA', E: 'FFF2CC', M: 'FCE4D6',
+  D: 'EDE9F8', O: 'D9EAD3', S: 'FCE4D6', A: 'F4F4F4',
+  R: 'FAFAFA', V: 'FFFFC0', Z: 'FFE0B2', K: 'E8F0FE',
+  T: 'F3E5F5', X: 'FFEBEE', Q: 'E0F7FA',
 };
 
-// Tekstkleur op basis van achtergrond (luma-drempel)
-function tekstKleurVoor(hex) {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return 'FF000000';
-  const r = parseInt(h.slice(0,2), 16);
-  const g = parseInt(h.slice(2,4), 16);
-  const b = parseInt(h.slice(4,6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 160 ? 'FF1a1a18' : 'FFFFFFFF';
-}
-
-// Bouw een gecombineerde kleurenmap uit state.functies + fallback
 function bouwKleurenMap() {
   const map = { ...FALLBACK_KLEUREN };
   (state.functies || []).forEach(f => {
     const code = (f.code || f.id || '').charAt(0).toUpperCase();
-    if (code && f.kleur) map[code] = f.kleur;
+    if (code && f.kleur) map[code] = f.kleur.replace('#', '');
   });
   return map;
 }
 
-// Geef de hoofd-letter van een code (bijv. '.WB' -> 'W', '5E' -> 'E')
 function hoofdLetter(code) {
   return (code || '').replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
 }
 
-// Laad SheetJS (gedeeld met import.js via window.XLSX)
-let _xlsxPromise = null;
-function laadSheetJS() {
-  if (_xlsxPromise) return _xlsxPromise;
-  _xlsxPromise = new Promise((resolve, reject) => {
-    if (window.XLSX) return resolve(window.XLSX);
+// Tekstkleur: donker op lichte achtergrond, licht op donkere
+function tekstArgb(hex6) {
+  const r = parseInt(hex6.slice(0,2), 16);
+  const g = parseInt(hex6.slice(2,4), 16);
+  const b = parseInt(hex6.slice(4,6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160 ? 'FF1A1A18' : 'FFFFFFFF';
+}
+
+// ---- ExcelJS laden via CDN --------------------------------------------------
+let _excelJsPromise = null;
+function laadExcelJS() {
+  if (_excelJsPromise) return _excelJsPromise;
+  _excelJsPromise = new Promise((resolve, reject) => {
+    if (window.ExcelJS) return resolve(window.ExcelJS);
     const s = document.createElement('script');
-    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-    s.onload = () => resolve(window.XLSX);
-    s.onerror = () => reject(new Error('Kon SheetJS niet laden (offline?).'));
+    s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+    s.onload = () => resolve(window.ExcelJS);
+    s.onerror = () => reject(new Error('Kon ExcelJS niet laden (offline?).'));
     document.head.appendChild(s);
   });
-  return _xlsxPromise;
+  return _excelJsPromise;
 }
 
-// Helper: zet stijl op een cel
-function zetCelStijl(ws, adres, stijl) {
-  if (!ws[adres]) return;
-  ws[adres].s = stijl;
+// ---- Blob downloaden --------------------------------------------------------
+function downloadBlob(buffer, bestandsnaam) {
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = bestandsnaam;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 }
 
-// Helper: maak stijl voor een functiecode-cel
-function maakCelStijl(code, kleurenMap, extra) {
-  const letter = hoofdLetter(code);
-  const bgHex = (kleurenMap[letter] || '').replace('#', '');
-  if (!bgHex || bgHex.length !== 6) return extra || {};
-  const bg = 'FF' + bgHex.toUpperCase();
-  const fg = tekstKleurVoor('#' + bgHex);
-  return Object.assign({
-    fill: { fgColor: { rgb: bg } },
-    font: { color: { rgb: fg } },
-    alignment: { horizontal: 'center', vertical: 'center' },
-  }, extra || {});
-}
-
+// ---- Hoofd-export -----------------------------------------------------------
 export async function actExportJaar(jaar) {
   if (!jaar) { alert('Kies eerst een jaar.'); return; }
 
   try {
-    const XLSX = await laadSheetJS();
+    const ExcelJS = await laadExcelJS();
 
     // Firestore: alle indeling-docs voor dit jaar
     const q = query(
@@ -117,137 +95,109 @@ export async function actExportJaar(jaar) {
     }
 
     const kleurenMap = bouwKleurenMap();
-
-    // Kolom-volgorde: Dag, Datum, radiologen, P/Q/R/S
     const radKolommen = Object.keys(IMPORT_KOLOM_NAAR_RADID);
-    const headers = [
-      'Dag', 'Datum',
-      ...radKolommen,
-      IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM,
+
+    // ---- Werkboek + werkblad ------------------------------------------------
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Rooster-app';
+    wb.created = new Date();
+
+    const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
+    const ws = wb.addWorksheet(sheetNaam);
+
+    // ---- Kolommen (volgorde + breedte) --------------------------------------
+    ws.columns = [
+      { header: 'Dag',          key: 'dag',    width: 5   },
+      { header: 'Datum',        key: 'datum',  width: 13  },
+      ...radKolommen.map(k => ({ header: k, key: k, width: 6 })),
+      { header: IMPORT_KOL_DIENST, key: 'dienst',     width: 6  },
+      { header: IMPORT_KOL_BESPR,  key: 'bespr',      width: 5  },
+      { header: IMPORT_KOL_INTERV, key: 'interventie',width: 6  },
+      { header: IMPORT_KOL_OPM,    key: 'opmerking',  width: 54 },
     ];
 
+    // ---- Header-rij stijl ---------------------------------------------------
+    const headerRij = ws.getRow(1);
+    headerRij.height = 18;
+    ws.columns.forEach((_, ci) => {
+      const cel = headerRij.getCell(ci + 1);
+      cel.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cel.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
+      cel.alignment = { horizontal: 'center', vertical: 'middle' };
+      cel.border    = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
+    });
+
+    // ---- Bevroren rijen/kolommen: rij 1 + kolommen A+B ----------------------
+    ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1, topLeftCell: 'C2', activePane: 'bottomRight' }];
+
+    // ---- Data-rijen ---------------------------------------------------------
     const DAGEN_NL_KORT = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
 
-    // ---- Bouw worksheet-data ----
-    const wsData = [headers];
     for (const dag of dagen) {
       const d = new Date(dag.datum + 'T12:00:00');
-      const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
-      // Datum als JS Date zodat SheetJS een echte datumcel maakt
-      const datumObj = new Date(dag.datum + 'T12:00:00');
-      const rij = [DAGEN_NL_KORT[dagNlIdx], datumObj];
+      const dagIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+      const isWeekend = dagIdx >= 5;
+
+      // Rij-data opbouwen
+      const rijData = {
+        dag:   DAGEN_NL_KORT[dagIdx],
+        datum: new Date(dag.datum + 'T12:00:00'),
+      };
       for (const kolHoofd of radKolommen) {
         const radId = IMPORT_KOLOM_NAAR_RADID[kolHoofd];
         const codes = dag.toewijzingen?.[radId];
-        rij.push(Array.isArray(codes) ? codes.join(',') : (codes || ''));
+        rijData[kolHoofd] = Array.isArray(codes) ? codes.join(',') : (codes || '');
       }
-      rij.push(dag.dienst?.dag || '');
-      rij.push(dag.bespreking || '');
-      rij.push(dag.interventie || '');
-      rij.push(dag.opmerking || '');
-      wsData.push(rij);
-    }
+      rijData.dienst      = dag.dienst?.dag  || '';
+      rijData.bespr       = dag.bespreking   || '';
+      rijData.interventie = dag.interventie  || '';
+      rijData.opmerking   = dag.opmerking    || '';
 
-    // ---- SheetJS worksheet ----
-    const ws = XLSX.utils.aoa_to_sheet(wsData, { cellDates: true, dateNF: 'DD-MM-YYYY' });
+      const rij = ws.addRow(rijData);
+      rij.height = 15;
 
-    // ---- Kolombreedten (karaktereenheden, passend bij het origineel) ----
-    ws['!cols'] = [
-      { wch: 4  },  // Dag
-      { wch: 11 },  // Datum
-      ...radKolommen.map(() => ({ wch: 5.5 })),
-      { wch: 5  },  // Dienst
-      { wch: 4  },  // Bespr
-      { wch: 5  },  // Interventie
-      { wch: 52 },  // Opmerking
-    ];
+      // Datum-cel: opmaak als datum
+      const datumCel = rij.getCell(2);
+      datumCel.numFmt = 'DD-MM-YYYY';
+      datumCel.alignment = { horizontal: 'left', vertical: 'middle' };
 
-    // ---- Bevroren rij + kolommen: header-rij + Dag+Datum ----
-    // SheetJS: !freeze als SheetView-like object
-    ws['!freeze'] = { xSplit: 2, ySplit: 1, topLeftCell: 'C2', activePane: 'bottomRight', state: 'frozen' };
-
-    // ---- Stijlen ----
-    const HEADER_STIJL = {
-      fill: { fgColor: { rgb: 'FF1F3863' } },
-      font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 10 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: { bottom: { style: 'medium', color: { rgb: 'FF9DC3E6' } } },
-    };
-    const WEEKEND_BG = { fill: { fgColor: { rgb: 'FFF2F2F2' } } };
-    const DATUM_STIJL = {
-      numFmt: 'DD-MM-YYYY',
-      alignment: { horizontal: 'left', vertical: 'center' },
-    };
-    const DATUM_WEEKEND = {
-      numFmt: 'DD-MM-YYYY',
-      alignment: { horizontal: 'left', vertical: 'center' },
-      fill: { fgColor: { rgb: 'FFF2F2F2' } },
-    };
-
-    // Header-rij stylen
-    headers.forEach((_, ci) => {
-      const addr = XLSX.utils.encode_cell({ r: 0, c: ci });
-      zetCelStijl(ws, addr, HEADER_STIJL);
-    });
-
-    // Data-rijen stylen
-    dagen.forEach((dag, ri) => {
-      const excelRij = ri + 1;
-      const d = new Date(dag.datum + 'T12:00:00');
-      const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
-      const isWeekend = dagNlIdx >= 5;
-
-      // Dag-cel
-      const dagAddr = XLSX.utils.encode_cell({ r: excelRij, c: 0 });
-      if (isWeekend) zetCelStijl(ws, dagAddr, WEEKEND_BG);
-
-      // Datum-cel
-      const datAddr = XLSX.utils.encode_cell({ r: excelRij, c: 1 });
-      if (ws[datAddr]) {
-        ws[datAddr].t = 'd';
-        ws[datAddr].s = isWeekend ? DATUM_WEEKEND : DATUM_STIJL;
+      // Weekend-achtergrond op alle cellen
+      if (isWeekend) {
+        rij.eachCell({ includeEmpty: true }, cel => {
+          cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+        });
       }
 
-      // Radioloog-cellen
+      // Radioloog-cellen: kleur per functiecode + optionele cel-opmerking
       radKolommen.forEach((kolHoofd, ki) => {
-        const ci = 2 + ki;
-        const addr = XLSX.utils.encode_cell({ r: excelRij, c: ci });
+        const colIdx = 3 + ki; // 1-based: col1=Dag, col2=Datum, col3=eerste rad
+        const cel = rij.getCell(colIdx);
+        cel.alignment = { horizontal: 'center', vertical: 'middle' };
+
         const radId = IMPORT_KOLOM_NAAR_RADID[kolHoofd];
         const codes = dag.toewijzingen?.[radId];
         const codeStr = Array.isArray(codes) ? codes[0] : (codes || '');
 
-        if (ws[addr]) {
-          if (codeStr) {
-            ws[addr].s = maakCelStijl(codeStr, kleurenMap,
-              isWeekend ? { fill: { fgColor: { rgb: 'FFF2F2F2' } } } : null);
-          } else if (isWeekend) {
-            ws[addr].s = WEEKEND_BG;
-          }
-
-          // Cel-opmerking als Excel comment
-          const opm = dag.cel_opmerkingen?.[radId];
-          if (opm) {
-            ws[addr].c = ws[addr].c || [];
-            ws[addr].c.push({ a: 'Rooster', t: opm, hidden: true });
+        if (codeStr) {
+          const letter = hoofdLetter(codeStr);
+          const bg = kleurenMap[letter];
+          if (bg && bg.length === 6) {
+            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg.toUpperCase() } };
+            cel.font = { color: { argb: tekstArgb(bg) } };
           }
         }
+
+        // Cel-opmerking als Excel note
+        const opm = dag.cel_opmerkingen?.[radId];
+        if (opm) {
+          cel.note = { texts: [{ text: opm }] };
+        }
       });
+    }
 
-      // Dienst/Bespr/Interventie/Opmerking – alleen weekend-grijs
-      if (isWeekend) {
-        const nRad = radKolommen.length;
-        [2 + nRad, 3 + nRad, 4 + nRad, 5 + nRad].forEach(ci => {
-          const addr = XLSX.utils.encode_cell({ r: excelRij, c: ci });
-          if (ws[addr]) ws[addr].s = WEEKEND_BG;
-        });
-      }
-    });
-
-    // ---- Werkboek + download ----
-    const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sheetNaam);
-    XLSX.writeFile(wb, `Indeling_${jaar}.xlsx`, { cellStyles: true, bookSST: false });
+    // ---- Downloaden ---------------------------------------------------------
+    const buffer = await wb.xlsx.writeBuffer();
+    downloadBlob(buffer, `Indeling_${jaar}.xlsx`);
 
   } catch (e) {
     console.error('actExportJaar', e);

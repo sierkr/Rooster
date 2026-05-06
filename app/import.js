@@ -1,10 +1,15 @@
 // Excel-import: lees .xlsm/.xlsx, parse 'Indeling 2026'-sheet en schrijf
 // naar Firestore. Cell-comments worden cel_opmerkingen, kolom S = dag-opm,
 // P = dienst, Q = bespreking, R = interventie.
-import { doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+//
+// Na het schrijven van indeling-docs worden open wensen automatisch
+// gesynchroniseerd:
+//  - Open wens die nu matcht met de geïmporteerde code → status 'verwerkt'
+//  - Verwerkte wens die nu gebroken wordt door de import → status terug naar 'open'
+import { doc, writeBatch, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, magGebruikersBeheren } from './helpers.js';
+import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode } from './helpers.js';
 
 export const IMPORT_SHEET = 'Indeling 2026';
 export const IMPORT_KOL_DIENST = 'P';
@@ -44,7 +49,7 @@ function _parseDatumCel(v) {
   if (typeof v === 'string') {
     const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-    const m2 = v.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    const m2 = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
     if (m2) return `${m2[3]}-${m2[2].padStart(2,'0')}-${m2[1].padStart(2,'0')}`;
   }
   return null;
@@ -61,6 +66,75 @@ function _celStr(cel) {
 function _celComment(cel) {
   if (!cel || !cel.c || !cel.c.length) return null;
   return cel.c.map(c => (c.t || '').trim()).filter(Boolean).join('\n') || null;
+}
+
+// ---- Wens-matching (zelfde logica als save.js) ------------------------------
+// Geeft terug of een code matcht met een wens-type.
+function wensMatcht(type, voorkeurCode, primaireCode) {
+  const hoofd = hoofdLetterCode(primaireCode);
+  if (type === 'vakantie')         return hoofd === 'V';
+  if (type === 'niet_beschikbaar') return !primaireCode || ['V','Z','K','Q'].includes(hoofd);
+  if (type === 'voorkeur')         return hoofd === voorkeurCode;
+  return false;
+}
+
+// Synchroniseer wens-statussen na import.
+// Vergelijkt de geïmporteerde toewijzingen met state.wensen en werkt statussen bij:
+//  - open wens die nu matcht → 'verwerkt'
+//  - verwerkte wens die nu gebroken is → 'open'
+// Retourneert { verwerkt: N, heropend: N } voor rapportage.
+async function synchroniseerWensen(importDagen, importeerderUid) {
+  // Bouw een map datum+radId → primaireCode vanuit de geïmporteerde data
+  const nieuweToewijzingen = {}; // `${datum}|${radId}` → primaireCode
+  for (const dag of importDagen) {
+    for (const [radId, codes] of Object.entries(dag.toewijzingen || {})) {
+      const prima = Array.isArray(codes) ? (codes[0] || '') : (codes || '');
+      nieuweToewijzingen[`${dag.datum}|${radId}`] = prima;
+    }
+  }
+
+  const datums = new Set(importDagen.map(d => d.datum));
+  const relevanteWensen = state.wensen.filter(w => datums.has(w.datum));
+
+  const updates = []; // { id, nieuweStatus }
+  for (const w of relevanteWensen) {
+    const sleutel = `${w.datum}|${w.radioloog_id}`;
+    const primaireCode = nieuweToewijzingen[sleutel] ?? null;
+    const huidigStatus = w.status || 'open';
+    const matcht = wensMatcht(w.type, w.voorkeur_code, primaireCode);
+
+    if (huidigStatus === 'open' && matcht) {
+      updates.push({ id: w.id, nieuweStatus: 'verwerkt' });
+    } else if (huidigStatus === 'verwerkt' && !matcht) {
+      updates.push({ id: w.id, nieuweStatus: 'open' });
+    }
+  }
+
+  let verwerkt = 0, heropend = 0;
+  for (const upd of updates) {
+    try {
+      if (upd.nieuweStatus === 'verwerkt') {
+        await updateDoc(doc(db, 'wensen', upd.id), {
+          status: 'verwerkt',
+          verwerkt_op: serverTimestamp(),
+          verwerkt_door: importeerderUid,
+          toelichting: 'Auto-verwerkt bij Excel-import',
+        });
+        verwerkt++;
+      } else {
+        await updateDoc(doc(db, 'wensen', upd.id), {
+          status: 'open',
+          verwerkt_op: null,
+          verwerkt_door: null,
+          toelichting: null,
+        });
+        heropend++;
+      }
+    } catch (e) {
+      console.warn('synchroniseerWensen: updateDoc mislukt voor', upd.id, e);
+    }
+  }
+  return { verwerkt, heropend };
 }
 
 // Parse-functie wordt aangeroepen vanuit de Gebruikers-view; de view zelf
@@ -189,6 +263,7 @@ export async function actImportSchrijven(renderGebView) {
   const ok = confirm(
     `OVERSCHRIJVEN — ${jaarDeel} worden in Firestore vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
     `${p.dagen.length} dagen, ${p.celOpmsAantal} cel-opmerkingen, ${p.dagOpmsAantal} dag-opmerkingen.\n\n` +
+    `Wens-statussen worden automatisch bijgewerkt.\n\n` +
     `Bestaande data in Firestore wordt vervangen. Doorgaan?`
   );
   if (!ok) return;
@@ -196,6 +271,7 @@ export async function actImportSchrijven(renderGebView) {
   state.importBezig = true;
   renderGebView();
   try {
+    // 1. Indeling wegschrijven
     const BATCH = 400;
     let geschreven = 0;
     for (let i = 0; i < p.dagen.length; i += BATCH) {
@@ -205,7 +281,18 @@ export async function actImportSchrijven(renderGebView) {
       await batch.commit();
       geschreven += slice.length;
     }
-    alert(`Klaar. ${geschreven} dagen weggeschreven.`);
+
+    // 2. Wens-statussen synchroniseren
+    const { verwerkt, heropend } = await synchroniseerWensen(
+      p.dagen,
+      state.user?.uid || 'import'
+    );
+
+    let berichtDelen = [`${geschreven} dagen weggeschreven.`];
+    if (verwerkt > 0)  berichtDelen.push(`${verwerkt} wens${verwerkt === 1 ? '' : 'en'} automatisch verwerkt.`);
+    if (heropend > 0)  berichtDelen.push(`${heropend} wens${heropend === 1 ? '' : 'en'} teruggezet naar 'open' (indeling klopt niet meer).`);
+    alert('Klaar. ' + berichtDelen.join('\n'));
+
     state.importPreview = null;
   } catch (e) {
     console.error('actImportSchrijven', e);
