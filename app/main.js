@@ -258,7 +258,6 @@ function luisterNaarData() {
 
   state.unsubscribers.push(onSnapshot(collection(db, 'functies'), (snap) => {
     state.functies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    injecteerFunctieKleuren(state.functies);
     render();
   }));
 
@@ -301,49 +300,6 @@ function luisterNaarData() {
 }
 
 // ==== App starten (na eventuele wachtwoord-wissel) ===========================
-
-// ==== Dynamische functiekleuren =============================================
-// Genereert CSS-klassen (.f-W, .f-B etc.) op basis van kleur-veld in Firestore.
-// Overschrijft de hardcoded kleuren in index.html voor bekende functies,
-// en voegt nieuwe klassen toe voor nieuw aangemaakte functies.
-
-function injecteerFunctieKleuren(functies) {
-  let styleEl = document.getElementById('functie-kleuren-style');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'functie-kleuren-style';
-    document.head.appendChild(styleEl);
-  }
-
-  const regels = functies
-    .filter(f => f.kleur && (f.code || f.id))
-    .map(f => {
-      const code = f.code || f.id;
-      // Pak de hoofdletter voor de CSS-klasse (zelfde logica als fclass())
-      const letter = code.replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
-      if (!letter) return '';
-      // Maak een lichte achtergrond en donkere tekstkleur van de hex-kleur
-      const hex = f.kleur.replace('#', '');
-      const r = parseInt(hex.slice(0,2), 16);
-      const g = parseInt(hex.slice(2,4), 16);
-      const b = parseInt(hex.slice(4,6), 16);
-      const bg = `rgba(${r},${g},${b},0.18)`;
-      const tekst = `rgba(${Math.round(r*0.4)},${Math.round(g*0.4)},${Math.round(b*0.4)},1)`;
-      return `.f-${letter} { background: ${bg}; color: ${tekst}; }`;
-    })
-    .filter(Boolean);
-
-  // Dedupliceer (laatste wint)
-  const gezien = new Set();
-  const uniek = regels.filter(r => {
-    const cls = r.match(/\.f-\w+/)?.[0];
-    if (!cls || gezien.has(cls)) return false;
-    gezien.add(cls);
-    return true;
-  });
-
-  styleEl.textContent = uniek.join('\n');
-}
 
 function startApp() {
   document.getElementById('login').style.display = 'none';
