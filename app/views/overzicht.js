@@ -335,7 +335,11 @@ window.openCell = function(datum, radId) {
 
 // Hertekenen van de picker-grid en selectie-indicator op basis van _pickerCodes
 function pickerHertekenen() {
-  const gangbaar = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
+  const gangbaar = (state.functies || [])
+    .filter(f => f.actief !== false)
+    .filter(f => { const c = f.code || f.id || ''; return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3; })
+    .sort((a, b) => (a.volgorde || 99) - (b.volgorde || 99))
+    .map(f => f.code || f.id);
   const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
   const codes = _pickerCodes;
   const grid = document.getElementById('pickerGrid');
