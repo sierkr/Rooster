@@ -6,7 +6,7 @@ import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
   vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
-  magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien,
+  magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien, magWijzigen,
   magVakantieZien, valideerWachtwoord,
 } from './helpers.js';
 import { openSheet, closeSheet } from './sheets.js';
@@ -175,7 +175,14 @@ window.toonGebruikerSheet = function() {
 
 function renderTabs() {
   const tabs = [
-    { id: 'beh', label: 'Overzicht' },
+    { id: 'beh', label: (() => {
+      const eigenRadId = state.profiel?.radioloog_id;
+      if (eigenRadId && !magWijzigen()) {
+        const n = (state.wijzigingen || []).length;
+        if (n > 0) return `Overzicht<span class="tab-badge tab-badge-oranje">${n}</span>`;
+      }
+      return 'Overzicht';
+    })() },
     { id: 'rad', label: 'Radioloog' },
   ];
   if (window.TOON_JAAROVERZICHT) tabs.push({ id: 'jaa', label: 'Jaaroverzicht' });
@@ -300,6 +307,21 @@ function luisterNaarData() {
 
   state.unsubscribers.push(onSnapshot(collection(db, 'vakantie_rankings'), (snap) => {
     state.vakantieRankings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
+
+  // Ongelezen wijzigingen: alleen docs waar gezien===false en radioloog_id
+  // overeenkomt met de eigen rad-id van de ingelogde gebruiker.
+  state.unsubscribers.push(onSnapshot(collection(db, 'wijzigingen'), (snap) => {
+    const eigenRadId = state.profiel?.radioloog_id;
+    const vandaag = vandaagIso();
+    state.wijzigingen = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(w =>
+        w.gezien === false &&
+        w.radioloog_id === eigenRadId &&
+        w.datum >= vandaag
+      );
     render();
   }));
 }

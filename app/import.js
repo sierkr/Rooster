@@ -6,10 +6,13 @@
 // gesynchroniseerd:
 //  - Open wens die nu matcht met de geïmporteerde code → status 'verwerkt'
 //  - Verwerkte wens die nu gebroken wordt door de import → status terug naar 'open'
-import { doc, writeBatch, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { doc, writeBatch, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode } from './helpers.js';
+import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode, vandaagIso, plusDagen } from './helpers.js';
+
+// Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
+const NABIJ_DAGEN = 30;
 
 export const IMPORT_SHEET = 'Indeling 2026';
 export const IMPORT_KOL_DIENST = 'P';
@@ -282,13 +285,44 @@ export async function actImportSchrijven(renderGebView) {
       geschreven += slice.length;
     }
 
-    // 2. Wens-statussen synchroniseren
+    // 2. Wijziging-docs schrijven voor gewijzigde cellen (gezien: false)
+    const vandaag = vandaagIso();
+    const grens = plusDagen(vandaag, NABIJ_DAGEN);
+    let wijzigingenGeschreven = 0;
+    const wijzWrites = [];
+    for (const dag of p.dagen) {
+      if (dag.datum < vandaag || dag.datum > grens) continue;
+      const bestaand = state.indelingMap[dag.datum];
+      for (const [radId, nieuweCodes] of Object.entries(dag.toewijzingen || {})) {
+        const oudeCodes = bestaand?.toewijzingen?.[radId] || [];
+        if (JSON.stringify(oudeCodes) === JSON.stringify(nieuweCodes)) continue;
+        wijzWrites.push({
+          uid: state.user?.uid || 'import',
+          email: state.profiel?.email || 'import',
+          datum: dag.datum,
+          radioloog_id: radId,
+          van: oudeCodes,
+          naar: nieuweCodes,
+          wanneer: serverTimestamp(),
+          gezien: false,
+        });
+      }
+    }
+    // Schrijf in batches van 400
+    for (let i = 0; i < wijzWrites.length; i += 400) {
+      const slice = wijzWrites.slice(i, i + 400);
+      await Promise.all(slice.map(w => addDoc(collection(db, 'wijzigingen'), w)));
+      wijzigingenGeschreven += slice.length;
+    }
+
+    // 3. Wens-statussen synchroniseren
     const { verwerkt, heropend } = await synchroniseerWensen(
       p.dagen,
       state.user?.uid || 'import'
     );
 
     let berichtDelen = [`${geschreven} dagen weggeschreven.`];
+    if (wijzigingenGeschreven > 0) berichtDelen.push(`${wijzigingenGeschreven} cel${wijzigingenGeschreven === 1 ? '' : 'len'} gemarkeerd als ongelezen voor betrokken radiologen.`);
     if (verwerkt > 0)  berichtDelen.push(`${verwerkt} wens${verwerkt === 1 ? '' : 'en'} automatisch verwerkt.`);
     if (heropend > 0)  berichtDelen.push(`${heropend} wens${heropend === 1 ? '' : 'en'} teruggezet naar 'open' (indeling klopt niet meer).`);
     alert('Klaar. ' + berichtDelen.join('\n'));

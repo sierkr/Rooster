@@ -35,6 +35,7 @@ export const state = {
   importPreview: null,
   importBezig: false,
   importJaar: '',         // '' = alle jaren in bestand, anders bv '2026'
+  wijzigingen: [],        // ongelezen wijzigingen (gezien === false) voor eigen radId
 };
 
 // ==== Constants ==============================================================

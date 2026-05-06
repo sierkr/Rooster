@@ -3,7 +3,7 @@
 import { collection, doc, setDoc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, hoofdLetterCode, magWijzigen, magAlleWensenZien } from './helpers.js';
+import { isoWeekVan, hoofdLetterCode, magWijzigen, magAlleWensenZien, vandaagIso, plusDagen } from './helpers.js';
 import { checkCelConflict } from './validatie.js';
 
 // Schrijf cel-toewijzing + (optioneel) cel-opmerking. Ook check op
@@ -91,15 +91,31 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
 
   try {
     await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
-    await addDoc(collection(db, 'wijzigingen'), {
-      uid: state.user.uid,
-      email: state.profiel.email,
-      datum,
-      radioloog_id: radId,
-      van: bestaand?.toewijzingen?.[radId] || [],
-      naar: codesArr,
-      wanneer: serverTimestamp(),
-    });
+
+    // Bepaal of er een echte toewijzingswijziging is t.o.v. vorige waarde
+    const oudeCodesArr = bestaand?.toewijzingen?.[radId] || [];
+    const isGewijzigd = JSON.stringify(oudeCodesArr) !== JSON.stringify(codesArr);
+
+    // Wijziging-doc schrijven voor audit-log
+    if (isGewijzigd) {
+      // gezien: false — tenzij de beheerder zijn eigen cel wijzigt
+      const eigenCel = state.profiel?.radioloog_id === radId;
+      const nabijeDatum = _isDatumNabij(datum);
+
+      await addDoc(collection(db, 'wijzigingen'), {
+        uid: state.user.uid,
+        email: state.profiel.email,
+        datum,
+        radioloog_id: radId,
+        van: oudeCodesArr,
+        naar: codesArr,
+        wanneer: serverTimestamp(),
+        // gezien: false alleen als het de betrokken radioloog raakt (niet zijn eigen cel)
+        // en de datum binnen de nabije horizon valt
+        gezien: eigenCel || !nabijeDatum ? true : false,
+      });
+    }
+
     if (celOpmGewijzigd) {
       await addDoc(collection(db, 'wijzigingen'), {
         uid: state.user.uid,
@@ -110,6 +126,7 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
         van: oudeCelOpm || null,
         naar: opmerking || null,
         wanneer: serverTimestamp(),
+        gezien: true, // opmerking-wijzigingen hoeven geen bevestiging
       });
     }
 
@@ -140,6 +157,14 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
+}
+
+// Drempel: wijzigingen binnen N dagen zijn "nabij" en krijgen gezien:false
+const NABIJ_DAGEN = 30;
+function _isDatumNabij(datum) {
+  const vandaag = vandaagIso();
+  const grens = plusDagen(vandaag, NABIJ_DAGEN);
+  return datum >= vandaag && datum <= grens;
 }
 
 // Alleen cel-opmerking opslaan (zonder code-wijziging)
@@ -178,6 +203,7 @@ export async function slaCelOpmerkingOp(datum, radId, opmerking) {
         van: oude || null,
         naar: opmerking || null,
         wanneer: serverTimestamp(),
+        gezien: true,
       });
     }
   } catch (e) {
@@ -231,6 +257,7 @@ export async function slaDienstOp(datum, radId) {
       van: bestaand?.dienst?.dag || null,
       naar: radId || null,
       wanneer: serverTimestamp(),
+      gezien: true,
     });
   } catch (e) {
     alert('Opslaan dienst mislukt: ' + e.message);

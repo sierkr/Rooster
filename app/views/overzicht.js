@@ -1,5 +1,7 @@
 // Overzicht-view (voorheen "Beheer"): hoofdraster met cellen per (datum × radioloog).
 // Klik op cel = wijzigen (beheerders), opmerking lezen (lezers).
+import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { db } from '../firebase-init.js';
 import { state, DAGEN_NL } from '../state.js';
 import {
   vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
@@ -8,7 +10,7 @@ import {
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
   magAlleWensenZien, isFeestdag,
 } from '../helpers.js';
-import { openSheet } from '../sheets.js';
+import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
 import { slaToewijzingOp, slaCelOpmerkingOp, slaOpmerkingOp } from '../save.js';
 
@@ -74,6 +76,21 @@ export function renderBehView() {
     const k = `${w.datum}|${w.radioloog_id}`;
     wensenIndex[k] = w.status || 'open';
   });
+
+  // Ongelezen wijzigingen-index: datum|radId → meest recente wijziging-doc
+  // Alleen zichtbaar voor de eigen radioloog (niet voor beheerders).
+  const wijzigingenIndex = {};
+  if (!magWijzigen() && eigenRadId) {
+    (state.wijzigingen || []).forEach(w => {
+      if (!datums.includes(w.datum)) return;
+      const k = `${w.datum}|${w.radioloog_id}`;
+      // Bewaar de meest recente (hoogste wanneer)
+      const bestaand = wijzigingenIndex[k];
+      if (!bestaand || (w.wanneer?.seconds || 0) > (bestaand.wanneer?.seconds || 0)) {
+        wijzigingenIndex[k] = w;
+      }
+    });
+  }
 
   let bannerHtml = '';
   if (fouten.length > 0) {
@@ -171,11 +188,19 @@ export function renderBehView() {
               const wensTitels = { open: 'Wens: nog niet behandeld', verwerkt: 'Wens: goedgekeurd', afgewezen: 'Wens: afgewezen' };
               const wensMarker = wens ? `<span class="wens-marker wens-marker-${wens}" title="${wensTitels[wens] || wens}"></span>` : '';
               const opmMarker = celOpm ? `<span class="opm-marker" title="${(celOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
+              // Ongelezen wijziging-marker (oranje driehoek linksboven, alleen eigen cel)
+              const wijz = wijzigingenIndex[`${datum}|${k.id}`];
+              const wijzMarker = wijz ? `<span class="wijz-marker" title="Je rooster is gewijzigd — klik voor details"></span>` : '';
+              // Gewijzigde eigen cel is altijd klikbaar, ook voor readonly-gebruikers
+              let effectiefOnclick = onclick;
+              if (wijz && (alleenOpmerkingen || alleenLezen)) {
+                effectiefOnclick = `onclick="window.toonCelDetail('${datum}', '${k.id}')"`;
+              }
               // Duo-weergave: codes met ' / ' tussen, bv. "B / M".
               const inhoud = isDuo
                 ? `${code1} / ${code2}`
                 : (code1 || '·');
-              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${onclick}>${inhoud}${wensMarker}${opmMarker}</div>`;
+              return `<div class="grid-cell ${cls} ${readonly} ${statusCls}" style="${sep}" ${effectiefOnclick}>${inhoud}${wensMarker}${opmMarker}${wijzMarker}</div>`;
             }).join('')}
             ${toonW ? (() => {
               const n = telPerDag(datum);
@@ -267,7 +292,6 @@ window.toonCelDetail = function(datum, radId) {
   const celOpm = dag?.cel_opmerkingen?.[radId] || '';
 
   document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
-  // Sub-tekst: één code = "B · Bucky/Echo", twee codes = "B · Bucky/Echo  +  M · Mammo"
   let subTekst;
   if (codes.length === 0) subTekst = 'Geen toewijzing';
   else if (codes.length === 1) subTekst = `${codes[0]} · ${functieNaam(codes[0])}`;
@@ -278,10 +302,40 @@ window.toonCelDetail = function(datum, radId) {
     ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${celOpm.replace(/</g,'&lt;')}</div></div>`
     : `<div class="muted" style="font-style: italic;">Geen opmerking</div>`;
 
+  // Ongelezen wijziging voor deze cel?
+  const eigenRadId = state.profiel?.radioloog_id;
+  const ongelezen = (state.wijzigingen || [])
+    .filter(w => w.datum === datum && w.radioloog_id === radId)
+    .sort((a, b) => (b.wanneer?.seconds || 0) - (a.wanneer?.seconds || 0));
+  const recentste = ongelezen[0];
+
+  let wijzHtml = '';
+  if (recentste) {
+    const vanStr = recentste.van?.length ? recentste.van.join(', ') : '(leeg)';
+    const naarStr = recentste.naar?.length ? recentste.naar.join(', ') : '(leeg)';
+    const wanneerStr = recentste.wanneer?.toDate
+      ? recentste.wanneer.toDate().toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : 'onbekend tijdstip';
+    wijzHtml = `
+      <div style="background: #faeeda; border-left: 3px solid #ef9f27; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;">
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">⚠ Je rooster is gewijzigd</div>
+        <div style="font-size: 13px;">Was: <b>${vanStr}</b> &rarr; Nu: <b>${naarStr}</b></div>
+        <div style="font-size: 11px; color: #5f5e5a; margin-top: 3px;">Gewijzigd op ${wanneerStr}</div>
+      </div>`;
+  }
+
+  const gezienKnop = recentste
+    ? `<button class="btn btn-primary" style="flex: 1;" onclick="window.markeerWijzigingenGezien('${datum}', '${radId}')">Gezien ✓</button>`
+    : '';
+
   document.getElementById('sheetBody').innerHTML = `
+    ${wijzHtml}
     ${opmHtml}
     ${dag?.opmerking ? `<div class="summary"><div class="summary-label">Dag-opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${dag.opmerking.replace(/</g,'&lt;')}</div></div>` : ''}
-    <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Sluiten</button>
+      ${gezienKnop}
+    </div>
   `;
   openSheet();
 };
@@ -435,4 +489,19 @@ window.opslaanOpmerking = async function(datum) {
   const nieuw = document.getElementById('opmInput').value.trim();
   window.closeSheet();
   await slaOpmerkingOp(datum, nieuw);
+};
+
+// Markeer alle ongelezen wijzigingen voor datum+radId als gezien
+window.markeerWijzigingenGezien = async function(datum, radId) {
+  const ongelezen = (state.wijzigingen || []).filter(
+    w => w.datum === datum && w.radioloog_id === radId
+  );
+  try {
+    await Promise.all(
+      ongelezen.map(w => updateDoc(doc(db, 'wijzigingen', w.id), { gezien: true }))
+    );
+  } catch (e) {
+    console.error('markeerWijzigingenGezien', e);
+  }
+  closeSheet();
 };
