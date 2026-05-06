@@ -327,8 +327,10 @@ window.injecteerNieuweKleuren = function(functies) {
       const r = parseInt(hex.slice(0,2), 16);
       const g = parseInt(hex.slice(2,4), 16);
       const b = parseInt(hex.slice(4,6), 16);
-      const bg   = `rgba(${r},${g},${b},0.18)`;
-      const tekst = `rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},1)`;
+      const bg = f.kleur;
+      // Tekstkleur: donker op lichte achtergrond, licht op donkere achtergrond
+      const helderheid = (r * 299 + g * 587 + b * 114) / 1000;
+      const tekst = helderheid > 160 ? '#1a1a18' : '#ffffff';
       return `.f-${code} { background: ${bg}; color: ${tekst}; }`;
     })
     .filter(Boolean);
