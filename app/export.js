@@ -1,12 +1,23 @@
 // Excel-export: lees Firestore-indeling voor een gekozen jaar en schrijf een .xlsx
-// met volledige opmaak via ExcelJS (gratis, ondersteunt stijlen in browser):
-//  - Datum als echte Excel-datumcel (DD-MM-YYYY)
-//  - Kleurcodering per functiecode vanuit state.functies (+ fallback-map)
-//  - Weekend-rijen lichtgrijs
-//  - Header-rij vetgedrukt met donkerblauwe achtergrond
-//  - Bevroren header-rij + kolommen Dag+Datum
-//  - Kolombreedte passend bij het origineel
-//  - Cel-opmerkingen (cel_opmerkingen) als Excel cell notes
+// met volledige opmaak + formules via ExcelJS:
+//
+//  Kolommen A–S  : data (identiek aan import-formaat)
+//  Kolom  T      : Aantal — werkvloerbezetting per dag (formule)
+//  Kolom  U      : leeg (spacer)
+//  Kolommen V–AA : W B E M D O — toont de letter als die functie nog NIET bezet is (formule)
+//
+//  Conditionele opmaak:
+//   - Kolom B (datum) rood als bezetting < norm (5 op ma-do, 4 op vr)
+//   - Kolom T (Aantal) groen ≥5, oranje =4, rood <4
+//   - Radioloog-cellen C–O lichtgeel bij V of K (afwezigheid)
+//
+//  Overig:
+//   - Kleurcodering per functiecode (uit state.functies + fallback)
+//   - Weekend-rijen lichtgrijs
+//   - Header donkerblauw + vet
+//   - Bevroren rij 1 + kolommen A+B
+//   - Kolombreedte passend bij origineel
+//   - Cel-opmerkingen als Excel notes
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
@@ -34,7 +45,6 @@ function hoofdLetter(code) {
   return (code || '').replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
 }
 
-// Tekstkleur: donker op lichte achtergrond, licht op donkere
 function tekstArgb(hex6) {
   const r = parseInt(hex6.slice(0,2), 16);
   const g = parseInt(hex6.slice(2,4), 16);
@@ -42,7 +52,34 @@ function tekstArgb(hex6) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 160 ? 'FF1A1A18' : 'FFFFFFFF';
 }
 
-// ---- ExcelJS laden via CDN --------------------------------------------------
+// ---- Formule-helpers --------------------------------------------------------
+// Bouw een SUMPRODUCT-formule die telt hoeveel cellen in `range` de hoofdletter
+// `letter` hebben. Werkt voor codes zoals W, .WB, 5W, YYW1 etc.
+function telLetterFormule(letter, range) {
+  const l = letter.toUpperCase();
+  return (
+    `SUMPRODUCT(` +
+    `((${range}="${l}")+` +
+    `(LEFT(${range},1)="${l}")+` +
+    `((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))+` +
+    `((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}"))>0)*1)`
+  );
+}
+
+// Formule voor kolom T (werkvloerbezetting): som van W+B+E+M+D+O+S per rij
+function aantalFormule(rij) {
+  const range = `C${rij}:O${rij}`;
+  const letters = ['W', 'B', 'E', 'M', 'D', 'O', 'S'];
+  return '=' + letters.map(l => telLetterFormule(l, range)).join('+');
+}
+
+// Formule voor kolom V–AA: toon letter als die functie NIET aanwezig is
+function ontbrekendFormule(letter, rij) {
+  const range = `C${rij}:O${rij}`;
+  return `=IF(${telLetterFormule(letter, range)}=0,"${letter}","")`;
+}
+
+// ---- ExcelJS laden ----------------------------------------------------------
 let _excelJsPromise = null;
 function laadExcelJS() {
   if (_excelJsPromise) return _excelJsPromise;
@@ -57,7 +94,6 @@ function laadExcelJS() {
   return _excelJsPromise;
 }
 
-// ---- Blob downloaden --------------------------------------------------------
 function downloadBlob(buffer, bestandsnaam) {
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -96,104 +132,208 @@ export async function actExportJaar(jaar) {
 
     const kleurenMap = bouwKleurenMap();
     const radKolommen = Object.keys(IMPORT_KOLOM_NAAR_RADID);
+    // Vaste kolom-indices (1-based in ExcelJS):
+    // 1=Dag, 2=Datum, 3..15=radiologen, 16=Dienst, 17=Bespr, 18=Interv, 19=Opm
+    // 20=Aantal(T), 21=spacer(U), 22=W(V), 23=B(W), 24=E(X), 25=M(Y), 26=D(Z), 27=O(AA)
+    const COL_AANTAL   = 20;
+    const COL_FUNCTIES = [22, 23, 24, 25, 26, 27]; // V–AA: W,B,E,M,D,O
+    const FUNCTIE_LETTERS = ['W', 'B', 'E', 'M', 'D', 'O'];
 
     // ---- Werkboek + werkblad ------------------------------------------------
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Rooster-app';
     wb.created = new Date();
-
     const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
     const ws = wb.addWorksheet(sheetNaam);
 
-    // ---- Kolommen (volgorde + breedte) --------------------------------------
+    // ---- Kolommen -----------------------------------------------------------
     ws.columns = [
-      { header: 'Dag',          key: 'dag',    width: 5   },
-      { header: 'Datum',        key: 'datum',  width: 13  },
+      { header: 'Dag',             key: 'dag',         width: 5  },
+      { header: 'Datum',           key: 'datum',       width: 13 },
       ...radKolommen.map(k => ({ header: k, key: k, width: 6 })),
-      { header: IMPORT_KOL_DIENST, key: 'dienst',     width: 6  },
-      { header: IMPORT_KOL_BESPR,  key: 'bespr',      width: 5  },
-      { header: IMPORT_KOL_INTERV, key: 'interventie',width: 6  },
-      { header: IMPORT_KOL_OPM,    key: 'opmerking',  width: 54 },
+      { header: IMPORT_KOL_DIENST, key: 'dienst',      width: 6  },
+      { header: IMPORT_KOL_BESPR,  key: 'bespr',       width: 5  },
+      { header: IMPORT_KOL_INTERV, key: 'interventie', width: 6  },
+      { header: IMPORT_KOL_OPM,    key: 'opmerking',   width: 54 },
+      { header: 'Aantal',          key: 'aantal',      width: 7  },
+      { header: '',                key: 'spacer',      width: 3  },
+      ...FUNCTIE_LETTERS.map(l => ({ header: l, key: `fn_${l}`, width: 4 })),
     ];
 
-    // ---- Header-rij stijl ---------------------------------------------------
+    // ---- Header-rij ---------------------------------------------------------
     const headerRij = ws.getRow(1);
     headerRij.height = 18;
-    ws.columns.forEach((_, ci) => {
-      const cel = headerRij.getCell(ci + 1);
-      cel.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-      cel.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
+    const totalCols = ws.columns.length;
+    for (let ci = 1; ci <= totalCols; ci++) {
+      const cel = headerRij.getCell(ci);
+      // Spacer-kolom (U) en functie-indicatoren krijgen subtielere header
+      const isFunctieKol = ci >= 22;
+      cel.font      = { bold: true, color: { argb: isFunctieKol ? 'FF5F5E5A' : 'FFFFFFFF' }, size: 10 };
+      cel.fill      = { type: 'pattern', pattern: 'solid',
+                        fgColor: { argb: isFunctieKol ? 'FFE8EDF2' : 'FF1F3863' } };
       cel.alignment = { horizontal: 'center', vertical: 'middle' };
-      cel.border    = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
-    });
+      if (!isFunctieKol) {
+        cel.border  = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
+      }
+    }
+    // Header Aantal kolom apart stijlen
+    const aantalHeaderCel = headerRij.getCell(COL_AANTAL);
+    aantalHeaderCel.font  = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    aantalHeaderCel.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
+    aantalHeaderCel.border = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
 
-    // ---- Bevroren rijen/kolommen: rij 1 + kolommen A+B ----------------------
+    // ---- Bevroren rij 1 + kolommen A+B -------------------------------------
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1, topLeftCell: 'C2', activePane: 'bottomRight' }];
 
     // ---- Data-rijen ---------------------------------------------------------
     const DAGEN_NL_KORT = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+    const WEEKEND_FILL  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+    const VK_FILL       = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF99' } }; // lichtgeel V/K
+
+    let excelRij = 2; // rij 1 = header
 
     for (const dag of dagen) {
       const d = new Date(dag.datum + 'T12:00:00');
-      const dagIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+      const dagIdx  = d.getDay() === 0 ? 6 : d.getDay() - 1;
       const isWeekend = dagIdx >= 5;
 
-      // Rij-data opbouwen
-      const rijData = {
-        dag:   DAGEN_NL_KORT[dagIdx],
-        datum: new Date(dag.datum + 'T12:00:00'),
-      };
-      for (const kolHoofd of radKolommen) {
-        const radId = IMPORT_KOLOM_NAAR_RADID[kolHoofd];
-        const codes = dag.toewijzingen?.[radId];
-        rijData[kolHoofd] = Array.isArray(codes) ? codes.join(',') : (codes || '');
-      }
-      rijData.dienst      = dag.dienst?.dag  || '';
-      rijData.bespr       = dag.bespreking   || '';
-      rijData.interventie = dag.interventie  || '';
-      rijData.opmerking   = dag.opmerking    || '';
-
-      const rij = ws.addRow(rijData);
+      const rij = ws.getRow(excelRij);
       rij.height = 15;
 
-      // Datum-cel: opmaak als datum
+      // Dag-cel
+      rij.getCell(1).value = DAGEN_NL_KORT[dagIdx];
+
+      // Datum-cel
       const datumCel = rij.getCell(2);
+      datumCel.value  = new Date(dag.datum + 'T12:00:00');
       datumCel.numFmt = 'DD-MM-YYYY';
       datumCel.alignment = { horizontal: 'left', vertical: 'middle' };
 
-      // Weekend-achtergrond op alle cellen
+      // Weekend-achtergrond basislaag
       if (isWeekend) {
-        rij.eachCell({ includeEmpty: true }, cel => {
-          cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
-        });
+        for (let ci = 1; ci <= totalCols; ci++) {
+          rij.getCell(ci).fill = WEEKEND_FILL;
+        }
       }
 
-      // Radioloog-cellen: kleur per functiecode + optionele cel-opmerking
+      // Radioloog-cellen (kolommen 3–15)
       radKolommen.forEach((kolHoofd, ki) => {
-        const colIdx = 3 + ki; // 1-based: col1=Dag, col2=Datum, col3=eerste rad
-        const cel = rij.getCell(colIdx);
+        const ci  = 3 + ki;
+        const cel = rij.getCell(ci);
         cel.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        const radId = IMPORT_KOLOM_NAAR_RADID[kolHoofd];
-        const codes = dag.toewijzingen?.[radId];
-        const codeStr = Array.isArray(codes) ? codes[0] : (codes || '');
+        const radId   = IMPORT_KOLOM_NAAR_RADID[kolHoofd];
+        const codes   = dag.toewijzingen?.[radId];
+        const codeStr = Array.isArray(codes) ? codes.join(',') : (codes || '');
+        cel.value = codeStr;
 
         if (codeStr) {
-          const letter = hoofdLetter(codeStr);
-          const bg = kleurenMap[letter];
-          if (bg && bg.length === 6) {
-            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg.toUpperCase() } };
-            cel.font = { color: { argb: tekstArgb(bg) } };
+          const firstCode = Array.isArray(codes) ? codes[0] : codes;
+          const letter = hoofdLetter(firstCode || '');
+
+          // V of K → lichtgeel (afwezigheid), overschrijft weekend-grijs
+          if (letter === 'V' || letter === 'K') {
+            cel.fill = VK_FILL;
+            cel.font = { color: { argb: 'FF5A4800' } };
+          } else {
+            const bg = kleurenMap[letter];
+            if (bg && bg.length === 6) {
+              cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg.toUpperCase() } };
+              cel.font = { color: { argb: tekstArgb(bg) } };
+            }
           }
         }
 
-        // Cel-opmerking als Excel note
+        // Cel-opmerking als note
         const opm = dag.cel_opmerkingen?.[radId];
-        if (opm) {
-          cel.note = { texts: [{ text: opm }] };
-        }
+        if (opm) cel.note = { texts: [{ text: opm }] };
       });
+
+      // Dienst / Bespr / Interventie / Opmerking (kolommen 16–19)
+      rij.getCell(16).value = dag.dienst?.dag  || '';
+      rij.getCell(17).value = dag.bespreking   || '';
+      rij.getCell(18).value = dag.interventie  || '';
+      rij.getCell(19).value = dag.opmerking    || '';
+      for (let ci = 16; ci <= 19; ci++) {
+        rij.getCell(ci).alignment = { vertical: 'middle' };
+      }
+
+      // Kolom T (Aantal): formule
+      const aantalCel = rij.getCell(COL_AANTAL);
+      aantalCel.value     = { formula: aantalFormule(excelRij) };
+      aantalCel.alignment = { horizontal: 'center', vertical: 'middle' };
+      aantalCel.font      = { bold: true };
+
+      // Kolommen V–AA: ontbrekende functie-indicatoren
+      FUNCTIE_LETTERS.forEach((letter, li) => {
+        const cel = rij.getCell(COL_FUNCTIES[li]);
+        cel.value     = { formula: ontbrekendFormule(letter, excelRij) };
+        cel.alignment = { horizontal: 'center', vertical: 'middle' };
+        cel.font      = { color: { argb: 'FF888888' }, italic: true, size: 9 };
+        if (isWeekend) cel.fill = WEEKEND_FILL;
+      });
+
+      excelRij++;
     }
+
+    // ---- Conditionele opmaak ------------------------------------------------
+    const dataRef    = `B2:B${excelRij - 1}`;   // datum-kolom
+    const aantalRef  = `T2:T${excelRij - 1}`;   // Aantal-kolom
+    const radRef     = `C2:O${excelRij - 1}`;   // radioloog-cellen
+
+    // 1. Datum rood als bezetting te laag (weekdag + Aantal < norm)
+    ws.addConditionalFormatting({
+      ref: dataRef,
+      rules: [{
+        type: 'expression',
+        formulae: ['AND(T2<IF(WEEKDAY(B2,2)=5,4,5),WEEKDAY(B2,2)<6)'],
+        style: {
+          fill:   { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
+          font:   { color: { argb: 'FF9C0006' }, bold: true },
+        },
+        priority: 1,
+      }],
+    });
+
+    // 2. Aantal-kolom: rood <4, oranje =4, groen ≥5
+    ws.addConditionalFormatting({
+      ref: aantalRef,
+      rules: [
+        {
+          type: 'cellIs', operator: 'greaterThanOrEqual', formulae: [5],
+          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFC6EFCE' } },
+                   font: { color: { argb: 'FF276221' } } },
+          priority: 3,
+        },
+        {
+          type: 'cellIs', operator: 'equal', formulae: [4],
+          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFEB9C' } },
+                   font: { color: { argb: 'FF9C5700' } } },
+          priority: 2,
+        },
+        {
+          type: 'cellIs', operator: 'lessThan', formulae: [4],
+          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
+                   font: { color: { argb: 'FF9C0006' }, bold: true } },
+          priority: 1,
+        },
+      ],
+    });
+
+    // 3. Radioloog-cellen V of K: lichtgeel achtergrond (condformat als extra laag,
+    //    bovenop de statische kleur die al gezet is — voor gebruikers die data aanpassen)
+    ws.addConditionalFormatting({
+      ref: radRef,
+      rules: [{
+        type: 'expression',
+        formulae: ['OR(C2="V",C2="K")'],
+        style: {
+          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF99' } },
+          font: { color: { argb: 'FF5A4800' } },
+        },
+        priority: 1,
+      }],
+    });
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();
