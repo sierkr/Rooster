@@ -312,6 +312,13 @@ export function renderVakView() {
     const vandaagAttr = isVandaag ? 'data-vak-vandaag="1"' : '';
     const dagCell = `<div class="grid-day" style="${dagCellStyle}" ${vandaagAttr}><span>${dagNaamKort}</span><span>${dagNummer}</span></div>`;
 
+    // Bereken rankingnummer per radioloog voor deze dag
+    const dagPosMap = {};
+    if (x && ranking) {
+      const volgorde = rankingVolgordeVoorJaar(ranking, zichtbaarJaarNum);
+      volgorde.forEach((rid, i) => { dagPosMap[rid] = i + 1; });
+    }
+
     const radCells = allKolommen.map((k, i) => {
       const code = vCode(vDataObj[k.id]);
       const sep = (i === rads.length && toonW) ? 'border-left:1px solid rgba(0,0,0,0.15);' : '';
@@ -322,15 +329,19 @@ export function renderVakView() {
       const dataAttr = magKlikken ? `data-vak-cel="${iso}|${k.id}"` : '';
       const cursor = magKlikken ? 'cursor:pointer;' : 'cursor:default;';
 
+      const pos = dagPosMap[k.id];
+      const rankLabel = (x && pos != null)
+        ? `<span style="font-size:13px; font-weight:600; color:${ranking?.kleur || '#555'}; opacity:0.85; margin-left:3px;">${pos}</span>`
+        : '';
+
       if (code) {
         if (code === 'V') {
-          return `<div class="grid-cell f-V" style="${sep} ${eigenMark} ${cursor}" ${dataAttr}>${code}</div>`;
+          return `<div class="grid-cell f-V" style="${sep} ${eigenMark} ${cursor}" ${dataAttr}>${code}${rankLabel}</div>`;
         } else {
-          // Niet-V (K, Z, vrije code) krijgt een gele celkleur, niet de hele rij
-          return `<div class="grid-cell" style="${sep} ${eigenMark} ${cursor} background: #fff3d6; color: #6b5b1a; font-weight: 500;" ${dataAttr}>${code}</div>`;
+          return `<div class="grid-cell" style="${sep} ${eigenMark} ${cursor} background: #fff3d6; color: #6b5b1a; font-weight: 500;" ${dataAttr}>${code}${rankLabel}</div>`;
         }
       } else {
-        return `<div class="grid-cell grid-cell-empty" style="${sep} ${eigenMark} ${rijStyle} ${cursor}" ${dataAttr}>\u00b7</div>`;
+        return `<div class="grid-cell grid-cell-empty" style="${sep} ${eigenMark} ${rijStyle} ${cursor}" ${dataAttr}>${rankLabel || '\u00b7'}</div>`;
       }
     }).join('');
 
@@ -417,12 +428,7 @@ export function renderVakView() {
           ${saldoCells}
           ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
         </div>
-        ${rankingActief ? `<div class="vak-sticky-row vak-rank-row">
-          <div class="vak-rank-label">Rang</div>
-          ${rankingCells}
-          ${toonBeheer ? '<div></div><div></div><div></div><div></div>' : ''}
-        </div>` : ''}
-        <div class="vak-maand-nav" style="top: ${rankingActief ? '82px' : '56px'}; grid-column: 1 / span ${totaalKolommen};">
+        <div class="vak-maand-nav" style="top: 56px; grid-column: 1 / span ${totaalKolommen};">
           <button class="nav-btn" onclick="window.vakNavMaand(-1)" title="Vorige maand">\u2039</button>
           <span class="vak-maand-titel">${MAANDEN[zichtbaarMaandNum].toUpperCase()} ${zichtbaarJaarNum}</span>
           <button class="nav-btn" onclick="window.vakNavMaand(1)" title="Volgende maand">\u203a</button>
@@ -882,7 +888,8 @@ window.openVakRankingEdit = function(naam) {
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field">
       <label class="form-label">Naam (intern, geen spaties)</label>
-      <input type="text" class="input" id="vakRkNaam" value="${bestaand?.naam || ''}" ${naam ? 'readonly style="background:#f5f5f5"' : ''} placeholder="bv. zomer1">
+      <input type="text" class="input" id="vakRkNaam" value="${bestaand?.naam || ''}" placeholder="bv. zomer1">
+      ${naam ? '<div style="font-size:11px; color:#888; margin-top:4px;">Let op: bij naamswijziging worden alle gekoppelde dagen automatisch bijgewerkt.</div>' : ''}
     </div>
     <div class="form-field">
       <label class="form-label">Label</label>
@@ -946,12 +953,33 @@ window.vakOpslaanRanking = async function(origineelNaam) {
   const volgorde = [...items].map(el => el.getAttribute('data-rid'));
 
   try {
-    const docId = origineelNaam || naam;
-    await setDoc(doc(db, 'vakantie_rankings', docId), {
+    const naamGewijzigd = origineelNaam && origineelNaam !== naam;
+
+    // Schrijf het ranking-document (altijd onder de nieuwe naam)
+    await setDoc(doc(db, 'vakantie_rankings', naam), {
       naam, label, kleur,
       anker_jaar: ankerJaar,
       anker_volgorde: volgorde,
     });
+
+    if (naamGewijzigd) {
+      // Update alle indeling-docs die de oude naam als vakantie_rank hebben
+      const dagenTeUpdaten = Object.values(state.indelingMap)
+        .filter(dag => dag?.vakantie_rank === origineelNaam && dag?.datum);
+
+      const BATCH_SIZE = 400;
+      for (let i = 0; i < dagenTeUpdaten.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        dagenTeUpdaten.slice(i, i + BATCH_SIZE).forEach(dag => {
+          batch.update(doc(db, 'indeling', dag.datum), { vakantie_rank: naam });
+        });
+        await batch.commit();
+      }
+
+      // Verwijder het oude ranking-document
+      await deleteDoc(doc(db, 'vakantie_rankings', origineelNaam));
+    }
+
     closeSheet();
   } catch (e) {
     alert('Opslaan mislukt: ' + (e.message || e.code));
