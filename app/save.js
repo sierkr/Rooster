@@ -98,9 +98,17 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
 
     // Wijziging-doc schrijven voor audit-log
     if (isGewijzigd) {
-      // gezien: false — tenzij de beheerder zijn eigen cel wijzigt
-      const eigenCel = state.profiel?.radioloog_id === radId;
+      // De schrijver is altijd een beheerder/secretariaat (radiologen hebben
+      // geen mag_beheer). Een beheerder die toevallig op hetzelfde slot zit
+      // (bijv. W3) wijzigt toch de cel van de betrokken radioloog → altijd
+      // gezien:false als de datum nabij is. Alleen niet als de gebruiker
+      // geen wijzigingsrechten heeft en zijn eigen slot aanpast (onmogelijk
+      // in de huidige UI, maar als veiligheidsnet).
+      const schrijverIsBeheerder = magWijzigen();
       const nabijeDatum = _isDatumNabij(datum);
+      // Markeer als ongelezen als: datum is nabij EN de schrijver is beheerder
+      // (niet de radioloog zelf die per ongeluk zijn eigen slot zou wijzigen)
+      const markeerOngelezen = nabijeDatum && schrijverIsBeheerder;
 
       await addDoc(collection(db, 'wijzigingen'), {
         uid: state.user.uid,
@@ -110,9 +118,7 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
         van: oudeCodesArr,
         naar: codesArr,
         wanneer: serverTimestamp(),
-        // gezien: false alleen als het de betrokken radioloog raakt (niet zijn eigen cel)
-        // en de datum binnen de nabije horizon valt
-        gezien: eigenCel || !nabijeDatum ? true : false,
+        gezien: markeerOngelezen ? false : true,
       });
     }
 
