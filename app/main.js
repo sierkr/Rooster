@@ -1,7 +1,7 @@
 // Entry point van de app. Laadt alle modules in juiste volgorde, registreert
 // algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, doc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, getDoc, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
@@ -310,20 +310,26 @@ function luisterNaarData() {
     render();
   }));
 
-  // Ongelezen wijzigingen: alleen docs waar gezien===false en radioloog_id
-  // overeenkomt met de eigen rad-id van de ingelogde gebruiker.
-  state.unsubscribers.push(onSnapshot(collection(db, 'wijzigingen'), (snap) => {
-    const eigenRadId = state.profiel?.radioloog_id;
-    const vandaag = vandaagIso();
-    state.wijzigingen = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(w =>
-        w.gezien === false &&
-        w.radioloog_id === eigenRadId &&
-        w.datum >= vandaag
-      );
-    render();
-  }));
+  // Ongelezen wijzigingen: gefilterde query op eigen radioloog_id + gezien===false.
+  // Volledige collectie-scan werkt niet: Firestore verwerpt de query zodra er
+  // ook docs zijn die de radioloog niet mag lezen.
+  const eigenRadId = state.profiel?.radioloog_id;
+  if (eigenRadId && !magWijzigen()) {
+    const wijzQuery = query(
+      collection(db, 'wijzigingen'),
+      where('radioloog_id', '==', eigenRadId),
+      where('gezien', '==', false)
+    );
+    state.unsubscribers.push(onSnapshot(wijzQuery, (snap) => {
+      const vandaag = vandaagIso();
+      state.wijzigingen = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(w => w.datum >= vandaag);
+      render();
+    }));
+  } else {
+    state.wijzigingen = [];
+  }
 }
 
 // ==== App starten (na eventuele wachtwoord-wissel) ===========================
