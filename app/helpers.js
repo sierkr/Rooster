@@ -361,3 +361,15 @@ export function valideerWachtwoord(pw) {
   if (pw === STANDAARD_WACHTWOORD) return 'Kies een ander wachtwoord dan het standaard wachtwoord';
   return null; // geldig
 }
+
+// ==== Feestdagen =============================================================
+// Geeft true als de datum een Nederlandse officiële feestdag is.
+// Gebruikt de feestdagen array uit de context-feestdag validatieregel.
+export function isFeestdag(datum) {
+  const regel = state.validatieRegels?.find(r => r.id === 'context-feestdag');
+  if (!regel) return false;
+  // Zoek alle feestdagen_YYYY velden
+  return Object.entries(regel)
+    .filter(([k]) => k.startsWith('feestdagen_'))
+    .some(([, arr]) => Array.isArray(arr) && arr.includes(datum));
+}

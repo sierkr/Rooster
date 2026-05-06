@@ -6,7 +6,7 @@ import {
   radiologenMap, functiesMap, vandaagIso,
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
-  magAlleWensenZien,
+  magAlleWensenZien, isFeestdag,
 } from '../helpers.js';
 import { openSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
@@ -127,6 +127,7 @@ export function renderBehView() {
         ${datums.map(datum => {
           const d = new Date(datum + 'T12:00:00');
           const isVandaag = datum === vandaag;
+          const isFeest = isFeestdag(datum);
           const dagNaamKort = DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1];
           const dagNummer = d.getDate();
           const dagLabel = `<span>${dagNaamKort}</span><span>${dagNummer}</span>`;
@@ -141,7 +142,7 @@ export function renderBehView() {
           }
           const dagOpmMarker = dagOpm ? `<span class="opm-marker" title="${(dagOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
           return `
-            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''}" ${dagOnclick} style="cursor: ${dagCursor}; position: relative; display: flex; justify-content: space-between; align-items: baseline; padding-right: 4px;">${dagLabel}${dagOpmMarker}</div>
+            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''} ${isFeest ? 'feestdag-cel' : ''}" ${dagOnclick} style="cursor: ${dagCursor}; position: relative; display: flex; justify-content: space-between; align-items: baseline; padding-right: 4px;">${dagLabel}${dagOpmMarker}</div>
             ${allKolommen.map((k, i) => {
               const codes = toewijzingVoor(datum, k.id);
               const code1 = codes[0] || '';
