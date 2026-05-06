@@ -85,7 +85,7 @@ export function renderRegView() {
       <div style="font-size: 12px; font-weight: 500; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Functies</div>
       <div class="card" style="padding: 0; overflow: hidden;">
         <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; min-width: 540px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; min-width: 380px;">
             <thead>
               <tr style="background: rgba(0,0,0,0.03); border-bottom: 1px solid rgba(0,0,0,0.08);">
                 <th style="padding: 8px; text-align: left; font-weight: 500; width: 48px;">Code</th>
@@ -135,7 +135,7 @@ function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
         value="${code}" id="fcode-${id}" placeholder="Code">
     </td>
     <td style="padding: 5px 8px;">
-      <input class="input" style="width: 100%; min-width: 100px; font-size: 12px; padding: 3px 5px;"
+      <input class="input" style="width: 100%; min-width: 60px; font-size: 12px; padding: 3px 5px;"
         value="${naam}" id="fnaam-${id}" placeholder="Naam">
     </td>
     <td style="padding: 5px 4px; text-align: center;">
