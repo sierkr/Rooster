@@ -306,7 +306,7 @@ function luisterNaarData() {
 // Voegt alleen CSS-klassen toe voor functies die nog geen .f-X klasse hebben.
 // Bestaande hardcoded kleuren in index.html worden nooit overschreven.
 
-function injecteerNieuweKleuren(functies) {
+window.injecteerNieuweKleuren = function(functies) {
   // Verzamel alle al bestaande .f-* klassen uit de stylesheets
   const bestaand = new Set();
   for (const sheet of document.styleSheets) {

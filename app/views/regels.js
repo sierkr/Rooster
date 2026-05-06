@@ -186,6 +186,7 @@ window.slaFunctieOp = async function(id) {
 
   try {
     await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, actief }, { merge: true });
+    if (window.injecteerNieuweKleuren) window.injecteerNieuweKleuren([...( state.functies || []), { code, naam, kleur }]);
     if (id === 'nieuw') {
       document.getElementById('nieuwe-rij').style.display = 'none';
       document.getElementById('fcode-nieuw').value = '';
