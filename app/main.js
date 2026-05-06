@@ -307,27 +307,6 @@ function luisterNaarData() {
 // Bestaande hardcoded kleuren in index.html worden nooit overschreven.
 
 window.injecteerNieuweKleuren = function(functies) {
-  // Verzamel alle al bestaande .f-* klassen uit de stylesheets
-  const bestaand = new Set();
-  for (const sheet of document.styleSheets) {
-    try {
-      for (const rule of sheet.cssRules || []) {
-        const m = rule.selectorText?.match(/^\.f-(\w+)$/);
-        if (m) bestaand.add(m[1]);
-      }
-    } catch (_) {} // cross-origin sheets
-  }
-
-  // Genereer alleen klassen voor hoofdfuncties zonder bestaande klasse
-  const nieuw = functies.filter(f => {
-    const code = f.code || f.id || '';
-    if (!code || !f.kleur) return false;
-    if (code.startsWith('.') || code.startsWith('YY') || /^\d/.test(code)) return false;
-    return !bestaand.has(code);
-  });
-
-  if (nieuw.length === 0) return;
-
   let styleEl = document.getElementById('functie-kleuren-extra');
   if (!styleEl) {
     styleEl = document.createElement('style');
@@ -335,18 +314,32 @@ window.injecteerNieuweKleuren = function(functies) {
     document.head.appendChild(styleEl);
   }
 
-  const regels = nieuw.map(f => {
-    const hex = f.kleur.replace('#', '');
-    const r = parseInt(hex.slice(0,2), 16);
-    const g = parseInt(hex.slice(2,4), 16);
-    const b = parseInt(hex.slice(4,6), 16);
-    const bg   = `rgba(${r},${g},${b},0.18)`;
-    const tekst = `rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},1)`;
-    return `.f-${f.code || f.id} { background: ${bg}; color: ${tekst}; }`;
-  });
+  const regels = (functies || [])
+    .filter(f => f.kleur && (f.code || f.id))
+    .map(f => {
+      const code = f.code || f.id;
+      const hex = f.kleur.replace('#', '');
+      if (hex.length !== 6) return '';
+      const r = parseInt(hex.slice(0,2), 16);
+      const g = parseInt(hex.slice(2,4), 16);
+      const b = parseInt(hex.slice(4,6), 16);
+      const bg   = `rgba(${r},${g},${b},0.18)`;
+      const tekst = `rgba(${Math.round(r*0.35)},${Math.round(g*0.35)},${Math.round(b*0.35)},1)`;
+      return `.f-${code} { background: ${bg}; color: ${tekst}; }`;
+    })
+    .filter(Boolean);
 
-  styleEl.textContent = regels.join('\n');
-}
+  // Dedupliceer — laatste wint
+  const gezien = new Set();
+  const uniek = [];
+  for (const r of regels) {
+    const cls = r.match(/\.f-\S+/)?.[0];
+    if (cls && !gezien.has(cls)) { gezien.add(cls); uniek.push(r); }
+  }
+
+  styleEl.textContent = uniek.join('\n');
+};
+
 
 function startApp() {
   document.getElementById('login').style.display = 'none';
