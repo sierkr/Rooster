@@ -1,8 +1,14 @@
-// Regels-view: validatieregels aan/uit, ernst, telcode-instellingen.
-import { doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+// Regels-view: validatieregels aan/uit, ernst, en functies-matrix.
+import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
 import { functiesMap, magGebruikersBeheren } from '../helpers.js';
+
+// Hoofdfuncties filter
+const isHoofd = f => {
+  const c = f.code || f.id || '';
+  return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3;
+};
 
 export function renderRegView() {
   const container = document.getElementById('view-reg');
@@ -10,7 +16,6 @@ export function renderRegView() {
 
   const regels = state.validatieRegels;
   const groepen = {
-    bezetting: regels.filter(r => r.type === 'bezetting'),
     conflict:  regels.filter(r => r.type === 'conflict'),
     context:   regels.filter(r => r.type === 'context'),
     uniciteit: regels.filter(r => r.type === 'uniciteit'),
@@ -18,7 +23,6 @@ export function renderRegView() {
     wens:      regels.filter(r => r.type === 'wens'),
   };
   const groepLabels = {
-    bezetting: 'Bezetting (uit Excel)',
     conflict:  'Conflicten',
     context:   'Context (weekend, feestdag)',
     uniciteit: 'Uniciteit',
@@ -26,11 +30,20 @@ export function renderRegView() {
     wens:      'Wensen',
   };
 
+  const actieveRegels = regels.filter(r => r.type !== 'bezetting');
+  const bezetting = regels.filter(r => r.type === 'bezetting');
+
   let html = `
     <div class="card">
       <p style="font-size: 17px; font-weight: 500; margin: 0;">Validatie-regels</p>
-      <p class="muted" style="margin: 2px 0 0;">${regels.length} regels actief: ${regels.filter(r=>r.actief!==false).length}</p>
+      <p class="muted" style="margin: 2px 0 0;">${actieveRegels.length} regels actief: ${actieveRegels.filter(r => r.actief !== false).length}</p>
       <p class="muted" style="margin: 8px 0 0; font-size: 12px;">Tik op de pillen om strengheid aan te passen, of de schakelaar om een regel uit/aan te zetten.</p>
+      ${bezetting.length > 0 ? `
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center;">
+          <span class="muted" style="font-size: 12px;">${bezetting.length} verouderde bezettingsregels</span>
+          <button class="btn" style="font-size: 12px; color: #501313;" onclick="window.verwijderBezettingRegels()">Verwijderen</button>
+        </div>
+      ` : ''}
     </div>
   `;
 
@@ -59,49 +72,47 @@ export function renderRegView() {
     html += `</div>`;
   });
 
-  // Sectie: telt mee voor dagteller
-  const alleCodes = ['W','B','E','M','D','O','S','A','R','V','Z','K','T','X'];
-  const huidigeCodes = window.TELLEN_CODES || ['B','E','M','D','O','S','W'];
-  html += `
-    <div style="margin-top: 1.5rem;">
-      <div style="font-size: 12px; font-weight: 500; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Telt mee voor dagteller</div>
-      <div class="card">
-        <p class="muted" style="margin: 0 0 10px;">Welke functies tellen mee voor de teller-kolom in het beheer-raster (zichtbaar als W-slots aanstaan).</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-          ${alleCodes.map(c => {
-            const aan = huidigeCodes.includes(c);
-            const f = functiesMap()[c];
-            const naam = f ? f.naam.split('/')[0] : c;
-            return `<label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: ${aan ? '#e1f5ee' : 'rgba(0,0,0,0.04)'}; cursor: pointer; font-size: 13px;">
-              <input type="checkbox" id="tel_${c}" ${aan ? 'checked' : ''}>
-              <span><b>${c}</b> ${naam}</span>
-            </label>`;
-          }).join('')}
-        </div>
-        <button class="btn btn-primary" style="width: 100%; margin-top: 12px;" onclick="window.opslaanTellenCodes()">Opslaan</button>
-      </div>
-    </div>
-  `;
+  // ==== Functies-matrix ====================================================
+  const telCodes = window.TELLEN_CODES   || ['B','E','M','D','O','S','W'];
+  const mtsCodes = window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X'];
 
-  // Sectie: telt mee voor Maatschapsdagen
-  const mtsHuidig = window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X'];
+  const functies = (state.functies || [])
+    .filter(isHoofd)
+    .sort((a, b) => (a.volgorde || 99) - (b.volgorde || 99));
+
   html += `
     <div style="margin-top: 1.5rem;">
-      <div style="font-size: 12px; font-weight: 500; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Telt mee voor maatschapsdagen</div>
-      <div class="card">
-        <p class="muted" style="margin: 0 0 10px;">Welke hoofdfuncties meegeteld worden in de Maatschapsdagen-rij in de Activiteit-tab. Varianten van een hoofdletter (bv. .WB, 5W) tellen automatisch mee als de hoofdletter aan staat.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-          ${alleCodes.map(c => {
-            const aan = mtsHuidig.includes(c);
-            const f = functiesMap()[c];
-            const naam = f ? f.naam.split('/')[0] : c;
-            return `<label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: ${aan ? '#e1f5ee' : 'rgba(0,0,0,0.04)'}; cursor: pointer; font-size: 13px;">
-              <input type="checkbox" id="mts_${c}" ${aan ? 'checked' : ''}>
-              <span><b>${c}</b> ${naam}</span>
-            </label>`;
-          }).join('')}
+      <div style="font-size: 12px; font-weight: 500; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Functies</div>
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; min-width: 540px;">
+            <thead>
+              <tr style="background: rgba(0,0,0,0.03); border-bottom: 1px solid rgba(0,0,0,0.08);">
+                <th style="padding: 8px; text-align: left; font-weight: 500; width: 48px;">Code</th>
+                <th style="padding: 8px; text-align: left; font-weight: 500;">Naam</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 36px;" title="Kleur">🎨</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Dag-<br>teller</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Maat-<br>schaps</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Werk-<br>vloer</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Actief</th>
+                <th style="padding: 8px 4px; width: 28px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${functies.map(f => {
+                const id = f.code || f.id;
+                return `<tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">${rijCellen(f, id, telCodes, mtsCodes, false)}</tr>`;
+              }).join('')}
+              <tr id="nieuwe-rij" style="display: none; background: rgba(44,130,210,0.04); border-top: 2px dashed rgba(0,0,0,0.1);">
+                ${rijCellen({ code:'', naam:'', kleur:'#cccccc', werkvloer:false, actief:true }, 'nieuw', [], [], true)}
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <button class="btn btn-primary" style="width: 100%; margin-top: 12px;" onclick="window.opslaanMtsdagenCodes()">Opslaan</button>
+        <div style="padding: 8px 12px; border-top: 1px solid rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <button class="btn" style="font-size: 12px;" onclick="window.toonNieuweRij()">+ Nieuwe functie</button>
+          <button class="btn btn-primary" onclick="window.opslaanAlleCheckboxes()">Opslaan</button>
+        </div>
       </div>
     </div>
   `;
@@ -109,27 +120,121 @@ export function renderRegView() {
   container.innerHTML = html;
 }
 
+function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
+  const code      = f.code || f.id || '';
+  const naam      = f.naam || '';
+  const kleur     = f.kleur || '#cccccc';
+  const isTel     = telCodes.includes(code);
+  const isMts     = mtsCodes.includes(code);
+  const isWerk    = f.werkvloer || false;
+  const isActief  = f.actief !== false;
+
+  return `
+    <td style="padding: 5px 8px;">
+      <input class="input" style="width: 42px; font-size: 12px; padding: 3px 5px; font-family: monospace; font-weight: 600;"
+        value="${code}" id="fcode-${id}" placeholder="Code">
+    </td>
+    <td style="padding: 5px 8px;">
+      <input class="input" style="width: 100%; min-width: 100px; font-size: 12px; padding: 3px 5px;"
+        value="${naam}" id="fnaam-${id}" placeholder="Naam">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="color" style="width: 28px; height: 22px; border: none; border-radius: 3px; cursor: pointer; padding: 1px;"
+        value="${kleur}" id="fkleur-${id}">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="checkbox" id="ftel-${id}" ${isTel ? 'checked' : ''} style="width: 15px; height: 15px;">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="checkbox" id="fmts-${id}" ${isMts ? 'checked' : ''} style="width: 15px; height: 15px;">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="checkbox" id="fwerkvloer-${id}" ${isWerk ? 'checked' : ''} style="width: 15px; height: 15px;">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="checkbox" id="factief-${id}" ${isActief ? 'checked' : ''} style="width: 15px; height: 15px;">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      ${isNieuw
+        ? `<button style="background:none;border:none;font-size:14px;cursor:pointer;color:#2a8;padding:2px;" onclick="window.slaFunctieOp('nieuw')" title="Toevoegen">➕</button>`
+        : `<button style="background:none;border:none;font-size:14px;cursor:pointer;color:#c44;padding:2px;" onclick="window.verwijderFunctie('${id}')" title="Verwijderen">🗑</button>`
+      }
+    </td>
+  `;
+}
+
 // ==== Handlers ===============================================================
 
-window.opslaanTellenCodes = async function() {
-  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K','T','X'].filter(c =>
-    document.getElementById('tel_' + c)?.checked
-  );
+window.toonNieuweRij = function() {
+  const rij = document.getElementById('nieuwe-rij');
+  if (rij) rij.style.display = '';
+  document.getElementById('fcode-nieuw')?.focus();
+};
+
+window.slaFunctieOp = async function(id) {
+  const code     = document.getElementById(`fcode-${id}`)?.value?.trim();
+  const naam     = document.getElementById(`fnaam-${id}`)?.value?.trim();
+  const kleur    = document.getElementById(`fkleur-${id}`)?.value || '#cccccc';
+  const werkvloer = document.getElementById(`fwerkvloer-${id}`)?.checked || false;
+  const actief   = document.getElementById(`factief-${id}`)?.checked !== false;
+
+  if (!code) { alert('Code is verplicht.'); return; }
+  if (!naam)  { alert('Naam is verplicht.'); return; }
+
+  const bestaatAl = (state.functies || []).some(f => (f.code || f.id) === code);
+  if (bestaatAl && id === 'nieuw') { alert(`Code "${code}" bestaat al.`); return; }
+
   try {
-    await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: codes }, { merge: true });
-    alert('Opgeslagen.');
+    await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, actief }, { merge: true });
+    if (id === 'nieuw') {
+      document.getElementById('nieuwe-rij').style.display = 'none';
+      document.getElementById('fcode-nieuw').value = '';
+      document.getElementById('fnaam-nieuw').value = '';
+      document.getElementById('fkleur-nieuw').value = '#cccccc';
+    }
   } catch (e) {
-    alert('Mislukt: ' + e.message);
+    alert('Opslaan mislukt: ' + e.message);
   }
 };
 
-window.opslaanMtsdagenCodes = async function() {
-  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K','T','X'].filter(c =>
-    document.getElementById('mts_' + c)?.checked
-  );
+window.verwijderFunctie = async function(id) {
+  if (!confirm(`Functie "${id}" verwijderen?`)) return;
   try {
-    await setDoc(doc(db, 'instellingen', 'algemeen'), { mtsdagen_codes: codes }, { merge: true });
-    alert('Maatschapsdagen-codes opgeslagen.');
+    await deleteDoc(doc(db, 'functies', id));
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + e.message);
+  }
+};
+
+window.opslaanAlleCheckboxes = async function() {
+  const functies = (state.functies || []).filter(isHoofd);
+  const telCodes = [];
+  const mtsCodes = [];
+
+  try {
+    await Promise.all(functies.map(async f => {
+      const id        = f.code || f.id;
+      const naam      = document.getElementById(`fnaam-${id}`)?.value?.trim() || f.naam;
+      const kleur     = document.getElementById(`fkleur-${id}`)?.value || f.kleur;
+      const werkvloer = document.getElementById(`fwerkvloer-${id}`)?.checked || false;
+      const actief    = document.getElementById(`factief-${id}`)?.checked !== false;
+      if (document.getElementById(`ftel-${id}`)?.checked) telCodes.push(id);
+      if (document.getElementById(`fmts-${id}`)?.checked) mtsCodes.push(id);
+      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, actief }, { merge: true });
+    }));
+    await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: telCodes, mtsdagen_codes: mtsCodes }, { merge: true });
+    alert('Opgeslagen.');
+  } catch (e) {
+    alert('Opslaan mislukt: ' + e.message);
+  }
+};
+
+window.verwijderBezettingRegels = async function() {
+  const bezetting = state.validatieRegels.filter(r => r.type === 'bezetting');
+  if (!confirm(`${bezetting.length} bezettingsregels permanent verwijderen?`)) return;
+  try {
+    await Promise.all(bezetting.map(r => deleteDoc(doc(db, 'validatie_regels', r.id))));
+    alert(`${bezetting.length} bezettingsregels verwijderd.`);
   } catch (e) {
     alert('Mislukt: ' + e.message);
   }
