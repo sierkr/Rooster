@@ -246,6 +246,9 @@ async function laadProfiel(uid) {
 }
 
 function luisterNaarData() {
+  // render() mag pas lopen als functies geladen zijn (kleuren nodig voor weergave)
+  let functiesGeladen = false;
+
   state.unsubscribers.push(onSnapshot(collection(db, 'radiologen'), (snap) => {
     state.radiologen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!state.huidigeRadId) {
@@ -253,12 +256,13 @@ function luisterNaarData() {
         ? state.profiel.radioloog_id
         : VASTE_RAD_IDS[0];
     }
-    render();
+    if (functiesGeladen) render();
   }));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'functies'), (snap) => {
     state.functies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    injecteerNieuweKleuren(state.functies);
+    window.injecteerNieuweKleuren(state.functies);
+    functiesGeladen = true;
     render();
   }));
 
