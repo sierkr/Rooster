@@ -330,7 +330,7 @@ export function functieFlags(code) {
   const f = functiesMap()[code];
   const def = defaultFunctieFlags(code);
   return {
-    werkvloer: f?.werkvloer === true ? true : def.werkvloer,
+    werkvloer: f?.werkvloer_manual === true ? f.werkvloer : def.werkvloer,
     werkdag:   f?.werkdag   === true ? true : def.werkdag,
   };
 }

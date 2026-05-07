@@ -180,7 +180,7 @@ window.slaFunctieOp = async function(id) {
   if (bestaatAl && id === 'nieuw') { alert(`Code "${code}" bestaat al.`); return; }
 
   try {
-    await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, actief }, { merge: true });
+    await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, werkvloer_manual: true, actief }, { merge: true });
     if (window.injecteerNieuweKleuren) window.injecteerNieuweKleuren([...( state.functies || []), { code, naam, kleur }]);
     if (id === 'nieuw') {
       document.getElementById('nieuwe-rij').style.display = 'none';
@@ -216,7 +216,7 @@ window.opslaanAlleCheckboxes = async function() {
       const actief    = document.getElementById(`factief-${id}`)?.checked !== false;
       if (document.getElementById(`ftel-${id}`)?.checked) telCodes.push(id);
       if (document.getElementById(`fmts-${id}`)?.checked) mtsCodes.push(id);
-      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, actief }, { merge: true });
+      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, werkvloer_manual: true, actief }, { merge: true });
     }));
     await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: telCodes, mtsdagen_codes: mtsCodes }, { merge: true });
     alert('Opgeslagen.');
