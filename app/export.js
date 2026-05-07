@@ -354,6 +354,7 @@ export async function actExportJaar(jaar) {
     //    bovenop de statische kleur die al gezet is — voor gebruikers die data aanpassen)
     ws.addConditionalFormatting({
       ref: radRef,
+      rules: [{
         type: 'expression',
         formulae: ['OR(C2="V",C2="K")'],
         style: {
