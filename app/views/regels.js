@@ -2,7 +2,7 @@
 import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
-import { functiesMap, magGebruikersBeheren, isHoofd } from '../helpers.js';
+import { functiesMap, magGebruikersBeheren, isHoofd, functieFlags } from '../helpers.js';
 
 
 export function renderRegView() {
@@ -121,7 +121,7 @@ function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
   const kleur     = f.kleur || '#cccccc';
   const isTel     = telCodes.includes(code);
   const isMts     = mtsCodes.includes(code);
-  const isWerk    = f.werkvloer || false;
+  const isWerk    = functieFlags(code).werkvloer;
   const isActief  = f.actief !== false;
 
   return `

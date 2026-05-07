@@ -23,6 +23,7 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { db } from './firebase-init.js';
 import { state } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
+import { isHoofd, functieFlags } from './helpers.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -67,9 +68,9 @@ function telLetterFormule(letter, range) {
 }
 
 // Formule voor kolom T (werkvloerbezetting): som van W+B+E+M+D+O+S per rij
-function aantalFormule(rij) {
+function aantalFormule(rij, letters) {
   const range = `C${rij}:O${rij}`;
-  const letters = ['W', 'B', 'E', 'M', 'D', 'O', 'S'];
+  if (!letters || letters.length === 0) return '=0';
   return '=' + letters.map(l => telLetterFormule(l, range)).join('+');
 }
 
@@ -132,12 +133,15 @@ export async function actExportJaar(jaar) {
 
     const kleurenMap = bouwKleurenMap();
     const radKolommen = Object.keys(IMPORT_KOLOM_NAAR_RADID);
-    // Vaste kolom-indices (1-based in ExcelJS):
+    // Kolom-indices (1-based in ExcelJS):
     // 1=Dag, 2=Datum, 3..15=radiologen, 16=Dienst, 17=Bespr, 18=Interv, 19=Opm
-    // 20=Aantal(T), 21=spacer(U), 22=W(V), 23=B(W), 24=E(X), 25=M(Y), 26=D(Z), 27=O(AA)
+    // 20=Aantal(T), 21=spacer(U), 22..N=werkvloer-indicatoren (dynamisch)
     const COL_AANTAL   = 20;
-    const COL_FUNCTIES = [22, 23, 24, 25, 26, 27]; // V–AA: W,B,E,M,D,O
-    const FUNCTIE_LETTERS = ['W', 'B', 'E', 'M', 'D', 'O'];
+    const FUNCTIE_LETTERS = (state.functies || [])
+      .filter(f => isHoofd(f) && functieFlags(f.code || f.id).werkvloer)
+      .map(f => (f.code || f.id).toUpperCase())
+      .sort();
+    const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => 22 + i);
 
     // ---- Werkboek + werkblad ------------------------------------------------
     const wb = new ExcelJS.Workbook();
@@ -260,7 +264,7 @@ export async function actExportJaar(jaar) {
 
       // Kolom T (Aantal): formule
       const aantalCel = rij.getCell(COL_AANTAL);
-      aantalCel.value     = { formula: aantalFormule(excelRij) };
+      aantalCel.value     = { formula: aantalFormule(excelRij, FUNCTIE_LETTERS) };
       aantalCel.alignment = { horizontal: 'center', vertical: 'middle' };
       aantalCel.font      = { bold: true };
 
