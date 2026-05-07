@@ -354,5 +354,22 @@ export async function actExportJaar(jaar) {
     //    bovenop de statische kleur die al gezet is — voor gebruikers die data aanpassen)
     ws.addConditionalFormatting({
       ref: radRef,
-      rules: [{
-        type: 'expressi
+        type: 'expression',
+        formulae: ['OR(C2="V",C2="K")'],
+        style: {
+          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF99' } },
+          font: { color: { argb: 'FF5A4800' } },
+        },
+        priority: 1,
+      }],
+    });
+
+    // ---- Downloaden ---------------------------------------------------------
+    const buffer = await wb.xlsx.writeBuffer();
+    downloadBlob(buffer, `Indeling_${jaar}.xlsx`);
+
+  } catch (e) {
+    console.error('actExportJaar', e);
+    alert('Export mislukt:\n\n' + (e.message || e));
+  }
+}
