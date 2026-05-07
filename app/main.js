@@ -160,10 +160,11 @@ window.springNaarBeheer = function(datum) {
 
 window.toonGebruikerSheet = function() {
   const p = state.profiel;
-  document.getElementById('sheetTitle').textContent = p.email;
+  const voornaam = p.naam?.split('.')[0] || p.email?.split('@')[0]?.split('.')[0] || '?';
+  document.getElementById('sheetTitle').textContent = voornaam;
   document.getElementById('sheetSub').textContent = `Ingelogd als ${p.rol}`;
   document.getElementById('sheetBody').innerHTML = `
-    <div class="summary"><div class="summary-label">Account</div><div class="summary-text">${p.email}</div></div>
+    <div class="summary"><div class="summary-label">Account</div><div class="summary-text">${voornaam}</div></div>
     <div class="summary"><div class="summary-label">Rol</div><div class="summary-text">${p.rol}</div></div>
     ${p.radioloog_id ? `<div class="summary"><div class="summary-label">Gekoppeld als radioloog</div><div class="summary-text">${p.radioloog_id}</div></div>` : ''}
     <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.doLogout()">Uitloggen</button>
@@ -218,7 +219,7 @@ function renderUserChip() {
   if (!el || !state.profiel) return;
   const p = state.profiel;
   const rad = p.radioloog_id ? radiologenMap()[p.radioloog_id] : null;
-  const naam = rad ? rad.code : (p.email?.split('@')[0] || '?');
+  const naam = rad ? rad.code : (p.naam?.split('.')[0] || p.email?.split('@')[0]?.split('.')[0] || '?');
   el.textContent = `${naam} · ${p.rol}`;
 }
 
