@@ -2,12 +2,32 @@
 import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
-import { functiesMap, magGebruikersBeheren, isHoofd, functieFlags } from '../helpers.js';
+import { functiesMap, defaultFunctieFlags, magGebruikersBeheren, isHoofd, functieFlags } from '../helpers.js';
 
+
+// Eenmalige migratie: corrigeer werkvloer-waarden die door oude code fout zijn opgeslagen.
+// Draait één keer; daarna is de vlag gezet in Firestore en slaan we de functie over.
+async function migrateerWerkvloer() {
+  if (state.instellingen?.werkvloer_migratie_v1) return;
+  const fixes = (state.functies || [])
+    .filter(f => {
+      const code = f.code || f.id;
+      const def  = defaultFunctieFlags(code);
+      // Alleen corrigeren als de standaard 'true' is maar Firestore 'false' bevat (oude bug)
+      return def.werkvloer === true && f.werkvloer !== true;
+    })
+    .map(f => {
+      const code = f.code || f.id;
+      return setDoc(doc(db, 'functies', code), { werkvloer: true }, { merge: true });
+    });
+  fixes.push(setDoc(doc(db, 'instellingen', 'algemeen'), { werkvloer_migratie_v1: true }, { merge: true }));
+  await Promise.all(fixes);
+}
 
 export function renderRegView() {
   const container = document.getElementById('view-reg');
   if (!magGebruikersBeheren()) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
+  migrateerWerkvloer().catch(console.error);
 
   const regels = state.validatieRegels;
   const groepen = {
@@ -180,7 +200,7 @@ window.slaFunctieOp = async function(id) {
   if (bestaatAl && id === 'nieuw') { alert(`Code "${code}" bestaat al.`); return; }
 
   try {
-    await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, werkvloer_manual: true, actief }, { merge: true });
+    await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, actief }, { merge: true });
     if (window.injecteerNieuweKleuren) window.injecteerNieuweKleuren([...( state.functies || []), { code, naam, kleur }]);
     if (id === 'nieuw') {
       document.getElementById('nieuwe-rij').style.display = 'none';
@@ -216,7 +236,7 @@ window.opslaanAlleCheckboxes = async function() {
       const actief    = document.getElementById(`factief-${id}`)?.checked !== false;
       if (document.getElementById(`ftel-${id}`)?.checked) telCodes.push(id);
       if (document.getElementById(`fmts-${id}`)?.checked) mtsCodes.push(id);
-      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, werkvloer_manual: true, actief }, { merge: true });
+      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, actief }, { merge: true });
     }));
     await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: telCodes, mtsdagen_codes: mtsCodes }, { merge: true });
     alert('Opgeslagen.');
@@ -226,30 +246,4 @@ window.opslaanAlleCheckboxes = async function() {
 };
 
 window.verwijderBezettingRegels = async function() {
-  const bezetting = state.validatieRegels.filter(r => r.type === 'bezetting');
-  if (!confirm(`${bezetting.length} bezettingsregels permanent verwijderen?`)) return;
-  try {
-    await Promise.all(bezetting.map(r => deleteDoc(doc(db, 'validatie_regels', r.id))));
-    alert(`${bezetting.length} bezettingsregels verwijderd.`);
-  } catch (e) {
-    alert('Mislukt: ' + e.message);
-  }
-};
-
-window.regelToggle = async function(regelId) {
-  const r = state.validatieRegels.find(x => x.id === regelId);
-  if (!r) return;
-  try {
-    await updateDoc(doc(db, 'validatie_regels', regelId), { actief: r.actief === false });
-  } catch (e) {
-    alert('Kan regel niet wijzigen: ' + e.message);
-  }
-};
-
-window.regelErnst = async function(regelId, nieuwErnst) {
-  try {
-    await updateDoc(doc(db, 'validatie_regels', regelId), { ernst: nieuwErnst });
-  } catch (e) {
-    alert('Kan regel niet wijzigen: ' + e.message);
-  }
-};
+  cons
