@@ -885,4 +885,19 @@ window.verwijderOudeGegevens = async function() {
     if (!wensenSnap.empty) {
       const docs = wensenSnap.docs;
       for (let i = 0; i < docs.length; i += 400) {
-        const b
+        const batch = writeBatch(db);
+        docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        totaal += Math.min(400, docs.length - i);
+      }
+    }
+
+    if (totaal === 0) {
+      alert('Geen gegevens gevonden ouder dan 2 jaar.');
+    } else {
+      alert(`${totaal} document(en) verwijderd (indeling + wensen vóór ${formatDatum(grensdatum, 'kort')}).`);
+    }
+  } catch (e) {
+    alert('Mislukt: ' + e.message);
+  }
+};
