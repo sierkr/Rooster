@@ -23,7 +23,7 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { db } from './firebase-init.js';
 import { state } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
-import { isHoofd, functieFlags } from './helpers.js';
+import { isHoofd, functieFlags, kolomNaarRadId } from './helpers.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -80,6 +80,13 @@ function ontbrekendFormule(letter, rij) {
   return `=IF(${telLetterFormule(letter, range)}=0,"${letter}","")`;
 }
 
+// Converteert 1-based kolomnummer naar Excel-letter (bijv. 20 → 'T')
+function kolLetter(n) {
+  let s = '';
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
 // ---- ExcelJS laden ----------------------------------------------------------
 let _excelJsPromise = null;
 function laadExcelJS() {
@@ -132,16 +139,27 @@ export async function actExportJaar(jaar) {
     }
 
     const kleurenMap = bouwKleurenMap();
-    const radKolommen = Object.keys(IMPORT_KOLOM_NAAR_RADID);
+    const VASTE_VOLGORDE = ['L','P','V','F','K','H','S','J','W5','W4','W3','W2','W1'];
+    const dynKolomMap = Object.keys(kolomNaarRadId()).length > 0
+      ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
+    const radKolommen = Object.keys(dynKolomMap).sort((a, b) => {
+      const ia = VASTE_VOLGORDE.indexOf(dynKolomMap[a]);
+      const ib = VASTE_VOLGORDE.indexOf(dynKolomMap[b]);
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a.localeCompare(b);
+    });
     // Kolom-indices (1-based in ExcelJS):
     // 1=Dag, 2=Datum, 3..15=radiologen, 16=Dienst, 17=Bespr, 18=Interv, 19=Opm
     // 20=Aantal(T), 21=spacer(U), 22..N=werkvloer-indicatoren (dynamisch)
-    const COL_AANTAL   = 20;
+    // 1=Dag, 2=Datum, 3..(2+n)=rads, (3+n)..(6+n)=Dienst/Bespr/Interv/Opm, (7+n)=Aantal, (8+n)=Spacer
+    const COL_AANTAL   = 2 + radKolommen.length + 5;
     const FUNCTIE_LETTERS = (state.functies || [])
       .filter(f => isHoofd(f) && functieFlags(f.code || f.id).werkvloer)
       .map(f => (f.code || f.id).toUpperCase())
       .sort();
-    const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => 22 + i);
+    const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => COL_AANTAL + 2 + i);
 
     // ---- Werkboek + werkblad ------------------------------------------------
     const wb = new ExcelJS.Workbook();
@@ -171,7 +189,7 @@ export async function actExportJaar(jaar) {
     for (let ci = 1; ci <= totalCols; ci++) {
       const cel = headerRij.getCell(ci);
       // Spacer-kolom (U) en functie-indicatoren krijgen subtielere header
-      const isFunctieKol = ci >= 22;
+      const isFunctieKol = ci >= COL_AANTAL + 2;
       cel.font      = { bold: true, color: { argb: isFunctieKol ? 'FF5F5E5A' : 'FFFFFFFF' }, size: 10 };
       cel.fill      = { type: 'pattern', pattern: 'solid',
                         fgColor: { argb: isFunctieKol ? 'FFE8EDF2' : 'FF1F3863' } };
@@ -226,7 +244,7 @@ export async function actExportJaar(jaar) {
         const cel = rij.getCell(ci);
         cel.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        const radId   = IMPORT_KOLOM_NAAR_RADID[kolHoofd];
+        const radId   = dynKolomMap[kolHoofd];
         const codes   = dag.toewijzingen?.[radId];
         const codeStr = Array.isArray(codes) ? codes.join(',') : (codes || '');
         cel.value = codeStr;
@@ -281,16 +299,18 @@ export async function actExportJaar(jaar) {
     }
 
     // ---- Conditionele opmaak ------------------------------------------------
-    const dataRef    = `B2:B${excelRij - 1}`;   // datum-kolom
-    const aantalRef  = `T2:T${excelRij - 1}`;   // Aantal-kolom
-    const radRef     = `C2:O${excelRij - 1}`;   // radioloog-cellen
+    const dataRef    = `B2:B${excelRij - 1}`;
+    const aantalLetter = kolLetter(COL_AANTAL);
+    const aantalRef  = `${aantalLetter}2:${aantalLetter}${excelRij - 1}`;
+    const radEindLetter = kolLetter(2 + radKolommen.length);
+    const radRef     = `C2:${radEindLetter}${excelRij - 1}`;
 
     // 1. Datum rood als bezetting te laag (weekdag + Aantal < norm)
     ws.addConditionalFormatting({
       ref: dataRef,
       rules: [{
         type: 'expression',
-        formulae: ['AND(T2<IF(WEEKDAY(B2,2)=5,4,5),WEEKDAY(B2,2)<6)'],
+        formulae: [`AND(${aantalLetter}2<IF(WEEKDAY(B2,2)=5,4,5),WEEKDAY(B2,2)<6)`],
         style: {
           fill:   { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
           font:   { color: { argb: 'FF9C0006' }, bold: true },

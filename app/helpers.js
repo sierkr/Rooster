@@ -60,6 +60,14 @@ export function radiologenMap() {
 export function functiesMap() {
   return Object.fromEntries(state.functies.map(f => [f.id, f]));
 }
+export function kolomNaarRadId() {
+  const map = {};
+  (state.radiologen || []).forEach(r => {
+    const header = r.code || r.id;
+    if (header) map[header] = r.id;
+  });
+  return map;
+}
 export function isHoofd(f) {
   const c = f.code || f.id || '';
   return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3;

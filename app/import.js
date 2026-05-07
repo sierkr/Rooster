@@ -9,7 +9,7 @@
 import { doc, writeBatch, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode, vandaagIso, plusDagen } from './helpers.js';
+import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode, vandaagIso, plusDagen, kolomNaarRadId } from './helpers.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
 const NABIJ_DAGEN = 30;
@@ -152,10 +152,13 @@ export async function actImportFile(input, renderGebView) {
     const XLSX = await laadSheetJS();
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { cellComments: true, cellDates: true });
-    if (!wb.Sheets[IMPORT_SHEET]) {
-      throw new Error(`Sheet '${IMPORT_SHEET}' niet gevonden. Aanwezig: ${wb.SheetNames.join(', ')}`);
+    const sheetNaam = state.importJaar
+      ? IMPORT_SHEET.replace(/\d{4}/, state.importJaar)
+      : (wb.SheetNames.find(n => /^Indeling \d{4}$/.test(n)) || IMPORT_SHEET);
+    if (!wb.Sheets[sheetNaam]) {
+      throw new Error(`Sheet '${sheetNaam}' niet gevonden. Aanwezig: ${wb.SheetNames.join(', ')}`);
     }
-    const ws = wb.Sheets[IMPORT_SHEET];
+    const ws = wb.Sheets[sheetNaam];
     const ref = ws['!ref'];
     const range = XLSX.utils.decode_range(ref);
 
@@ -171,14 +174,25 @@ export async function actImportFile(input, renderGebView) {
     for (let c = 2; c <= range.e.c; c++) {
       const headerVal = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
       if (!headerVal) continue;
-      const radId = IMPORT_KOLOM_NAAR_RADID[headerVal];
+      const dynMap = Object.keys(kolomNaarRadId()).length > 0 ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
+      const radId = dynMap[headerVal];
       if (radId) kolNaarRadId[c] = radId;
     }
 
-    const kolDienst = XLSX.utils.decode_col(IMPORT_KOL_DIENST);
-    const kolBespr  = XLSX.utils.decode_col(IMPORT_KOL_BESPR);
-    const kolInterv = XLSX.utils.decode_col(IMPORT_KOL_INTERV);
-    const kolOpm    = XLSX.utils.decode_col(IMPORT_KOL_OPM);
+    // Zoek Dienst/Bespr/Interv/Opm op naam in header (robuust bij wisselend aantal radkolommen)
+    let kolDienst = -1, kolBespr = -1, kolInterv = -1, kolOpm = -1;
+    for (let c = 2; c <= range.e.c; c++) {
+      const h = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
+      if (h === IMPORT_KOL_DIENST) kolDienst = c;
+      else if (h === IMPORT_KOL_BESPR)  kolBespr  = c;
+      else if (h === IMPORT_KOL_INTERV) kolInterv = c;
+      else if (h === IMPORT_KOL_OPM)    kolOpm    = c;
+    }
+    // Fallback naar vaste kolomposities als header niet gevonden
+    if (kolDienst < 0) kolDienst = XLSX.utils.decode_col(IMPORT_KOL_DIENST);
+    if (kolBespr  < 0) kolBespr  = XLSX.utils.decode_col(IMPORT_KOL_BESPR);
+    if (kolInterv < 0) kolInterv = XLSX.utils.decode_col(IMPORT_KOL_INTERV);
+    if (kolOpm    < 0) kolOpm    = XLSX.utils.decode_col(IMPORT_KOL_OPM);
 
     const dagen = [];
     let celOpmsAantal = 0, dagOpmsAantal = 0, dienstAantal = 0, besprAantal = 0, intervAantal = 0;
