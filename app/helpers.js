@@ -60,6 +60,10 @@ export function radiologenMap() {
 export function functiesMap() {
   return Object.fromEntries(state.functies.map(f => [f.id, f]));
 }
+export function isHoofd(f) {
+  const c = f.code || f.id || '';
+  return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3;
+}
 
 // ==== Bezetting per stoel over tijd =========================================
 //

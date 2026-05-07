@@ -2,13 +2,8 @@
 import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
-import { functiesMap, magGebruikersBeheren } from '../helpers.js';
+import { functiesMap, magGebruikersBeheren, isHoofd } from '../helpers.js';
 
-// Hoofdfuncties filter
-const isHoofd = f => {
-  const c = f.code || f.id || '';
-  return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3;
-};
 
 export function renderRegView() {
   const container = document.getElementById('view-reg');

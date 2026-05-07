@@ -5,7 +5,7 @@ import { db } from '../firebase-init.js';
 import { state } from '../state.js';
 import {
   radiologenMap, functiesMap, vandaagIso, formatDatum,
-  toewijzingVoor, hoofdLetterCode, magAlleWensenZien,
+  toewijzingVoor, hoofdLetterCode, magAlleWensenZien, isHoofd,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 
@@ -129,7 +129,7 @@ function toonWensFormulier(bestaand) {
   document.getElementById('sheetTitle').textContent = isNieuw ? 'Nieuwe wens' : 'Wens bewerken';
   document.getElementById('sheetSub').textContent = isNieuw ? 'Vul de details in' : formatDatum(w.datum, 'lang');
 
-  const codes = ['W','B','E','M','D','O','S','A','R','V','Z','K'];
+  const codes = (state.functies).filter(isHoofd).sort((a,b) => (a.code||a.id).localeCompare(b.code||b.id));
 
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field">
@@ -148,9 +148,9 @@ function toonWensFormulier(bestaand) {
       <label class="form-label">Voorkeursfunctie</label>
       <select class="select" id="wVoorkeur">
         <option value="">— kies —</option>
-        ${codes.map(c => {
-          const f = functiesMap()[c];
-          const naam = f ? f.naam.split('/')[0] : c;
+        ${codes.map(f => {
+          const c = f.code || f.id;
+          const naam = f.naam ? f.naam.split('/')[0] : c;
           return `<option value="${c}" ${w.voorkeur_code===c?'selected':''}>${c} · ${naam}</option>`;
         }).join('')}
       </select>

@@ -8,7 +8,7 @@ import {
   radiologenMap, functiesMap, vandaagIso,
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
-  magAlleWensenZien, isFeestdag,
+  magAlleWensenZien, isFeestdag, isHoofd,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
@@ -214,9 +214,9 @@ export function renderBehView() {
     <div class="legend">
       <div class="legend-label">Legenda</div>
       <div class="legend-items">
-        ${['W','B','E','M','D','O','S','A','R','Z','V','K'].map(c => {
-          const f = functiesMap()[c];
-          const naam = f ? f.naam.split('/')[0] : c;
+        ${(state.functies).filter(isHoofd).sort((a,b) => (a.code||a.id).localeCompare(b.code||b.id)).map(f => {
+          const c = f.code || f.id;
+          const naam = f.naam ? f.naam.split('/')[0] : c;
           return `<span class="legend-item f-${c}">${c} ${naam}</span>`;
         }).join('')}
       </div>
