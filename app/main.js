@@ -31,12 +31,14 @@ window.closeSheet = closeSheet;
 // ==== Auth handlers ==========================================================
 
 window.doLogin = async function() {
-  const email = document.getElementById('loginEmail').value.trim();
+  const invoer = document.getElementById('loginEmail').value.trim();
+  // Voeg @rooster.intern toe als de gebruiker alleen voornaam.achternaam typt
+  const email = invoer.includes('@') ? invoer : invoer + '@rooster.intern';
   const pw    = document.getElementById('loginPassword').value;
   const err   = document.getElementById('loginError');
   err.style.display = 'none';
-  if (!email || !pw) {
-    err.textContent = 'Vul e-mail en wachtwoord in';
+  if (!invoer || !pw) {
+    err.textContent = 'Vul naam en wachtwoord in';
     err.style.display = 'block';
     return;
   }
@@ -417,7 +419,6 @@ onAuthStateChanged(auth, async (user) => {
       startApp();
     }
   } catch (e) {
-    document.getElementById('login').style.display = 'flex';
     const err = document.getElementById('loginError');
     err.textContent = e.message;
     err.style.display = 'block';

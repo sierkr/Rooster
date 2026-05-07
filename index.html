@@ -338,11 +338,11 @@
 <!-- Login -->
 <div id="login" class="login-screen" style="display: none;">
   <h1 class="login-title">Indeling Radiologen</h1>
-  <p class="login-sub">Log in met je e-mail en wachtwoord</p>
+  <p class="login-sub">Log in met je naam en wachtwoord</p>
   <div id="loginError" class="form-error" style="display: none;"></div>
   <div class="form-field">
-    <label class="form-label">E-mail</label>
-    <input type="email" class="input" id="loginEmail" autocomplete="email" autocapitalize="off">
+    <label class="form-label">Naam</label>
+    <input type="text" class="input" id="loginEmail" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="voornaam.achternaam">
   </div>
   <div class="form-field">
     <label class="form-label">Wachtwoord</label>
@@ -466,10 +466,10 @@
 
     // Als een wachtende SW klaar staat, activeer direct
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
       window.location.reload();
     });
   }
 </script>
 </body>
 </html>
-        
