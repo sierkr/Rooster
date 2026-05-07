@@ -322,8 +322,8 @@ export function functieFlags(code) {
   const f = functiesMap()[code];
   const def = defaultFunctieFlags(code);
   return {
-    werkvloer: typeof f?.werkvloer === 'boolean' ? f.werkvloer : def.werkvloer,
-    werkdag:   typeof f?.werkdag === 'boolean'   ? f.werkdag   : def.werkdag,
+    werkvloer: f?.werkvloer === true ? true : def.werkvloer,
+    werkdag:   f?.werkdag   === true ? true : def.werkdag,
   };
 }
 export function parttimeFactor(radId) {
