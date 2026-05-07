@@ -67,16 +67,17 @@ function telLetterFormule(letter, range) {
   );
 }
 
-// Formule voor kolom T (werkvloerbezetting): som van W+B+E+M+D+O+S per rij
-function aantalFormule(rij, letters) {
-  const range = `C${rij}:O${rij}`;
+// Formule voor kolom Aantal (werkvloerbezetting): som over alle rad-kolommen per rij
+// eindKol = Excel-kolomletter van de laatste radioloogkolom (bijv. 'O' bij 13 rads)
+function aantalFormule(rij, letters, eindKol) {
+  const range = `C${rij}:${eindKol}${rij}`;
   if (!letters || letters.length === 0) return '=0';
   return '=' + letters.map(l => telLetterFormule(l, range)).join('+');
 }
 
-// Formule voor kolom V–AA: toon letter als die functie NIET aanwezig is
-function ontbrekendFormule(letter, rij) {
-  const range = `C${rij}:O${rij}`;
+// Formule voor functie-indicatoren: toon letter als die functie NIET aanwezig is
+function ontbrekendFormule(letter, rij, eindKol) {
+  const range = `C${rij}:${eindKol}${rij}`;
   return `=IF(${telLetterFormule(letter, range)}=0,"${letter}","")`;
 }
 
@@ -150,11 +151,16 @@ export async function actExportJaar(jaar) {
       if (ib >= 0) return 1;
       return a.localeCompare(b);
     });
-    // Kolom-indices (1-based in ExcelJS):
-    // 1=Dag, 2=Datum, 3..15=radiologen, 16=Dienst, 17=Bespr, 18=Interv, 19=Opm
-    // 20=Aantal(T), 21=spacer(U), 22..N=werkvloer-indicatoren (dynamisch)
-    // 1=Dag, 2=Datum, 3..(2+n)=rads, (3+n)..(6+n)=Dienst/Bespr/Interv/Opm, (7+n)=Aantal, (8+n)=Spacer
-    const COL_AANTAL   = 2 + radKolommen.length + 5;
+    // Kolom-indices (1-based in ExcelJS) — volledig dynamisch op basis van aantal radiologen:
+    // 1=Dag, 2=Datum, 3..(2+n)=rads, (3+n)=Dienst, (4+n)=Bespr, (5+n)=Interv, (6+n)=Opm,
+    // (7+n)=Aantal, (8+n)=Spacer, (9+n)..=functie-indicatoren
+    const COL_RAD_EIND = 2 + radKolommen.length;       // laatste radioloogkolom
+    const RAD_EIND_KOL = kolLetter(COL_RAD_EIND);      // Excel-letter voor formule-ranges
+    const COL_DIENST   = COL_RAD_EIND + 1;
+    const COL_BESPR    = COL_RAD_EIND + 2;
+    const COL_INTERV   = COL_RAD_EIND + 3;
+    const COL_OPM      = COL_RAD_EIND + 4;
+    const COL_AANTAL   = COL_RAD_EIND + 5;
     const FUNCTIE_LETTERS = (state.functies || [])
       .filter(f => isHoofd(f) && functieFlags(f.code || f.id).werkvloer)
       .map(f => (f.code || f.id).toUpperCase())
@@ -271,25 +277,25 @@ export async function actExportJaar(jaar) {
         if (opm) cel.note = { texts: [{ text: opm }] };
       });
 
-      // Dienst / Bespr / Interventie / Opmerking (kolommen 16–19)
-      rij.getCell(16).value = dag.dienst?.dag  || '';
-      rij.getCell(17).value = dag.bespreking   || '';
-      rij.getCell(18).value = dag.interventie  || '';
-      rij.getCell(19).value = dag.opmerking    || '';
-      for (let ci = 16; ci <= 19; ci++) {
+      // Dienst / Bespr / Interventie / Opmerking (dynamische kolommen)
+      rij.getCell(COL_DIENST).value = dag.dienst?.dag  || '';
+      rij.getCell(COL_BESPR).value  = dag.bespreking   || '';
+      rij.getCell(COL_INTERV).value = dag.interventie  || '';
+      rij.getCell(COL_OPM).value    = dag.opmerking    || '';
+      for (let ci = COL_DIENST; ci <= COL_OPM; ci++) {
         rij.getCell(ci).alignment = { vertical: 'middle' };
       }
 
-      // Kolom T (Aantal): formule
+      // Kolom Aantal: formule over alle radioloog-kolommen (C tot RAD_EIND_KOL)
       const aantalCel = rij.getCell(COL_AANTAL);
-      aantalCel.value     = { formula: aantalFormule(excelRij, FUNCTIE_LETTERS) };
+      aantalCel.value     = { formula: aantalFormule(excelRij, FUNCTIE_LETTERS, RAD_EIND_KOL) };
       aantalCel.alignment = { horizontal: 'center', vertical: 'middle' };
       aantalCel.font      = { bold: true };
 
-      // Kolommen V–AA: ontbrekende functie-indicatoren
+      // Functie-indicatoren: ontbrekende functies per rij
       FUNCTIE_LETTERS.forEach((letter, li) => {
         const cel = rij.getCell(COL_FUNCTIES[li]);
-        cel.value     = { formula: ontbrekendFormule(letter, excelRij) };
+        cel.value     = { formula: ontbrekendFormule(letter, excelRij, RAD_EIND_KOL) };
         cel.alignment = { horizontal: 'center', vertical: 'middle' };
         cel.font      = { color: { argb: 'FF888888' }, italic: true, size: 9 };
         if (isWeekend) cel.fill = WEEKEND_FILL;
@@ -349,22 +355,4 @@ export async function actExportJaar(jaar) {
     ws.addConditionalFormatting({
       ref: radRef,
       rules: [{
-        type: 'expression',
-        formulae: ['OR(C2="V",C2="K")'],
-        style: {
-          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF99' } },
-          font: { color: { argb: 'FF5A4800' } },
-        },
-        priority: 1,
-      }],
-    });
-
-    // ---- Downloaden ---------------------------------------------------------
-    const buffer = await wb.xlsx.writeBuffer();
-    downloadBlob(buffer, `Indeling_${jaar}.xlsx`);
-
-  } catch (e) {
-    console.error('actExportJaar', e);
-    alert('Export mislukt:\n\n' + (e.message || e));
-  }
-}
+        type: 'expressi

@@ -245,5 +245,32 @@ window.opslaanAlleCheckboxes = async function() {
   }
 };
 
+
 window.verwijderBezettingRegels = async function() {
-  cons
+  const bezetting = state.validatieRegels.filter(r => r.type === 'bezetting');
+  if (!confirm(`${bezetting.length} bezettingsregels permanent verwijderen?`)) return;
+  try {
+    await Promise.all(bezetting.map(r => deleteDoc(doc(db, 'validatie_regels', r.id))));
+    alert(`${bezetting.length} bezettingsregels verwijderd.`);
+  } catch (e) {
+    alert('Mislukt: ' + e.message);
+  }
+};
+
+window.regelToggle = async function(regelId) {
+  const r = state.validatieRegels.find(x => x.id === regelId);
+  if (!r) return;
+  try {
+    await updateDoc(doc(db, 'validatie_regels', regelId), { actief: r.actief === false });
+  } catch (e) {
+    alert('Kan regel niet wijzigen: ' + e.message);
+  }
+};
+
+window.regelErnst = async function(regelId, nieuwErnst) {
+  try {
+    await updateDoc(doc(db, 'validatie_regels', regelId), { ernst: nieuwErnst });
+  } catch (e) {
+    alert('Kan regel niet wijzigen: ' + e.message);
+  }
+};
