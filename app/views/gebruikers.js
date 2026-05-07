@@ -42,15 +42,15 @@ export async function renderGebView() {
       <div class="gebruiker-item">
         <div class="gebruiker-hoofd">
           <div style="flex: 1; min-width: 0;">
-            <div style="font-weight: 500; overflow: hidden; text-overflow: ellipsis;">${g.email}</div>
+            <div style="font-weight: 500; overflow: hidden; text-overflow: ellipsis;">${g.naam || g.email}</div>
             ${rad ? `<div class="muted">${rad.code} · ${rad.achternaam}</div>` : ''}
           </div>
           <span class="rol-badge rol-${g.rol}">${g.rol}</span>
         </div>
         <div style="margin-top: 10px; display: flex; gap: 6px;">
           <button class="btn" style="flex: 1; font-size: 12px; padding: 6px;" onclick="window.gebruikerBewerken('${g.id}')">Rol wijzigen</button>
-          <button class="btn" style="font-size: 12px; padding: 6px 10px;" onclick="window.gebruikerWachtwoordReset('${g.id}', '${g.email}')">🔑</button>
-          ${(g.id !== state.user.uid && (g.email||'').toLowerCase() !== VASTE_BEHEERDER_EMAIL) ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${g.email}')">🗑</button>` : ''}
+          <button class="btn" style="font-size: 12px; padding: 6px 10px;" onclick="window.gebruikerWachtwoordReset('${g.id}', '${g.naam || g.email}')">🔑</button>
+          ${(g.id !== state.user.uid && (g.email||'').toLowerCase() !== VASTE_BEHEERDER_EMAIL) ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${g.naam || g.email}')">🗑</button>` : ''}
         </div>
       </div>
     `;
@@ -286,7 +286,7 @@ window.nieuweGebruiker = function() {
   const rads = vasteRads();
   const waarnemers = actieveInvallers();
   document.getElementById('sheetBody').innerHTML = `
-    <div class="form-field"><label class="form-label">E-mail</label><input type="email" class="input" id="nuEmail" autocapitalize="off"></div>
+    <div class="form-field"><label class="form-label">Naam</label><input type="text" class="input" id="nuNaam" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="voornaam.achternaam"></div>
     <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${STANDAARD_WACHTWOORD}"></div>
     <div class="form-field"><label class="form-label">Rol</label>
       <select class="select" id="nuRol">
@@ -317,21 +317,30 @@ window.nieuweGebruiker = function() {
 };
 
 window.opslaanNieuweGebruiker = async function() {
-  const email = document.getElementById('nuEmail').value.trim();
+  const naam = document.getElementById('nuNaam').value.trim();
   const pw = document.getElementById('nuPw').value;
   const rol = document.getElementById('nuRol').value;
   const radId = document.getElementById('nuRadId').value;
 
-  if (!email || !pw) { alert('Vul e-mail en wachtwoord in'); return; }
+  if (!naam || !pw) { alert('Vul naam en wachtwoord in'); return; }
   if (pw.length < 6) { alert('Wachtwoord min. 6 tekens'); return; }
+
+  // Genereer e-mailadres op basis van naam; voeg teller toe bij duplicaat.
+  const basis = naam.toLowerCase().replace(/\s+/g, '.') + '@rooster.intern';
+  let email = basis;
+  let teller = 2;
+  while (state.gebruikers.some(g => g.email === email)) {
+    email = naam.toLowerCase().replace(/\s+/g, '.') + teller + '@rooster.intern';
+    teller++;
+  }
 
   const btn = document.querySelector('#sheetBody .btn-primary');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
 
   try {
-    await fnGebruikerAanmaken({ email, wachtwoord: pw, rol, radioloog_id: radId || null });
+    await fnGebruikerAanmaken({ email, naam, wachtwoord: pw, rol, radioloog_id: radId || null });
     closeSheet();
-    alert(`Gebruiker aangemaakt.\nE-mail: ${email}\nWachtwoord: ${pw}\n\nNoteer dit; het wachtwoord is nu niet meer op te vragen.`);
+    alert(`Gebruiker aangemaakt.\nNaam: ${naam}\nWachtwoord: ${pw}\n\nNoteer dit; het wachtwoord is nu niet meer op te vragen.`);
     await laadGebruikers();
     renderGebView();
   } catch (e) {
@@ -366,7 +375,7 @@ window.gebruikerBewerken = function(uid) {
     { id: 'mag_vakantie', label: 'Vakantie-tab zien' },
   ];
 
-  document.getElementById('sheetTitle').textContent = g.email;
+  document.getElementById('sheetTitle').textContent = g.naam || g.email;
   document.getElementById('sheetSub').textContent = 'Rol, koppeling en permissies';
   document.getElementById('sheetBody').innerHTML = `
     ${isVasteBeheerder ? `<div class="form-info" style="margin-bottom: 1rem; font-size: 12px;">🔒 Hoofdbeheerder-account. Rol en koppeling staan vast.</div>` : ''}
@@ -876,19 +885,4 @@ window.verwijderOudeGegevens = async function() {
     if (!wensenSnap.empty) {
       const docs = wensenSnap.docs;
       for (let i = 0; i < docs.length; i += 400) {
-        const batch = writeBatch(db);
-        docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        totaal += Math.min(400, docs.length - i);
-      }
-    }
-
-    if (totaal === 0) {
-      alert('Geen gegevens gevonden ouder dan 2 jaar.');
-    } else {
-      alert(`${totaal} document(en) verwijderd (indeling + wensen vóór ${formatDatum(grensdatum, 'kort')}).`);
-    }
-  } catch (e) {
-    alert('Mislukt: ' + e.message);
-  }
-};
+        const b
