@@ -11,6 +11,7 @@
 
 import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
+import { state } from './state.js';
 
 const BACKUP_COLLECTIES = [
   'radiologen', 'functies', 'indeling', 'wensen',
@@ -147,12 +148,31 @@ export async function maakClientBackup(reden = 'handmatig') {
   // Download
   downloadBlob(JSON.stringify(envelop, null, 2), `rooster-backup-${tijdstempel()}.json`);
 
-  // Tijdstip opslaan in Firestore
+  // Tijdstip + geschiedenis opslaan in Firestore
+  const bestandsnaam = 'rooster-backup-' + tijdstempel() + '.json';
+  const nieuweEntry  = { tijdstip, reden, bestandsnaam };
+  const huidigeGesch = Array.isArray(state?.instellingen?.backup_geschiedenis)
+    ? state.instellingen.backup_geschiedenis
+    : [];
+  const nieuweGesch  = [nieuweEntry, ...huidigeGesch].slice(0, 10);
+
   await setDoc(
     doc(db, 'instellingen', 'algemeen'),
-    { laatste_backup: tijdstip, laatste_backup_reden: reden },
+    {
+      laatste_backup:         tijdstip,
+      laatste_backup_reden:   reden,
+      backup_geschiedenis:    nieuweGesch,
+    },
     { merge: true }
   );
+
+  // State direct bijwerken zodat renderGebView() meteen de nieuwe waarden ziet
+  // (onSnapshot-listener kan te laat komen na snel re-renderen)
+  if (state && state.instellingen) {
+    state.instellingen.laatste_backup       = tijdstip;
+    state.instellingen.laatste_backup_reden = reden;
+    state.instellingen.backup_geschiedenis  = nieuweGesch;
+  }
 
   return { tijdstip, aantallen };
 }

@@ -249,14 +249,17 @@ export async function renderGebView() {
         <div class="card">
           ${_wHtml}
           <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">${_lbTxt}${_lbRStr}</div>
+          <div style="font-size:12px;color:#5f5e5a;margin-bottom:8px;">
+            Klik op <b>Nu backup maken</b> om een versleutelde snapshot van de hele database te downloaden.
+            Vóór elke Excel-import wordt automatisch een backup gemaakt.
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn" onclick="window.actMaakBackup()">⬇ Backup downloaden</button>
+            <button class="btn btn-primary" onclick="window.actMaakBackup()">⬇ Nu backup maken</button>
             <button class="btn" onclick="document.getElementById('herstelFileInput').click()">↩ Backup terugzetten</button>
             <input type="file" accept=".json" id="herstelFileInput" style="display:none;" onchange="window.actHerstelBackup(this)">
           </div>
           <p class="muted" style="margin:8px 0 0;font-size:11px;">
-            Backup is versleuteld. Vóór elke Excel-import wordt automatisch een backup gemaakt.
-            Auth-accounts blijven altijd bewaard via Firebase Auth.
+            Backup is versleuteld met jouw wachtwoord. Auth-accounts blijven altijd bewaard via Firebase Auth.
           </p>
           ${_geschHtml}
         </div>
