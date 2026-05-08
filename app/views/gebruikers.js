@@ -150,6 +150,23 @@ export async function renderGebView() {
             ${p.dagen.length} dagen · ${p.celOpmsAantal} cel-opmerkingen · ${p.dagOpmsAantal} dag-opmerkingen<br>
             ${p.dienstAantal} dienst-toewijzingen · ${p.besprAantal} besprekingen · ${p.intervAantal} interventies
           </div>
+          ${p.totaalGewijzigd > 0 ? `
+            <div style="background: #eef4ff; color: #1a3a6b; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px;">
+              📝 <b>${p.totaalGewijzigd} toewijzing${p.totaalGewijzigd === 1 ? '' : 'en'}</b> gewijzigd t.o.v. huidige Firestore-data
+            </div>
+          ` : `
+            <div style="background: #eefaf2; color: #1a4a2a; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px;">
+              ✓ Geen wijzigingen t.o.v. huidige Firestore-data
+            </div>
+          `}
+          ${p.nabijeCellen > 0 ? `
+            <div style="background: #fff4e0; color: #6b3a00; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; border-left: 3px solid #f0a020;">
+              ⚠ <b>${p.nabijeCellen} toewijzing${p.nabijeCellen === 1 ? '' : 'en'}</b> gewijzigd binnen 30 dagen
+              (${p.nabijeDagen} dag${p.nabijeDagen === 1 ? '' : 'en'}:
+              ${p.nabijeDagsList.slice(0, 5).map(d => d.slice(5)).join(', ')}${p.nabijeDagen > 5 ? ' …' : ''}).
+              Betrokken radiologen krijgen een notificatie.
+            </div>
+          ` : ''}
           ${p.waarschuwingen.length ? `
             <div style="background: #faeeda; color: #412402; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 10px;">
               <b>Waarschuwingen (${p.waarschuwingenTotaal}):</b><br>

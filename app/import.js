@@ -253,12 +253,36 @@ export async function actImportFile(input, renderGebView) {
       dagen.push(docData);
     }
 
+    // Bereken wijzigingen t.o.v. huidige Firestore-data (voor preview)
+    const vandaagPrev = vandaagIso();
+    const grensPrev   = plusDagen(vandaagPrev, NABIJ_DAGEN);
+    let totaalGewijzigd = 0;
+    let nabijeCellen    = 0;
+    const nabijeDatumsSet = new Set();
+    for (const dag of dagen) {
+      const bestaand = state.indelingMap[dag.datum];
+      for (const [radId, nieuweCodes] of Object.entries(dag.toewijzingen || {})) {
+        const oudeCodes = bestaand?.toewijzingen?.[radId] || [];
+        if (JSON.stringify(oudeCodes) !== JSON.stringify(nieuweCodes)) {
+          totaalGewijzigd++;
+          if (dag.datum >= vandaagPrev && dag.datum <= grensPrev) {
+            nabijeCellen++;
+            nabijeDatumsSet.add(dag.datum);
+          }
+        }
+      }
+    }
+
     state.importPreview = {
       bestandnaam: file.name,
       dagen,
       celOpmsAantal, dagOpmsAantal, dienstAantal, besprAantal, intervAantal,
       waarschuwingen: waarschuwingen.slice(0, 25),
       waarschuwingenTotaal: waarschuwingen.length,
+      totaalGewijzigd,
+      nabijeCellen,
+      nabijeDagen: nabijeDatumsSet.size,
+      nabijeDagsList: [...nabijeDatumsSet].sort(),
     };
   } catch (e) {
     console.error('actImportFile', e);
