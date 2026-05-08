@@ -28,6 +28,15 @@ import { renderGebView } from './views/gebruikers.js';
 window.openSheet  = openSheet;
 window.closeSheet = closeSheet;
 
+// ==== Help-pagina opener =====================================================
+window.toonHelp = function() {
+  const isBeheerder = typeof magGebruikersBeheren === 'function'
+    ? magGebruikersBeheren()
+    : false;
+  const url = isBeheerder ? './help/beheerder.html' : './help/gebruiker.html';
+  window.open(url, '_blank', 'noopener');
+};
+
 // ==== Auth handlers ==========================================================
 
 window.doLogin = async function() {

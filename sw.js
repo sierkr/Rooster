@@ -2,7 +2,7 @@
 // Cache-naam bevat versienummer. Bij een nieuwe versie worden oude caches
 // automatisch verwijderd en alle bestanden opnieuw gecached.
 
-const VERSION = '3.27.57';
+const VERSION = '3.27.58';
 const CACHE = `rooster-${VERSION}`;
 
 const PRECACHE = [
@@ -33,6 +33,8 @@ const PRECACHE = [
   './icons/icon-512.png',
   './icons/icon-180.png',
   './icons/icon-maskable-512.png',
+  './help/gebruiker.html',
+  './help/beheerder.html',
 ];
 
 // Install: precache alle app-bestanden

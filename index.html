@@ -29,6 +29,8 @@
   .card-compact { padding: 12px 14px; cursor: pointer; }
   .card-compact:active { transform: scale(0.98); }
   .row { display: flex; align-items: center; gap: 12px; }
+  .help-btn { width: 32px; height: 32px; border-radius: 50%; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; font-size: 15px; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; color: #5f5e5a; flex-shrink: 0; }
+  .help-btn:active { background: #f0efe9; transform: scale(0.95); }
   .avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 13px; background: #cecbf6; color: #26215c; flex-shrink: 0; }
   .muted { color: #5f5e5a; font-size: 12px; }
   .nav-btn { width: 36px; height: 36px; border-radius: 8px; border: 0.5px solid rgba(0, 0, 0, 0.15); background: #fff; font-size: 16px; cursor: pointer; font-family: inherit; }
@@ -426,7 +428,10 @@
   <div class="header">
     <div class="header-row">
       <h1 class="title">Indeling radiologen</h1>
-      <span class="user-chip" id="userChip" onclick="window.toonGebruikerSheet()">·</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="help-btn" id="helpBtn" title="Help" onclick="window.toonHelp()">?</button>
+        <span class="user-chip" id="userChip" onclick="window.toonGebruikerSheet()">·</span>
+      </div>
     </div>
     <div class="tabs" id="tabs"></div>
   </div>
