@@ -276,12 +276,34 @@ export async function actImportSchrijven(renderGebView) {
     alert('Geen rechten voor schrijven.');
     return;
   }
+  // Tel wijzigingen binnen de 30-dagengrens vóór bevestiging
+  const vandaag = vandaagIso();
+  const grens   = plusDagen(vandaag, NABIJ_DAGEN);
+  let nabijeCellen = 0;
+  const nabijeDatums = new Set();
+  for (const dag of p.dagen) {
+    if (dag.datum < vandaag || dag.datum > grens) continue;
+    const bestaand = state.indelingMap[dag.datum];
+    for (const [radId, nieuweCodes] of Object.entries(dag.toewijzingen || {})) {
+      const oudeCodes = bestaand?.toewijzingen?.[radId] || [];
+      if (JSON.stringify(oudeCodes) !== JSON.stringify(nieuweCodes)) {
+        nabijeCellen++;
+        nabijeDatums.add(dag.datum);
+      }
+    }
+  }
+
   const jaarDeel = state.importJaar ? `alle ${state.importJaar}-dagen` : `alle dagen in het bestand`;
+  const nabijWaarschuwing = nabijeCellen > 0
+    ? `\n\n⚠ LET OP: ${nabijeCellen} toewijzing${nabijeCellen === 1 ? '' : 'en'} worden gewijzigd binnen ${NABIJ_DAGEN} dagen (${nabijeDatums.size} dag${nabijeDatums.size === 1 ? '' : 'en'}). Betrokken radiologen krijgen een notificatie.`
+    : '';
+
   const ok = confirm(
     `OVERSCHRIJVEN — ${jaarDeel} worden in Firestore vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
     `${p.dagen.length} dagen, ${p.celOpmsAantal} cel-opmerkingen, ${p.dagOpmsAantal} dag-opmerkingen.\n\n` +
-    `Wens-statussen worden automatisch bijgewerkt.\n\n` +
-    `Bestaande data in Firestore wordt vervangen. Doorgaan?`
+    `Wens-statussen worden automatisch bijgewerkt.` +
+    nabijWaarschuwing +
+    `\n\nBestaande data in Firestore wordt vervangen. Doorgaan?`
   );
   if (!ok) return;
 
@@ -300,8 +322,7 @@ export async function actImportSchrijven(renderGebView) {
     }
 
     // 2. Wijziging-docs schrijven voor gewijzigde cellen (gezien: false)
-    const vandaag = vandaagIso();
-    const grens = plusDagen(vandaag, NABIJ_DAGEN);
+    // vandaag en grens zijn al berekend vóór de bevestiging
     let wijzigingenGeschreven = 0;
     const wijzWrites = [];
     for (const dag of p.dagen) {
