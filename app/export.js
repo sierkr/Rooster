@@ -350,20 +350,23 @@ export async function actExportJaar(jaar) {
       ],
     });
 
-    // 3. Radioloog-cellen V of K: lichtgeel achtergrond (condformat als extra laag,
-    //    bovenop de statische kleur die al gezet is — voor gebruikers die data aanpassen)
-    ws.addConditionalFormatting({
-      ref: radRef,
-      rules: [{
+    // 3. Radioloog-cellen: kleur per functiecode — dynamisch op basis van kleurenMap.
+    //    Zodat celopmaak mee verandert als een gebruiker een waarde aanpast in Excel.
+    //    Elke bekende functiecode krijgt een eigen regel met de kleur uit de app.
+    const functieCfRules = Object.entries(kleurenMap)
+      .filter(([, hex]) => hex && hex.length === 6)
+      .map(([code, hex], i) => ({
         type: 'expression',
-        formulae: ['OR(C2="V",C2="K")'],
+        formulae: [`OR(C2="${code}",LEFT(C2,1)="${code}",(LEFT(C2,1)=".")*(MID(C2,2,1)="${code}"))`],
         style: {
-          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF99' } },
-          font: { color: { argb: 'FF5A4800' } },
+          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF' + hex.toUpperCase() } },
+          font: { color: { argb: tekstArgb(hex) } },
         },
-        priority: 1,
-      }],
-    });
+        priority: 20 + i,
+      }));
+    if (functieCfRules.length > 0) {
+      ws.addConditionalFormatting({ ref: radRef, rules: functieCfRules });
+    }
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();
