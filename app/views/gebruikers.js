@@ -126,50 +126,6 @@ export async function renderGebView() {
     </div>
   `;
 
-  // Backup-sectie — strings vooraf berekenen om geneste template literals te vermijden
-  if (magGebruikersBeheren()) {
-    const lb     = state.instellingen?.laatste_backup;
-    const dagOud = lb ? Math.floor((Date.now() - new Date(lb).getTime()) / 86400000) : null;
-    const nooit  = dagOud === null;
-    const teOud  = dagOud !== null && dagOud > 30;
-    const lbDatumStr = lb ? new Date(lb).toLocaleDateString('nl-NL') : '';
-    const lbDagStr   = dagOud === 0 ? 'vandaag' : dagOud === 1 ? 'gisteren' : dagOud + ' dagen geleden';
-    const lbTekst    = nooit ? 'Nog nooit een backup gemaakt' : 'Laatste backup: ' + lbDagStr + ' · ' + lbDatumStr;
-    const lbReden    = state.instellingen?.laatste_backup_reden || '';
-    const lbRedenStr = (lbReden && lbReden !== 'handmatig') ? ' (' + lbReden + ')' : '';
-
-    const waarschuwingBg   = nooit ? '#fff0f0' : '#fff4e0';
-    const waarschuwingKleur = nooit ? '#7a1010' : '#6b3a00';
-    const waarschuwingRand  = nooit ? '#e04040' : '#f0a020';
-    const waarschuwingTekst = nooit
-      ? '⚠ Nog nooit een backup gemaakt. Maak er een vóór je iets wijzigt.'
-      : '⚠ Laatste backup is ' + dagOud + ' dagen geleden. Aanbevolen: maandelijks of vóór grote wijzigingen.';
-    const waarschuwingHtml = (nooit || teOud)
-      ? '<div style="background:' + waarschuwingBg + ';color:' + waarschuwingKleur + ';padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;border-left:3px solid ' + waarschuwingRand + ';">' + waarschuwingTekst + '</div>'
-      : '';
-
-    html += `
-      <div style="margin-top: 1.5rem;">
-        <div class="summary-label" style="margin-bottom: 6px;">Database-backup</div>
-        <div class="card">
-          ${waarschuwingHtml}
-          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">${lbTekst}${lbRedenStr}</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn" onclick="window.actMaakBackup()">⬇ Backup downloaden</button>
-            <label class="btn" style="cursor:pointer;">
-              ↩ Backup terugzetten
-              <input type="file" accept=".json" id="herstelFile" style="display:none;" onchange="window.actHerstelBackup(this)">
-            </label>
-          </div>
-          <p class="muted" style="margin:8px 0 0;font-size:11px;">
-            Backup is versleuteld met jouw wachtwoord. Vóór elke Excel-import wordt automatisch een backup gemaakt.
-            Auth-accounts blijven altijd bewaard via Firebase Auth.
-          </p>
-        </div>
-      </div>
-    `;
-  }
-
   // Excel-import sectie
   const p = state.importPreview;
   const bezig = state.importBezig;
@@ -246,6 +202,67 @@ export async function renderGebView() {
       </div>
     </div>
   `;
+
+  // Database-backup sectie
+  if (magGebruikersBeheren()) {
+    const _lb     = state.instellingen?.laatste_backup;
+    const _dagOud = _lb ? Math.floor((Date.now() - new Date(_lb).getTime()) / 86400000) : null;
+    const _nooit  = _dagOud === null;
+    const _teOud  = _dagOud !== null && _dagOud > 30;
+    const _lbDag  = _dagOud === 0 ? 'vandaag' : _dagOud === 1 ? 'gisteren' : _dagOud + ' dagen geleden';
+    const _lbTxt  = _nooit ? 'Nog nooit een backup gemaakt' : 'Laatste backup: ' + _lbDag + ' · ' + new Date(_lb).toLocaleDateString('nl-NL');
+    const _lbRed  = state.instellingen?.laatste_backup_reden || '';
+    const _lbRStr = (_lbRed && _lbRed !== 'handmatig') ? ' (' + _lbRed + ')' : '';
+    const _wBg    = _nooit ? '#fff0f0' : '#fff4e0';
+    const _wKl    = _nooit ? '#7a1010' : '#6b3a00';
+    const _wRd    = _nooit ? '#e04040' : '#f0a020';
+    const _wTxt   = _nooit
+      ? '⚠ Nog nooit een backup gemaakt. Maak er een vóór je iets wijzigt.'
+      : '⚠ Laatste backup is ' + _dagOud + ' dagen geleden. Aanbevolen: maandelijks of vóór grote wijzigingen.';
+    const _wHtml  = (_nooit || _teOud)
+      ? '<div style="background:' + _wBg + ';color:' + _wKl + ';padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;border-left:3px solid ' + _wRd + ';">' + _wTxt + '</div>'
+      : '';
+
+    // Backup-geschiedenis lijst
+    const _gesch  = (state.instellingen?.backup_geschiedenis || []);
+    const _reden  = { handmatig: 'handmatig', 'voor-import': 'vóór import' };
+    const _geschHtml = _gesch.length === 0
+      ? '<p class="muted" style="margin:10px 0 0;font-size:11px;font-style:italic;">Nog geen backup-geschiedenis beschikbaar.</p>'
+      : '<div style="margin-top:10px;">'
+        + '<div style="font-size:11px;color:#5f5e5a;margin-bottom:4px;font-weight:500;">Eerdere backups (herstel door bestand te selecteren):</div>'
+        + '<div style="display:flex;flex-direction:column;gap:4px;">'
+        + _gesch.map((e, i) => {
+            const _d  = new Date(e.tijdstip);
+            const _dd = _d.toLocaleDateString('nl-NL') + ' ' + _d.toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
+            const _r  = _reden[e.reden] || e.reden || '';
+            const _fn = e.bestandsnaam || '';
+            return '<div style="font-size:11px;background:#f5f4f0;padding:5px 8px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">'
+              + '<span style="color:#3a3937;">' + _dd + (_r ? ' <span style="color:#888;">(' + _r + ')</span>' : '') + '</span>'
+              + '<span style="color:#888;font-family:monospace;font-size:10px;">' + _fn + '</span>'
+              + '</div>';
+          }).join('')
+        + '</div></div>';
+
+    html += `
+      <div style="margin-top: 1rem;">
+        <div class="summary-label" style="margin-bottom: 6px;">Database-backup</div>
+        <div class="card">
+          ${_wHtml}
+          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">${_lbTxt}${_lbRStr}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn" onclick="window.actMaakBackup()">⬇ Backup downloaden</button>
+            <button class="btn" onclick="document.getElementById('herstelFileInput').click()">↩ Backup terugzetten</button>
+            <input type="file" accept=".json" id="herstelFileInput" style="display:none;" onchange="window.actHerstelBackup(this)">
+          </div>
+          <p class="muted" style="margin:8px 0 0;font-size:11px;">
+            Backup is versleuteld. Vóór elke Excel-import wordt automatisch een backup gemaakt.
+            Auth-accounts blijven altijd bewaard via Firebase Auth.
+          </p>
+          ${_geschHtml}
+        </div>
+      </div>
+    `;
+  }
 
   // Gegevensbeheer sectie (alleen beheerder)
   if (magGebruikersBeheren()) {
