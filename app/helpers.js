@@ -318,20 +318,19 @@ export function hoofdLetterCode(code) {
 // ==== Functie-flags (werkvloer / werkdag) ====================================
 
 export function defaultFunctieFlags(code) {
-  if (!code) return { werkvloer: false, werkdag: false };
-  // Roostervrij: niet werkvloer, niet werkdag
-  if (['P','4P','Q','R','V'].includes(code)) return { werkvloer: false, werkdag: false };
-  // Wel werkdag, niet werkvloer (cursus/ziek/transfer/admin)
-  if (['K','Z','T','A'].includes(code)) return { werkvloer: false, werkdag: true };
-  // Alle overige: werkvloer + werkdag (5A, W-varianten, B/E/M/D/S/O-varianten, X)
-  return { werkvloer: true, werkdag: true };
+  if (!code) return { werkvloer: false };
+  // Roostervrij: niet werkvloer
+  if (['P','4P','Q','R','V'].includes(code)) return { werkvloer: false };
+  // Niet werkvloer (cursus/ziek/transfer/admin)
+  if (['K','Z','T','A'].includes(code)) return { werkvloer: false };
+  // Alle overige: werkvloer
+  return { werkvloer: true };
 }
 export function functieFlags(code) {
   const f = functiesMap()[code];
   const def = defaultFunctieFlags(code);
   return {
     werkvloer: f?.werkvloer ?? def.werkvloer,
-    werkdag:   f?.werkdag   === true ? true : def.werkdag,
   };
 }
 export function parttimeFactor(radId) {

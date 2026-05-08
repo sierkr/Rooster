@@ -32,6 +32,7 @@ export const state = {
   actInvallers: false,    // W-slots zichtbaar in matrix
   actUitgeklapt: {},      // { 'W': true } - hoofdfuncties die uitgeklapt staan
   // Excel-import
+  instellingen: {},           // gespiegeld vanuit Firestore 'instellingen'-collectie
   importPreview: null,
   importBezig: false,
   importJaar: '',         // '' = alle jaren in bestand, anders bv '2026'

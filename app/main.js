@@ -293,8 +293,10 @@ function luisterNaarData() {
   }));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'instellingen'), (snap) => {
+    state.instellingen = {};
     snap.docs.forEach(d => {
       const data = d.data();
+      Object.assign(state.instellingen, data);  // spiegel alles (incl. migratie-vlaggen)
       if (data.dect_speciaal)      window.DECT_SPECIAAL = data.dect_speciaal;
       if (data.tellen_codes)       window.TELLEN_CODES = data.tellen_codes;
       if (data.mtsdagen_codes)     window.MTSDAGEN_CODES = data.mtsdagen_codes;
