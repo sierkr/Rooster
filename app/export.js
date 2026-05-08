@@ -21,7 +21,7 @@
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
-import { state } from './state.js';
+import { state, HOOFD_FUNCTIES } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
 import { isHoofd, functieFlags, kolomNaarRadId } from './helpers.js';
 
@@ -114,6 +114,230 @@ function downloadBlob(buffer, bestandsnaam) {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+
+// ---- Activiteit-sheet -------------------------------------------------------
+// Tweede worksheet "Activiteit" met formules die verwijzen naar het hoofdblad.
+// Rijen = functies / weekdagen / aggregaten; kolommen = radiologen.
+function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL_DIENST, dataEindRij) {
+  const ws = wb.addWorksheet('Activiteit');
+  const n  = radKolommen.length;
+  const totaalKol = n + 2; // label + n rads + gem
+
+  ws.columns = [
+    { width: 24 },
+    ...radKolommen.map(() => ({ width: 7 })),
+    { width: 8 },
+  ];
+
+  // Kolomletters in het hoofdblad
+  const mainRadKols    = radKolommen.map((_, i) => kolLetter(3 + i));
+  const mainDienstKol  = kolLetter(COL_DIENST);
+  const eindRij        = dataEindRij;
+
+  // Helper: SUMPRODUCT-check of een cel de hoofdletter `l` bevat
+  function bevatLetterCheck(letter, range) {
+    const l = letter.toUpperCase();
+    return (
+      `(((${range}="${l}")` +
+      `+(LEFT(${range},1)="${l}")` +
+      `+((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))` +
+      `+((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}")))>0)`
+    );
+  }
+
+  // Formule: tel hoofd-letter in hoofdblad-kolom
+  function telHoofdFormule(letter, mainKol) {
+    const rng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
+    return `=SUMPRODUCT(${bevatLetterCheck(letter, rng)})`;
+  }
+
+  // Formule: exacte variant-code tellen (bijv. ".WB")
+  function telVariantFormule(code, mainKol) {
+    const rng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
+    return `=COUNTIF(${rng},"${code}")`;
+  }
+
+  // Werkvloer-codes (voor weekdag-formule)
+  const werkCodes = (state.functies || [])
+    .filter(f => functieFlags(f.code || f.id).werkvloer)
+    .map(f => (f.code || f.id).toUpperCase());
+
+  // Formule: werkvloer-aanwezigheid op weekdag (1=ma … 5=vr)
+  function weekdagFormule(dagNr, mainKol) {
+    if (werkCodes.length === 0) return '=0';
+    const datRng = `${mainSheetNaam}!$B$2:$B$${eindRij}`;
+    const celRng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const checks = werkCodes.map(c => bevatLetterCheck(c, celRng)).join('+');
+    return (
+      `=SUMPRODUCT(` +
+      `(WEEKDAY(${datRng},2)=${dagNr})` +
+      `*(WEEKDAY(${datRng},2)<6)` +
+      `*(${checks}>0)*1)`
+    );
+  }
+
+  // Formule: dienst-teller (COUNTIF op slotId in dienst-kolom)
+  function dienstFormule(mainKol, slotId) {
+    const rng = `${mainSheetNaam}!${mainDienstKol}$2:${mainDienstKol}$${eindRij}`;
+    return `=COUNTIF(${rng},"${slotId}")`;
+  }
+
+  // Gemiddelde-formule voor huidige rij
+  function gemFormule(huidigeRij) {
+    return `=IFERROR(AVERAGE(${kolLetter(2)}${huidigeRij}:${kolLetter(n+1)}${huidigeRij}),0)`;
+  }
+
+  // SOM van specifieke rijen in dit sheet (voor aggregaten)
+  function aggrSomFormule(rijNrs, kolIdx) {
+    const kol  = kolLetter(kolIdx);
+    const refs = rijNrs.map(r => `${kol}${r}`);
+    return `=SUM(${refs.join(',')})`;
+  }
+
+  // ---- Stijlen ----------------------------------------------------------------
+  const BLAUW_F  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F3863' } };
+  const BLAUW_FO = { bold:true, color:{ argb:'FFFFFFFF' }, size:10 };
+  const GEM_F    = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF2F5496' } };
+  const SECT_F   = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFD6E4F0' } };
+  const SECT_FO  = { bold:true, size:10 };
+  const AGGR_F   = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFEBF2FC' } };
+  const AGGR_FO  = { bold:true, size:10 };
+
+  let rij = 1;
+
+  // Header-rij
+  {
+    const r = ws.getRow(rij); r.height = 18;
+    const lc = r.getCell(1);
+    lc.value = 'Functie'; lc.fill = BLAUW_F; lc.font = BLAUW_FO;
+    radKolommen.forEach((k, i) => {
+      const c = r.getCell(2 + i);
+      c.value = k; c.fill = BLAUW_F; c.font = BLAUW_FO;
+      c.alignment = { horizontal:'center' };
+    });
+    const gc = r.getCell(n + 2);
+    gc.value = 'Gem'; gc.fill = GEM_F; gc.font = BLAUW_FO;
+    gc.alignment = { horizontal:'center' };
+    rij++;
+  }
+
+  // Sectie-kop
+  function schrijfSectie(label) {
+    const r = ws.getRow(rij); r.height = 15;
+    for (let c = 1; c <= totaalKol; c++) r.getCell(c).fill = SECT_F;
+    r.getCell(1).value = label; r.getCell(1).font = SECT_FO;
+    ws.mergeCells(rij, 1, rij, totaalKol);
+    rij++;
+  }
+
+  // Data-rij (formule per radioloog-kolom)
+  function schrijfRij(label, formFn, opties = {}) {
+    const r = ws.getRow(rij); r.height = 14;
+    const lc = r.getCell(1);
+    lc.value = opties.variant ? '   ' + label : label;
+    if (opties.aggr)    { lc.fill = AGGR_F; lc.font = AGGR_FO; }
+    if (opties.variant) { lc.font = { italic:true, size:9, color:{ argb:'FF5F5E5A' } }; }
+
+    radKolommen.forEach((k, i) => {
+      const c = r.getCell(2 + i);
+      c.value = { formula: formFn(mainRadKols[i], dynKolomMap[k]) };
+      c.alignment = { horizontal:'center' };
+      if (opties.aggr)    c.fill = AGGR_F;
+      if (opties.variant) c.font = { italic:true, size:9, color:{ argb:'FF5F5E5A' } };
+    });
+
+    const gc = r.getCell(n + 2);
+    gc.value = { formula: gemFormule(rij) };
+    gc.alignment = { horizontal:'center' };
+    if (opties.aggr) gc.fill = AGGR_F;
+
+    const thisRij = rij; rij++; return thisRij;
+  }
+
+  // Aggregaat-rij via SUM van specifieke rijen in dit sheet
+  function schrijfAggrRij(label, rijNrs) {
+    const r = ws.getRow(rij); r.height = 14;
+    r.getCell(1).value = label;
+    r.getCell(1).fill = AGGR_F; r.getCell(1).font = AGGR_FO;
+    for (let i = 0; i < n; i++) {
+      const c = r.getCell(2 + i);
+      c.value = { formula: aggrSomFormule(rijNrs, 2 + i) };
+      c.alignment = { horizontal:'center' };
+      c.fill = AGGR_F;
+    }
+    const gc = r.getCell(n + 2);
+    gc.value = { formula: gemFormule(rij) };
+    gc.alignment = { horizontal:'center' };
+    gc.fill = AGGR_F;
+    const thisRij = rij; rij++; return thisRij;
+  }
+
+  // ==== Sectie 1: Functie-aantallen ==========================================
+  schrijfSectie('Functie-aantallen');
+
+  const hoofdRijNrs = {}; // letter → rijnummer in dit sheet
+  HOOFD_FUNCTIES.forEach(hoofd => {
+    const rn = schrijfRij(
+      `${hoofd.letter}  ·  ${hoofd.label}`,
+      (mainKol) => telHoofdFormule(hoofd.letter, mainKol)
+    );
+    hoofdRijNrs[hoofd.letter] = rn;
+
+    // Varianten (ingesprongen, kleinere tekst)
+    hoofd.varianten.forEach(v => {
+      schrijfRij(v, (mainKol) => telVariantFormule(v, mainKol), { variant: true });
+    });
+  });
+
+  // ==== Sectie 2: Aanwezigheid per weekdag ===================================
+  schrijfSectie('Aanwezigheid per weekdag (werkvloer)');
+  [
+    { label:'maandag',   dag:1 },
+    { label:'dinsdag',   dag:2 },
+    { label:'woensdag',  dag:3 },
+    { label:'donderdag', dag:4 },
+    { label:'vrijdag',   dag:5 },
+  ].forEach(({ label, dag }) => {
+    schrijfRij(label, (mainKol) => weekdagFormule(dag, mainKol));
+  });
+
+  // ==== Sectie 3: Samenvatting ===============================================
+  schrijfSectie('Samenvatting');
+
+  // Dienst (COUNTIF op slotId in dienst-kolom)
+  schrijfRij('Dienst', dienstFormule);
+
+  // Werkvloer = SOM van functies met werkvloer-vlag
+  const werkRijen = Object.entries(hoofdRijNrs)
+    .filter(([letter]) => functieFlags(letter).werkvloer)
+    .map(([, rn]) => rn);
+  const werkvloerRij = schrijfAggrRij('Werkvloer', werkRijen);
+
+  // Maatschapsdagen = SOM van codes die in MTSDAGEN_CODES zitten
+  const mtsCodes = window.MTSDAGEN_CODES || ['W','B','E','M','D','O','S','A','Z','T','X'];
+  const mtsRijen = Object.entries(hoofdRijNrs)
+    .filter(([letter]) => mtsCodes.includes(letter))
+    .map(([, rn]) => rn);
+  const mtsRij = schrijfAggrRij('Maatschapsdagen', mtsRijen);
+
+  // Mts + Stby = Maatschapsdagen + Q
+  const qRij = hoofdRijNrs['Q'];
+  const mtsstbyRij = schrijfAggrRij('Mts + Stby', [mtsRij, ...(qRij ? [qRij] : [])]);
+
+  // Werkdagen = Mts+Stby + K
+  const kRij = hoofdRijNrs['K'];
+  schrijfAggrRij('Werkdagen', [mtsstbyRij, ...(kRij ? [kRij] : [])]);
+
+  // Roostervrij = K + P + Q + R + V
+  const rvrRijen = ['K','P','Q','R','V']
+    .map(l => hoofdRijNrs[l])
+    .filter(Boolean);
+  schrijfAggrRij('Roostervrij', rvrRijen);
+
+  // ==== Bevroren header ======================================================
+  ws.views = [{ state:'frozen', ySplit:1, topLeftCell:'A2', activePane:'bottomLeft' }];
 }
 
 // ---- Hoofd-export -----------------------------------------------------------
@@ -367,6 +591,9 @@ export async function actExportJaar(jaar) {
     if (functieCfRules.length > 0) {
       ws.addConditionalFormatting({ ref: radRef, rules: functieCfRules });
     }
+
+    // ---- Activiteit-sheet ---------------------------------------------------
+    voegActiviteitSheetToe(wb, sheetNaam, radKolommen, dynKolomMap, COL_DIENST, excelRij - 1);
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();
