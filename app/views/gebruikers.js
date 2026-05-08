@@ -519,6 +519,38 @@ window.gebruikerVerwijderen = async function(uid, email) {
 
 // Excel-import handlers — delegeer naar import.js, met renderGebView als callback
 window.actImportFile        = (input) => actImportFile(input, renderGebView);
+
+window.actMaakBackup = async function() {
+  try {
+    const knop = document.querySelector('[onclick="window.actMaakBackup()"]');
+    if (knop) { knop.disabled = true; knop.textContent = 'Bezig\u2026'; }
+    await maakClientBackup('handmatig');
+    alert('Backup gedownload. Bewaar dit bestand op een veilige plek.');
+  } catch (e) {
+    alert('Backup mislukt: ' + e.message);
+  } finally {
+    renderGebView();
+  }
+};
+
+window.actHerstelBackup = async function(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (!confirm(
+    'WAARSCHUWING: Dit overschrijft alle Firestore-data met de inhoud van de backup.\n\n' +
+    'Auth-accounts (wachtwoorden) worden NIET aangetast.\n\n' +
+    'Doorgaan?'
+  )) return;
+  const meldingen = [];
+  try {
+    await herstelClientBackup(file, (t) => meldingen.push(t));
+    alert('Restore voltooid:\n\n' + meldingen.join('\n'));
+  } catch (e) {
+    alert('Restore mislukt: ' + e.message + '\n\n' + meldingen.join('\n'));
+  }
+  input.value = '';
+};
+
 window.actImportSchrijven   = ()      => actImportSchrijven(renderGebView);
 window.actImportAnnuleren   = ()      => actImportAnnuleren(renderGebView);
 window.actZetImportJaar     = (jaar)  => actZetImportJaar(jaar);

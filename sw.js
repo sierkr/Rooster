@@ -18,6 +18,7 @@ const PRECACHE = [
   './app/save.js',
   './app/import.js',
   './app/export.js',
+  './app/backup-client.js',
   './app/validatie.js',
   './app/views/radioloog.js',
   './app/views/jaaroverzicht.js',

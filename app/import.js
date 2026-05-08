@@ -10,6 +10,7 @@ import { doc, writeBatch, updateDoc, addDoc, collection, serverTimestamp } from 
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode, vandaagIso, plusDagen, kolomNaarRadId } from './helpers.js';
+import { maakClientBackup } from './backup-client.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
 const NABIJ_DAGEN = 30;
@@ -334,6 +335,13 @@ export async function actImportSchrijven(renderGebView) {
   state.importBezig = true;
   renderGebView();
   try {
+    // 0. Backup vóór schrijven — download JSON zodat altijd teruggedraaid kan worden
+    try {
+      await maakClientBackup('voor-import');
+    } catch (backupErr) {
+      console.warn('Backup mislukt (import gaat wel door):', backupErr);
+    }
+
     // 1. Indeling wegschrijven
     const BATCH = 400;
     let geschreven = 0;
