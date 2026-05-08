@@ -126,28 +126,34 @@ export async function renderGebView() {
     </div>
   `;
 
-  // Backup-sectie
+  // Backup-sectie — strings vooraf berekenen om geneste template literals te vermijden
   if (magGebruikersBeheren()) {
     const lb     = state.instellingen?.laatste_backup;
     const dagOud = lb ? Math.floor((Date.now() - new Date(lb).getTime()) / 86400000) : null;
     const nooit  = dagOud === null;
     const teOud  = dagOud !== null && dagOud > 30;
-    const lbTekst = nooit
-      ? 'Nog nooit een backup gemaakt'
-      : `Laatste backup: ${dagOud === 0 ? 'vandaag' : dagOud === 1 ? 'gisteren' : dagOud + ' dagen geleden'} · ${new Date(lb).toLocaleDateString('nl-NL')}`;
-    const lbReden = state.instellingen?.laatste_backup_reden || '';
+    const lbDatumStr = lb ? new Date(lb).toLocaleDateString('nl-NL') : '';
+    const lbDagStr   = dagOud === 0 ? 'vandaag' : dagOud === 1 ? 'gisteren' : dagOud + ' dagen geleden';
+    const lbTekst    = nooit ? 'Nog nooit een backup gemaakt' : 'Laatste backup: ' + lbDagStr + ' · ' + lbDatumStr;
+    const lbReden    = state.instellingen?.laatste_backup_reden || '';
+    const lbRedenStr = (lbReden && lbReden !== 'handmatig') ? ' (' + lbReden + ')' : '';
+
+    const waarschuwingBg   = nooit ? '#fff0f0' : '#fff4e0';
+    const waarschuwingKleur = nooit ? '#7a1010' : '#6b3a00';
+    const waarschuwingRand  = nooit ? '#e04040' : '#f0a020';
+    const waarschuwingTekst = nooit
+      ? '⚠ Nog nooit een backup gemaakt. Maak er een vóór je iets wijzigt.'
+      : '⚠ Laatste backup is ' + dagOud + ' dagen geleden. Aanbevolen: maandelijks of vóór grote wijzigingen.';
+    const waarschuwingHtml = (nooit || teOud)
+      ? '<div style="background:' + waarschuwingBg + ';color:' + waarschuwingKleur + ';padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;border-left:3px solid ' + waarschuwingRand + ';">' + waarschuwingTekst + '</div>'
+      : '';
+
     html += `
       <div style="margin-top: 1.5rem;">
         <div class="summary-label" style="margin-bottom: 6px;">Database-backup</div>
         <div class="card">
-          ${(nooit || teOud) ? `
-            <div style="background:${nooit?'#fff0f0':'#fff4e0'};color:${nooit?'#7a1010':'#6b3a00'};padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;border-left:3px solid ${nooit?'#e04040':'#f0a020'};">
-              ${nooit ? '⚠ Nog nooit een backup gemaakt. Maak er een vóór je iets wijzigt.' : \`⚠ Laatste backup is \${dagOud} dagen geleden. Aanbevolen: maandelijks of vóór grote wijzigingen.\`}
-            </div>
-          \` : ''}
-          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">
-            \${lbTekst}\${lbReden && lbReden !== 'handmatig' ? \` (\${lbReden})\` : ''}
-          </div>
+          ${waarschuwingHtml}
+          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">${lbTekst}${lbRedenStr}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn" onclick="window.actMaakBackup()">⬇ Backup downloaden</button>
             <label class="btn" style="cursor:pointer;">
@@ -161,7 +167,7 @@ export async function renderGebView() {
           </p>
         </div>
       </div>
-    \`;
+    `;
   }
 
   // Excel-import sectie
