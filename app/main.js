@@ -33,7 +33,10 @@ window.toonHelp = function() {
   const isBeheerder = typeof magGebruikersBeheren === 'function'
     ? magGebruikersBeheren()
     : false;
-  const url = isBeheerder ? './help/beheerder.html' : './help/gebruiker.html';
+  // Bouw absolute URL op basis van de huidige paginalocatie
+  // zodat het ook werkt als de app in een submap staat (bijv. GitHub Pages)
+  const base = window.location.href.replace(/\/[^\/]*$/, '/');
+  const url = base + (isBeheerder ? 'help/beheerder.html' : 'help/gebruiker.html');
   window.open(url, '_blank', 'noopener');
 };
 
