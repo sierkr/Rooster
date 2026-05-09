@@ -10,6 +10,7 @@ import { STANDAARD_WACHTWOORD } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { IMPORT_SHEET, actImportFile, actImportSchrijven, actImportAnnuleren, actZetImportJaar } from '../import.js';
 import { actExportJaar } from '../export.js';
+import { maakClientBackup, herstelClientBackup } from '../backup-client.js';
 
 export async function laadGebruikers() {
   if (!magGebruikersBeheren()) return;
