@@ -261,9 +261,14 @@ export async function actImportFile(input, renderGebView) {
     let nabijeCellen    = 0;
     const nabijeDatumsSet = new Set();
     for (const dag of dagen) {
-      const bestaand = state.indelingMap[dag.datum];
-      for (const [radId, nieuweCodes] of Object.entries(dag.toewijzingen || {})) {
-        const oudeCodes = bestaand?.toewijzingen?.[radId] || [];
+      const bestaand      = state.indelingMap[dag.datum];
+      const nieuweTwz     = dag.toewijzingen || {};
+      const oudeTwz       = bestaand?.toewijzingen || {};
+      // Verzamel alle radId's: zowel in Excel als in Firestore (om verwijderingen te vangen)
+      const alleRadIds    = new Set([...Object.keys(nieuweTwz), ...Object.keys(oudeTwz)]);
+      for (const radId of alleRadIds) {
+        const nieuweCodes = nieuweTwz[radId] || [];
+        const oudeCodes   = oudeTwz[radId]   || [];
         if (JSON.stringify(oudeCodes) !== JSON.stringify(nieuweCodes)) {
           totaalGewijzigd++;
           if (dag.datum >= vandaagPrev && dag.datum <= grensPrev) {
