@@ -341,12 +341,8 @@ export async function actImportSchrijven(renderGebView) {
       if (backupResultaat === null) {
         // Gebruiker heeft wachtwoord-prompt geannuleerd — geen backup gemaakt
         const doorgaan = confirm(
-          'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.
-
-' +
-          'Zonder backup kun je de import niet terugdraaien als er iets misgaat.
-
-' +
+          'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.\n\n' +
+          'Zonder backup kun je de import niet terugdraaien als er iets misgaat.\n\n' +
           'Wil je toch doorgaan zonder backup?'
         );
         if (!doorgaan) {
