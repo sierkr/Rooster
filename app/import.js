@@ -337,7 +337,24 @@ export async function actImportSchrijven(renderGebView) {
   try {
     // 0. Backup vóór schrijven — download JSON zodat altijd teruggedraaid kan worden
     try {
-      await maakClientBackup('voor-import');
+      const backupResultaat = await maakClientBackup('voor-import');
+      if (backupResultaat === null) {
+        // Gebruiker heeft wachtwoord-prompt geannuleerd — geen backup gemaakt
+        const doorgaan = confirm(
+          'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.
+
+' +
+          'Zonder backup kun je de import niet terugdraaien als er iets misgaat.
+
+' +
+          'Wil je toch doorgaan zonder backup?'
+        );
+        if (!doorgaan) {
+          state.importBezig = false;
+          renderGebView();
+          return;
+        }
+      }
     } catch (backupErr) {
       console.warn('Backup mislukt (import gaat wel door):', backupErr);
     }

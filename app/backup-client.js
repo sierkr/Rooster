@@ -145,11 +145,11 @@ export async function maakClientBackup(reden = 'handmatig') {
   const envelop = await versleutel(JSON.stringify(data), wachtwoord);
   envelop._info = { tijdstip, reden }; // leesbaar zonder wachtwoord (geen gevoelige data)
 
-  // Download
-  downloadBlob(JSON.stringify(envelop, null, 2), `rooster-backup-${tijdstempel()}.json`);
+  // Download — bestandsnaam eenmalig genereren zodat geschiedenis overeenkomt
+  const bestandsnaam = 'rooster-backup-' + tijdstempel() + '.json';
+  downloadBlob(JSON.stringify(envelop, null, 2), bestandsnaam);
 
   // Tijdstip + geschiedenis opslaan in Firestore
-  const bestandsnaam = 'rooster-backup-' + tijdstempel() + '.json';
   const nieuweEntry  = { tijdstip, reden, bestandsnaam };
   const huidigeGesch = Array.isArray(state?.instellingen?.backup_geschiedenis)
     ? state.instellingen.backup_geschiedenis
