@@ -34,7 +34,7 @@ export function permissie(naam) {
 }
 export function magWijzigen()         { return permissie('mag_beheer'); }
 export function magBeheerLezen()      { return permissie('mag_beheer_lezen') || permissie('mag_beheer'); }
-export function magOpmerkingen()      { return state.profiel?.rol === 'beheerder' || state.profiel?.rol === 'secretariaat'; }
+export function magOpmerkingen()      { return state.profiel?.rol === 'beheerder'; }
 export function magGebruikersBeheren(){ return permissie('mag_gebruikers'); }
 export function magRegelsBeheren()    { return permissie('mag_regels'); }
 export function magAlleWensenZien()   { return permissie('mag_wensen_alle'); }
@@ -295,13 +295,12 @@ export function weekRange(maandagIso) {
 
 export function fclass(code) {
   if (!code) return 'grid-cell-empty';
-  const c = code.replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
-  return `f-${c}`;
+  return `f-${hoofdLetterCode(code)}`;
 }
 export function functieNaam(code) {
   const f = functiesMap()[code];
   if (f) return f.naam;
-  const kort = (code || '').replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
+  const kort = hoofdLetterCode(code);
   return functiesMap()[kort]?.naam || code;
 }
 export function toewijzingVoor(datum, radId) {
@@ -371,6 +370,20 @@ export function valideerWachtwoord(pw) {
   if (pw.length < 6) return 'Wachtwoord moet minimaal 6 tekens zijn';
   if (pw === STANDAARD_WACHTWOORD) return 'Kies een ander wachtwoord dan het standaard wachtwoord';
   return null; // geldig
+}
+
+// ==== HTML escape =============================================================
+// Maakt vrije-tekst uit Firestore veilig om te interpoleren in een
+// template-string die later via innerHTML geinjecteerd wordt. Vervangt de
+// vijf HTML-special characters door hun entiteit. Toepassen op alles wat de
+// gebruiker zelf kon typen (opmerkingen, besprekingen, etc.).
+export function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ==== Feestdagen =============================================================

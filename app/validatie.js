@@ -50,7 +50,7 @@ export function valideerWeek(week) {
             });
           }
         }
-        if (regel.type === 'context' && regel.feestdagen_2026?.includes(datum)) {
+        if (regel.type === 'context' && regel[`feestdagen_${datum.slice(0,4)}`]?.includes(datum)) {
           if (hoofd.some(c => regel.codes_ongebruikelijk?.includes(c))) {
             conflicten.push({
               datum, dagNl, radId, codes, regelId: regel.id,

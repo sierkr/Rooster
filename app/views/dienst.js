@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import {
   vasteRads, radiologenMap, vandaagIso, isoWeekVan, datumsVanWeek,
-  weekRange, plusDagen, formatDatum, magWijzigen,
+  weekRange, plusDagen, formatDatum, magWijzigen, esc,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { slaDienstOp } from '../save.js';
@@ -72,7 +72,7 @@ export function renderDieView() {
           </div>
           ${dienstRad?.dect ? `<a class="dienst-dect-btn" href="${telLink(dienstRad.dect)}" onclick="event.stopPropagation();">📞 ${dienstRad.dect}</a>` : ''}
         </div>
-        ${interventie ? `<div class="dienst-meta">Interventie: ${interventie}</div>` : ''}
+        ${interventie ? `<div class="dienst-meta">Interventie: ${esc(interventie)}</div>` : ''}
       </div>
     `;
   });

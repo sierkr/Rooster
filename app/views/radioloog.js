@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import {
   vasteRads, radiologenMap, vandaagIso, isoWeekVan, datumsVanWeek,
   weekRange, formatDatum, fclass, functieNaam, toewijzingVoor, magOpmerkingen,
-  magBeheerLezen, magWijzigen,
+  magBeheerLezen, magWijzigen, esc,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { auth, db, reauthenticateWithCredential, EmailAuthProvider } from '../firebase-init.js';
@@ -106,11 +106,11 @@ window.toonDagDetail = function(datum, radId) {
     codes.forEach(c => { body += `<span class="badge ${fclass(c)}" style="margin-top: 4px;">${c} · ${functieNaam(c)}</span>`; });
     body += `</div>`;
   }
-  if (dag?.bespreking)  body += `<div style="margin-bottom: 10px;"><span class="muted">Bespreking</span><br>${dag.bespreking}</div>`;
-  if (dag?.interventie) body += `<div style="margin-bottom: 10px;"><span class="muted">Interventie</span><br>${dag.interventie}</div>`;
+  if (dag?.bespreking)  body += `<div style="margin-bottom: 10px;"><span class="muted">Bespreking</span><br>${esc(dag.bespreking)}</div>`;
+  if (dag?.interventie) body += `<div style="margin-bottom: 10px;"><span class="muted">Interventie</span><br>${esc(dag.interventie)}</div>`;
   const celOpm = dag?.cel_opmerkingen?.[radId];
-  if (celOpm)           body += `<div style="margin-bottom: 10px;"><span class="muted">Mijn opmerking</span><br>${celOpm}</div>`;
-  if (dag?.opmerking)   body += `<div style="margin-bottom: 10px;"><span class="muted">Dag-opmerking</span><br>${dag.opmerking}</div>`;
+  if (celOpm)           body += `<div style="margin-bottom: 10px;"><span class="muted">Mijn opmerking</span><br>${esc(celOpm)}</div>`;
+  if (dag?.opmerking)   body += `<div style="margin-bottom: 10px;"><span class="muted">Dag-opmerking</span><br>${esc(dag.opmerking)}</div>`;
   body += `</div>`;
 
   if (magOpmerkingen()) {

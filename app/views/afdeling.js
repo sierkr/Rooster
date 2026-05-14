@@ -2,8 +2,8 @@
 import { state, SLOTS, DAGEN_LANG, DAGEN_NL } from '../state.js';
 import {
   vasteRads, vasteRadsOpDatum, functiesMap, vandaagIso, formatDatum, functieNaam,
-  toewijzingVoor, huidigKalenderJaar, magBeheerLezen,
-  mandagVanIso, datumsVanWeek, isoWeekVan, plusDagen,
+  toewijzingVoor, huidigKalenderJaar, magBeheerLezen, hoofdLetterCode,
+  mandagVanIso, datumsVanWeek, isoWeekVan, plusDagen, esc,
 } from '../helpers.js';
 
 export function renderAfdView() {
@@ -42,7 +42,7 @@ export function renderAfdView() {
     vasteRads().forEach(r => {
       const codes = toewijzingVoor(datum, r.id);
       if (codes.length === 0) return;
-      const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+      const hoofdLetters = codes.map(hoofdLetterCode);
       // Bij beperkt zicht: hele item verbergen als ÉÉN van de codes privacy-gevoelig is
       if (beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l))) return;
 
@@ -76,9 +76,9 @@ export function renderAfdView() {
     if (weekRads.length > 0) {
       html += `<div class="summary"><div class="summary-label">Waarnemers</div><div class="summary-text">${weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' · ')}</div></div>`;
     }
-    if (dag.bespreking)  html += `<div class="summary"><div class="summary-label">Bespreking</div><div class="summary-text">${dag.bespreking}</div></div>`;
-    if (dag.interventie) html += `<div class="summary"><div class="summary-label">Interventie</div><div class="summary-text">${dag.interventie}</div></div>`;
-    if (dag.opmerking)   html += `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text">${dag.opmerking}</div></div>`;
+    if (dag.bespreking)  html += `<div class="summary"><div class="summary-label">Bespreking</div><div class="summary-text">${esc(dag.bespreking)}</div></div>`;
+    if (dag.interventie) html += `<div class="summary"><div class="summary-label">Interventie</div><div class="summary-text">${esc(dag.interventie)}</div></div>`;
+    if (dag.opmerking)   html += `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text">${esc(dag.opmerking)}</div></div>`;
   }
 
   container.innerHTML = html;
@@ -116,7 +116,7 @@ window.printAfdWeek = function() {
       rads.forEach(r => {
         const codes = toewijzingVoor(iso, r.id);
         if (codes.length === 0) return;
-        const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+        const hoofdLetters = codes.map(hoofdLetterCode);
         if (beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l))) return;
         const hoofdCode = codes[0];
         const isAfwezig = ['V', 'Z', 'A', 'K', 'Q', 'T'].includes(hoofdLetters[0]);
@@ -144,9 +144,9 @@ window.printAfdWeek = function() {
       if (weekRads.length > 0) {
         inhoud += `<div class="extra"><span class="lbl">Waarnemers:</span> ${weekRads.map(w => `${w.slot}: ${w.codes.join(', ')}`).join(' \u00b7 ')}</div>`;
       }
-      if (dagData.bespreking)  inhoud += `<div class="extra"><span class="lbl">Bespreking:</span> ${dagData.bespreking}</div>`;
-      if (dagData.interventie) inhoud += `<div class="extra"><span class="lbl">Interventie:</span> ${dagData.interventie}</div>`;
-      if (dagData.opmerking)   inhoud += `<div class="extra"><span class="lbl">Opmerking:</span> ${dagData.opmerking}</div>`;
+      if (dagData.bespreking)  inhoud += `<div class="extra"><span class="lbl">Bespreking:</span> ${esc(dagData.bespreking)}</div>`;
+      if (dagData.interventie) inhoud += `<div class="extra"><span class="lbl">Interventie:</span> ${esc(dagData.interventie)}</div>`;
+      if (dagData.opmerking)   inhoud += `<div class="extra"><span class="lbl">Opmerking:</span> ${esc(dagData.opmerking)}</div>`;
     }
 
     return `<div class="dag"><div class="kop">${dagLabel}</div>${inhoud}</div>`;
@@ -284,7 +284,7 @@ window.exportAfdWeek = async function() {
 
       const radInfo = rads.map(r => {
         const codes = toewijzingVoor(iso, r.id);
-        const hoofdLetters = codes.map(c => c.charAt(0).toUpperCase());
+        const hoofdLetters = codes.map(hoofdLetterCode);
         const verborgen = codes.length > 0 && beperkt && hoofdLetters.some(l => VERBORGEN_CODES.includes(l));
         let ochtend = '', middag = '';
         if (codes.length > 0 && !verborgen) {

@@ -8,7 +8,7 @@ import {
   radiologenMap, functiesMap, vandaagIso,
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
-  magAlleWensenZien, isFeestdag, isHoofd,
+  magAlleWensenZien, isFeestdag, isHoofd, esc,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
@@ -274,7 +274,7 @@ window.toonDagOpmerking = function(datum) {
   document.getElementById('sheetSub').textContent = 'Dag-opmerking';
   document.getElementById('sheetBody').innerHTML = `
     ${opm
-      ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${opm.replace(/</g,'&lt;')}</div></div>`
+      ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${esc(opm)}</div></div>`
       : `<div class="muted" style="font-style: italic;">Geen dag-opmerking</div>`}
     <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>
   `;
@@ -299,7 +299,7 @@ window.toonCelDetail = function(datum, radId) {
   document.getElementById('sheetSub').textContent = subTekst;
 
   const opmHtml = celOpm
-    ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${celOpm.replace(/</g,'&lt;')}</div></div>`
+    ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${esc(celOpm)}</div></div>`
     : `<div class="muted" style="font-style: italic;">Geen opmerking</div>`;
 
   // Ongelezen wijziging voor deze cel?
@@ -331,7 +331,7 @@ window.toonCelDetail = function(datum, radId) {
   document.getElementById('sheetBody').innerHTML = `
     ${wijzHtml}
     ${opmHtml}
-    ${dag?.opmerking ? `<div class="summary"><div class="summary-label">Dag-opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${dag.opmerking.replace(/</g,'&lt;')}</div></div>` : ''}
+    ${dag?.opmerking ? `<div class="summary"><div class="summary-label">Dag-opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${esc(dag.opmerking)}</div></div>` : ''}
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Sluiten</button>
       ${gezienKnop}
@@ -362,14 +362,14 @@ window.openCell = function(datum, radId) {
   if (wens) {
     const typeLabel = { vakantie: 'Vakantie', niet_beschikbaar: 'Niet beschikbaar', voorkeur: 'Voorkeur' }[wens.type] || wens.type;
     const voorkeur = wens.voorkeur_code ? ` (${wens.voorkeur_code})` : '';
-    const opm = wens.opmerking ? ` — ${wens.opmerking}` : '';
+    const opm = wens.opmerking ? ` — ${esc(wens.opmerking)}` : '';
     wensInfo = `<div class="form-info" style="margin-bottom: 1rem;">💬 Wens: <b>${typeLabel}${voorkeur}</b>${opm}</div>`;
   }
 
   document.getElementById('sheetTitle').textContent = `${label} · ${formatDatum(datum, 'kort')}`;
   document.getElementById('sheetSub').textContent = 'Tik 1 code (hele dag) of 2 codes (ochtend/middag)';
 
-  const opmEsc = huidigOpm.replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const opmEsc = esc(huidigOpm);
 
   document.getElementById('sheetBody').innerHTML = `
     ${wensInfo}
@@ -476,7 +476,7 @@ window.opmerkingBewerken = function(datum) {
   document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
   document.getElementById('sheetSub').textContent = 'Opmerking voor deze dag';
   document.getElementById('sheetBody').innerHTML = `
-    <textarea class="input" id="opmInput" rows="4" style="font-family: inherit;">${huidig.replace(/</g, '&lt;')}</textarea>
+    <textarea class="input" id="opmInput" rows="4" style="font-family: inherit;">${esc(huidig)}</textarea>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
       <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanOpmerking('${datum}')">Opslaan</button>

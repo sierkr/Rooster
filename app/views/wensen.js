@@ -5,7 +5,7 @@ import { db } from '../firebase-init.js';
 import { state } from '../state.js';
 import {
   radiologenMap, functiesMap, vandaagIso, formatDatum,
-  toewijzingVoor, hoofdLetterCode, magAlleWensenZien, isHoofd,
+  toewijzingVoor, hoofdLetterCode, magAlleWensenZien, isHoofd, esc,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 
@@ -94,7 +94,7 @@ function renderWensCard(w, eigen) {
     <button class="btn" style="font-size: 11px; padding: 4px 8px; margin-top: 8px;" onclick="event.stopPropagation(); window.wensHeropen('${w.id}')">Status terug naar open</button>
   ` : '';
 
-  const toelichting = w.toelichting ? `<div class="note" style="margin-top: 6px;">Beheerder: ${w.toelichting}</div>` : '';
+  const toelichting = w.toelichting ? `<div class="note" style="margin-top: 6px;">Beheerder: ${esc(w.toelichting)}</div>` : '';
 
   const klikActie = eigen
     ? `onclick="window.bewerkWens('${w.id}')"`
@@ -111,7 +111,7 @@ function renderWensCard(w, eigen) {
             ${statusBadge}
           </div>
           ${!eigen ? `<div class="muted" style="margin-top: 4px; font-size: 12px;">${naam}</div>` : ''}
-          ${w.opmerking ? `<div class="note" style="margin-top: 6px;">${w.opmerking}</div>` : ''}
+          ${w.opmerking ? `<div class="note" style="margin-top: 6px;">${esc(w.opmerking)}</div>` : ''}
           ${toelichting}
         </div>
       </div>
@@ -157,7 +157,7 @@ function toonWensFormulier(bestaand) {
     </div>
     <div class="form-field">
       <label class="form-label">Opmerking (optioneel)</label>
-      <textarea class="input" id="wOpmerking" rows="2">${(w.opmerking||'').replace(/</g,'&lt;')}</textarea>
+      <textarea class="input" id="wOpmerking" rows="2">${esc(w.opmerking||'')}</textarea>
     </div>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       ${!isNieuw ? `<button class="btn" style="color: #501313;" onclick="window.verwijderWens('${bestaand.id}')">Verwijder</button>` : ''}

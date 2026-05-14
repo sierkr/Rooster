@@ -23,7 +23,7 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { db } from './firebase-init.js';
 import { state, HOOFD_FUNCTIES } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
-import { isHoofd, functieFlags, kolomNaarRadId } from './helpers.js';
+import { isHoofd, functieFlags, kolomNaarRadId, hoofdLetterCode } from './helpers.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -36,14 +36,10 @@ const FALLBACK_KLEUREN = {
 function bouwKleurenMap() {
   const map = { ...FALLBACK_KLEUREN };
   (state.functies || []).forEach(f => {
-    const code = (f.code || f.id || '').charAt(0).toUpperCase();
+    const code = hoofdLetterCode(f.code || f.id);
     if (code && f.kleur) map[code] = f.kleur.replace('#', '');
   });
   return map;
-}
-
-function hoofdLetter(code) {
-  return (code || '').replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
 }
 
 function tekstArgb(hex6) {
@@ -481,7 +477,7 @@ export async function actExportJaar(jaar) {
 
         if (codeStr) {
           const firstCode = Array.isArray(codes) ? codes[0] : codes;
-          const letter = hoofdLetter(firstCode || '');
+          const letter = hoofdLetterCode(firstCode || '');
 
           // V of K → lichtgeel (afwezigheid), overschrijft weekend-grijs
           if (letter === 'V' || letter === 'K') {

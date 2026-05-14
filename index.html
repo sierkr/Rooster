@@ -461,21 +461,15 @@
 
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').then(reg => {
-      reg.addEventListener('updatefound', () => {
-        const newWorker = reg.installing;
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'activated') {
-            // Nieuwe versie actief — pagina herladen voor verse bestanden
-            window.location.reload();
-          }
-        });
-      });
-    });
-
-    // Als een wachtende SW klaar staat, activeer direct
+    // Onthoud of er bij page-load al een SW de controle had. Zo ja, dan
+    // betekent een latere controllerchange dat er een nieuwe versie actief
+    // is geworden en herladen we voor verse bestanden. Zo nee, dan is het
+    // een first-install (clients.claim() na install) en willen we juist
+    // niet reloaden — de pagina is net geopend.
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('./sw.js');
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
+      if (hadController) window.location.reload();
     });
   }
 </script>

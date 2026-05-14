@@ -4,44 +4,40 @@
 import { state, VASTE_RAD_IDS } from '../state.js';
 import {
   vasteRads, radiologenMap, vandaagIso, huidigKalenderJaar,
-  fclass, magWijzigen,
+  fclass, magWijzigen, plusDagen, isoWeekVan,
 } from '../helpers.js';
 
 const DAGEN = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
 
-// Geef alle maandag-datums van het jaar terug (ISO strings).
+// Geef alle maandag-datums van het jaar terug (ISO strings). UTC-veilig.
 function maandagsVanJaar(jaar) {
   const result = [];
-  const d = new Date(jaar, 0, 1);
-  // Ga naar eerste maandag
-  while (d.getDay() !== 1) d.setDate(d.getDate() + 1);
-  while (d.getFullYear() <= jaar) {
+  const d = new Date(Date.UTC(jaar, 0, 1));
+  // Ga naar eerste maandag van het jaar (UTC-day 1 = maandag, 0 = zondag).
+  const dagNr = d.getUTCDay() || 7; // 1=ma..7=zo
+  if (dagNr !== 1) d.setUTCDate(d.getUTCDate() + (8 - dagNr));
+  while (d.getUTCFullYear() <= jaar) {
     result.push(d.toISOString().slice(0, 10));
-    d.setDate(d.getDate() + 7);
+    d.setUTCDate(d.getUTCDate() + 7);
   }
   return result;
 }
 
 // Geef datum-string voor dag offset vanaf maandag (0=ma, 6=zo).
 function dagVanWeek(maandag, offset) {
-  const d = new Date(maandag + 'T12:00:00');
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return plusDagen(maandag, offset);
 }
 
-// Maandlabel: geef maand terug voor de eerste dag van een week die in die maand valt.
+// Maandlabel: geef maandnaam terug van de gegeven datum.
 function maandLabel(maandag) {
-  const d = new Date(maandag + 'T12:00:00');
-  return d.toLocaleDateString('nl-NL', { month: 'short' });
+  const [j, m, d] = maandag.split('-').map(Number);
+  const dt = new Date(Date.UTC(j, m - 1, d));
+  return dt.toLocaleDateString('nl-NL', { month: 'short', timeZone: 'UTC' });
 }
 
-// ISO weeknummer.
+// ISO weeknummer (UTC-veilig via gedeelde helper).
 function isoWeek(maandag) {
-  const d = new Date(maandag + 'T12:00:00');
-  const thursday = new Date(d);
-  thursday.setDate(d.getDate() + 3);
-  const yearStart = new Date(thursday.getFullYear(), 0, 1);
-  return Math.ceil((((thursday - yearStart) / 86400000) + 1) / 7);
+  return isoWeekVan(maandag);
 }
 
 export function renderJaaView() {
