@@ -32,7 +32,10 @@ export async function renderGebView() {
           <p style="font-size: 17px; font-weight: 500; margin: 0;">Gebruikers</p>
           <p class="muted" style="margin: 2px 0 0;">${state.gebruikers.length} gebruiker${state.gebruikers.length===1?'':'s'}</p>
         </div>
-        <button class="btn btn-primary" onclick="window.nieuweGebruiker()">+ Nieuw</button>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+          <button class="btn btn-primary" onclick="window.nieuweGebruiker()">+ Nieuw</button>
+          <span class="muted" style="font-size: 11px;">v${window.APP_VERSIE || '?'}</span>
+        </div>
       </div>
     </div>
   `;
