@@ -1,33 +1,17 @@
-Rooster v3.27.90 — Release notes
+Rooster v3.27.93 — Release notes
 ==================================
 
-EXCEL-KWALITEIT
----------------
-- wb.calcProperties = { fullCalcOnLoad: true } toegevoegd.
-  Excel sloeg geen gecachte formulewaarden op, waardoor het bij openen
-  alles moest herberekenen en daarbij fouten meldde. Dit vertelt Excel
-  expliciet dat het bij openen alles opnieuw moet berekenen.
+Export.js teruggezet naar v3.27.85-basis
+-----------------------------------------
+De Excel-export werkte foutloos in v3.27.85. Alle wijzigingen die
+daarna aan export.js zijn gedaan (UPPER, calcProperties, watermerk
+via named range en verborgen sheet, verplicht-filter) zijn verwijderd.
 
-- UPPER() toegevoegd in alle SUMPRODUCT-formules (telLetterFormule en
-  bevatLetterCheck). Lowercase celwaarden zoals 'bo' veroorzaakten
-  #VALUE!-fouten. Beide functies (hoofdblad + Activiteit-sheet) zijn
-  gecorrigeerd.
-
-WATERMERK + SLIMME IMPORT
---------------------------
-- Export schrijft nu een named range 'RoosterApp' in het werkboek.
-  Dit is een onzichtbaar watermerk waarmee de import het bestand herkent
-  als een Rooster-export, ongeacht hoe het sheet heet.
-
-- Import-logica bijgewerkt:
-  * Nieuw bestand (met watermerk): zoekt in alle sheets naar de eerste
-    met een Dag/Datum-header — sheetnaam maakt niet meer uit.
-  * Oud bestand (zonder watermerk): werkt precies zoals voorheen via
-    het 'Indeling YYYY'-patroon als fallback.
+Enige toevoeging t.o.v. v85: de bestandsnaam-parameter zodat de
+gebruiker zelf een naam kan opgeven voor het exportbestand.
 
 TE UPLOADEN NAAR GITHUB
 ------------------------
 - app/export.js
-- app/import.js
 - config.js
 - sw.js

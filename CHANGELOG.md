@@ -1,3 +1,25 @@
+## v3.27.93 — Export.js teruggezet naar v3.27.85-basis
+
+### Wijzigingen
+- **export.js**: volledig teruggezet naar de v3.27.85-versie die foutloos werkte. Alle wijzigingen na v85 (UPPER, calcProperties, watermerk, verplicht-filter, bgColor-fix) zijn verwijderd. Enige toevoeging t.o.v. v85: de bestandsnaam-parameter (naamParam) uit v3.27.86.
+
+---
+
+## v3.27.92 — Bugfix: watermerk veroorzaakte Excel-corruptie
+
+### Wijzigingen
+- **export.js**: `wb.definedNames.add('RoosterApp', { formula: '"1"' })` gebruikte de ExcelJS API verkeerd — het tweede argument moet een celreferentie-string zijn, niet een object. Dit produceerde `[object Object]` in de werkboek-XML, waardoor Excel het bestand moest repareren. Vervangen door een verborgen werkblad `_RoosterApp` (state: veryHidden) met waarde `1` in cel A1 — betrouwbaar en zonder API-risico.
+- **import.js**: watermerk-detectie bijgewerkt naar `wb.SheetNames.includes('_RoosterApp')` met fallback op de oude named-range check.
+
+---
+
+## v3.27.91 — Versienummer zichtbaar in gebruikers-tab
+
+### Wijzigingen
+- **gebruikers.js**: versienummer (`v3.27.91`) zichtbaar onder de "+ Nieuw"-knop in de Gebruikers-card, zodat na een upload direct te controleren is of de browser de juiste versie toont.
+
+---
+
 ## v3.27.90 — Excel: formule-kwaliteit + watermerk + import-herkenning
 
 ### Wijzigingen

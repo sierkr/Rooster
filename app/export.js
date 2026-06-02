@@ -56,10 +56,10 @@ function telLetterFormule(letter, range) {
   const l = letter.toUpperCase();
   return (
     `SUMPRODUCT(` +
-    `((UPPER(${range})="${l}")+` +
-    `(UPPER(LEFT(${range},1))="${l}")+` +
-    `((UPPER(LEFT(${range},1))=".")*(UPPER(MID(${range},2,1))="${l}"))+` +
-    `((ISNUMBER(VALUE(LEFT(${range},1))))*(UPPER(MID(${range},2,1))="${l}"))>0)*1)`
+    `((${range}="${l}")+` +
+    `(LEFT(${range},1)="${l}")+` +
+    `((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))+` +
+    `((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}"))>0)*1)`
   );
 }
 
@@ -132,30 +132,26 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   const mainDienstKol  = kolLetter(COL_DIENST);
   const eindRij        = dataEindRij;
 
-  // Helper: SUMPRODUCT-check of een cel de hoofdletter `l` bevat (case-insensitief)
+  // Helper: SUMPRODUCT-check of een cel de hoofdletter `l` bevat
   function bevatLetterCheck(letter, range) {
     const l = letter.toUpperCase();
     return (
-      `(((UPPER(${range})="${l}")` +
-      `+(UPPER(LEFT(${range},1))="${l}")` +
-      `+((UPPER(LEFT(${range},1))=".")*(UPPER(MID(${range},2,1))="${l}"))` +
-      `+((ISNUMBER(VALUE(LEFT(${range},1))))*(UPPER(MID(${range},2,1))="${l}")))>0)`
+      `(((${range}="${l}")` +
+      `+(LEFT(${range},1)="${l}")` +
+      `+((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))` +
+      `+((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}")))>0)`
     );
   }
 
-  // Geciteerde sheetnaam voor gebruik in cross-sheet formule-referenties.
-  // Excel vereist single quotes om sheetnamen met spaties: 'Indeling 2026'!A$2
-  const quotedSheet = `'${mainSheetNaam}'`;
-
   // Formule: tel hoofd-letter in hoofdblad-kolom
   function telHoofdFormule(letter, mainKol) {
-    const rng = `${quotedSheet}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const rng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
     return `=SUMPRODUCT(${bevatLetterCheck(letter, rng)})`;
   }
 
   // Formule: exacte variant-code tellen (bijv. ".WB")
   function telVariantFormule(code, mainKol) {
-    const rng = `${quotedSheet}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const rng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
     return `=COUNTIF(${rng},"${code}")`;
   }
 
@@ -167,8 +163,8 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   // Formule: werkvloer-aanwezigheid op weekdag (1=ma … 5=vr)
   function weekdagFormule(dagNr, mainKol) {
     if (werkCodes.length === 0) return '=0';
-    const datRng = `${quotedSheet}!$B$2:$B$${eindRij}`;
-    const celRng = `${quotedSheet}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const datRng = `${mainSheetNaam}!$B$2:$B$${eindRij}`;
+    const celRng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
     const checks = werkCodes.map(c => bevatLetterCheck(c, celRng)).join('+');
     return (
       `=SUMPRODUCT(` +
@@ -176,6 +172,12 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
       `*(WEEKDAY(${datRng},2)<6)` +
       `*(${checks}>0)*1)`
     );
+  }
+
+  // Formule: dienst-teller (COUNTIF op slotId in dienst-kolom)
+  function dienstFormule(mainKol, slotId) {
+    const rng = `${mainSheetNaam}!${mainDienstKol}$2:${mainDienstKol}$${eindRij}`;
+    return `=COUNTIF(${rng},"${slotId}")`;
   }
 
   // Gemiddelde-formule voor huidige rij
@@ -220,11 +222,9 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   // Sectie-kop
   function schrijfSectie(label) {
     const r = ws.getRow(rij); r.height = 15;
+    for (let c = 1; c <= totaalKol; c++) r.getCell(c).fill = SECT_F;
+    r.getCell(1).value = label; r.getCell(1).font = SECT_FO;
     ws.mergeCells(rij, 1, rij, totaalKol);
-    const lc = r.getCell(1);
-    lc.fill  = SECT_F;
-    lc.value = label;
-    lc.font  = SECT_FO;
     rij++;
   }
 
@@ -302,11 +302,8 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   // ==== Sectie 3: Samenvatting ===============================================
   schrijfSectie('Samenvatting');
 
-  // Dienst (COUNTIF op radioloog-kolomletter in dienst-kolom van hoofdblad)
-  schrijfRij('Dienst', (mainKol) => {
-    const rng = `${quotedSheet}!${mainDienstKol}$2:${mainDienstKol}$${eindRij}`;
-    return `=COUNTIF(${rng},"${mainKol}")`;
-  });
+  // Dienst (COUNTIF op slotId in dienst-kolom)
+  schrijfRij('Dienst', dienstFormule);
 
   // Werkvloer = SOM van functies met werkvloer-vlag
   const werkRijen = Object.entries(hoofdRijNrs)
@@ -384,9 +381,8 @@ export async function actExportJaar(jaar, naamParam) {
     const COL_INTERV   = COL_RAD_EIND + 3;
     const COL_OPM      = COL_RAD_EIND + 4;
     const COL_AANTAL   = COL_RAD_EIND + 5;
-    // Alleen functies met verplicht=true verschijnen als indicator-kolommen
     const FUNCTIE_LETTERS = (state.functies || [])
-      .filter(f => isHoofd(f) && f.verplicht === true)
+      .filter(f => isHoofd(f) && functieFlags(f.code || f.id).werkvloer)
       .map(f => (f.code || f.id).toUpperCase())
       .sort();
     const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => COL_AANTAL + 2 + i);
@@ -395,11 +391,6 @@ export async function actExportJaar(jaar, naamParam) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Rooster-app';
     wb.created = new Date();
-    // Vertel Excel dat formules herberekend moeten worden bij openen
-    wb.calcProperties = { fullCalcOnLoad: true };
-    // Watermerk: verborgen sheet zodat import het bestand herkent ongeacht sheetnaam
-    const wsWatermerk = wb.addWorksheet('_RoosterApp', { state: 'veryHidden' });
-    wsWatermerk.getCell('A1').value = '1';
     const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
     const ws = wb.addWorksheet(sheetNaam);
 
@@ -526,7 +517,7 @@ export async function actExportJaar(jaar, naamParam) {
         const cel = rij.getCell(COL_FUNCTIES[li]);
         cel.value     = { formula: ontbrekendFormule(letter, excelRij, RAD_EIND_KOL) };
         cel.alignment = { horizontal: 'center', vertical: 'middle' };
-        cel.font      = { color: { argb: 'FFAAAAAA' }, size: 10 };
+        cel.font      = { color: { argb: 'FF888888' }, italic: true, size: 9 };
         if (isWeekend) cel.fill = WEEKEND_FILL;
       });
 
@@ -547,7 +538,7 @@ export async function actExportJaar(jaar, naamParam) {
         type: 'expression',
         formulae: [`AND(${aantalLetter}2<IF(WEEKDAY(B2,2)=5,4,5),WEEKDAY(B2,2)<6)`],
         style: {
-          fill:   { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
+          fill:   { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
           font:   { color: { argb: 'FF9C0006' }, bold: true },
         },
         priority: 1,
@@ -560,19 +551,19 @@ export async function actExportJaar(jaar, naamParam) {
       rules: [
         {
           type: 'cellIs', operator: 'greaterThanOrEqual', formulae: [5],
-          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } },
+          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFC6EFCE' } },
                    font: { color: { argb: 'FF276221' } } },
           priority: 3,
         },
         {
           type: 'cellIs', operator: 'equal', formulae: [4],
-          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } },
+          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFEB9C' } },
                    font: { color: { argb: 'FF9C5700' } } },
           priority: 2,
         },
         {
           type: 'cellIs', operator: 'lessThan', formulae: [4],
-          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
+          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
                    font: { color: { argb: 'FF9C0006' }, bold: true } },
           priority: 1,
         },
@@ -588,49 +579,13 @@ export async function actExportJaar(jaar, naamParam) {
         type: 'expression',
         formulae: [`OR(C2="${code}",LEFT(C2,1)="${code}",(LEFT(C2,1)=".")*(MID(C2,2,1)="${code}"))`],
         style: {
-          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex.toUpperCase() } },
+          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF' + hex.toUpperCase() } },
           font: { color: { argb: tekstArgb(hex) } },
         },
         priority: 20 + i,
       }));
     if (functieCfRules.length > 0) {
       ws.addConditionalFormatting({ ref: radRef, rules: functieCfRules });
-    }
-
-    // 4. Indicator-kolommen: rood + vet als cel niet leeg (= functie ontbreekt)
-    FUNCTIE_LETTERS.forEach((letter, li) => {
-      const indKol = kolLetter(COL_FUNCTIES[li]);
-      const indRef = `${indKol}2:${indKol}${excelRij - 1}`;
-      ws.addConditionalFormatting({
-        ref: indRef,
-        rules: [{
-          type: 'expression',
-          formulae: [`${indKol}2<>""`],
-          style: {
-            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
-            font: { color: { argb: 'FF9C0006' }, bold: true, size: 10 },
-          },
-          priority: 1,
-        }],
-      });
-    });
-
-    // 5. Datum rood als verplichte functie ontbreekt (hogere prioriteit dan bezettingsnorm)
-    if (FUNCTIE_LETTERS.length > 0) {
-      const indLetters = FUNCTIE_LETTERS.map((_, li) => kolLetter(COL_FUNCTIES[li]));
-      const ontbreektFormule = indLetters.map(k => `${k}2<>""`).join(',');
-      ws.addConditionalFormatting({
-        ref: dataRef,
-        rules: [{
-          type: 'expression',
-          formulae: [`AND(WEEKDAY(B2,2)<6,OR(${ontbreektFormule}))`],
-          style: {
-            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
-            font: { color: { argb: 'FF9C0006' }, bold: true },
-          },
-          priority: 2,
-        }],
-      });
     }
 
     // ---- Activiteit-sheet ---------------------------------------------------
