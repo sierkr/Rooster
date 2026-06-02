@@ -56,10 +56,10 @@ function telLetterFormule(letter, range) {
   const l = letter.toUpperCase();
   return (
     `SUMPRODUCT(` +
-    `((${range}="${l}")+` +
-    `(LEFT(${range},1)="${l}")+` +
-    `((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))+` +
-    `((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}"))>0)*1)`
+    `((UPPER(${range})="${l}")+` +
+    `(UPPER(LEFT(${range},1))="${l}")+` +
+    `((UPPER(LEFT(${range},1))=".")*(UPPER(MID(${range},2,1))="${l}"))+` +
+    `((ISNUMBER(VALUE(LEFT(${range},1))))*(UPPER(MID(${range},2,1))="${l}"))>0)*1)`
   );
 }
 
@@ -132,14 +132,14 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   const mainDienstKol  = kolLetter(COL_DIENST);
   const eindRij        = dataEindRij;
 
-  // Helper: SUMPRODUCT-check of een cel de hoofdletter `l` bevat
+  // Helper: SUMPRODUCT-check of een cel de hoofdletter `l` bevat (case-insensitief)
   function bevatLetterCheck(letter, range) {
     const l = letter.toUpperCase();
     return (
-      `(((${range}="${l}")` +
-      `+(LEFT(${range},1)="${l}")` +
-      `+((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))` +
-      `+((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}")))>0)`
+      `(((UPPER(${range})="${l}")` +
+      `+(UPPER(LEFT(${range},1))="${l}")` +
+      `+((UPPER(LEFT(${range},1))=".")*(UPPER(MID(${range},2,1))="${l}"))` +
+      `+((ISNUMBER(VALUE(LEFT(${range},1))))*(UPPER(MID(${range},2,1))="${l}")))>0)`
     );
   }
 
@@ -395,6 +395,10 @@ export async function actExportJaar(jaar, naamParam) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Rooster-app';
     wb.created = new Date();
+    // Vertel Excel dat formules herberekend moeten worden bij openen
+    wb.calcProperties = { fullCalcOnLoad: true };
+    // Watermerk: named range zodat import het bestand herkent ongeacht sheetnaam
+    wb.definedNames.add('RoosterApp', { formula: '"1"' });
     const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
     const ws = wb.addWorksheet(sheetNaam);
 

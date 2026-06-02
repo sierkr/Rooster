@@ -1,3 +1,13 @@
+## v3.27.90 — Excel: formule-kwaliteit + watermerk + import-herkenning
+
+### Wijzigingen
+- **export.js**: `wb.calcProperties = { fullCalcOnLoad: true }` toegevoegd — Excel herberekent formules correct bij openen in plaats van te klagen over ontbrekende cache
+- **export.js**: `UPPER()` toegevoegd om `LEFT()` en `MID()` in alle SUMPRODUCT-formules (zowel hoofdblad als Activiteit-sheet) — lowercase celwaarden zoals `bo` veroorzaken geen `#VALUE!` meer
+- **export.js**: Named range `RoosterApp` toegevoegd als watermerk — maakt het bestand herkenbaar bij import ongeacht de sheetnaam
+- **import.js**: Sheetnaam-detectie uitgebreid: bij aanwezig watermerk zoekt de import de sheet met `Dag`/`Datum`-header in alle sheets (naam-onafhankelijk); zonder watermerk blijft het klassieke `Indeling YYYY`-patroon werken als fallback
+
+---
+
 ## v3.27.89 — Bugfix: Activiteit-sheet formules gecorrigeerd
 
 ### Wijzigingen

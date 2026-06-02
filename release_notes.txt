@@ -1,26 +1,33 @@
-Rooster v3.27.89 — Release notes
+Rooster v3.27.90 — Release notes
 ==================================
 
-BUGFIXES ACTIVITEIT-SHEET (EXCEL SHEET 2)
-------------------------------------------
-- Root cause van alle Excel-fouten (corruptie, #NAME?, "linked workbook"):
-  De sheetnaam 'Indeling 2026' bevat een spatie. Excel vereist dat sheetnamen
-  met spaties in formules tussen single quotes staan: 'Indeling 2026'!A$2
-  In plaats van: Indeling 2026!A$2
-  Alle 6 cross-sheet referenties in de Activiteit-sheet zijn gecorrigeerd.
-  Dit lost op:
-    * #NAME? fouten in alle COUNTIF-rijen (varianten zoals .WB, 4P etc.)
-    * "Removed Records: Formula from sheet2.xml" bij openen
-    * "Unable to refresh linked workbook" waarschuwing
+EXCEL-KWALITEIT
+---------------
+- wb.calcProperties = { fullCalcOnLoad: true } toegevoegd.
+  Excel sloeg geen gecachte formulewaarden op, waardoor het bij openen
+  alles moest herberekenen en daarbij fouten meldde. Dit vertelt Excel
+  expliciet dat het bij openen alles opnieuw moet berekenen.
 
-- Na ws.mergeCells() werden alle cellen in de rij gestyled via een loop.
-  ExcelJS staat na merge alleen schrijven naar de master-cel (cel 1) toe.
-  De loop produceerde ongeldige XML. Nu alleen cel 1 gestyled.
+- UPPER() toegevoegd in alle SUMPRODUCT-formules (telLetterFormule en
+  bevatLetterCheck). Lowercase celwaarden zoals 'bo' veroorzaakten
+  #VALUE!-fouten. Beide functies (hoofdblad + Activiteit-sheet) zijn
+  gecorrigeerd.
 
-- Dode functie dienstFormule() verwijderd (werd niet meer aangeroepen).
+WATERMERK + SLIMME IMPORT
+--------------------------
+- Export schrijft nu een named range 'RoosterApp' in het werkboek.
+  Dit is een onzichtbaar watermerk waarmee de import het bestand herkent
+  als een Rooster-export, ongeacht hoe het sheet heet.
+
+- Import-logica bijgewerkt:
+  * Nieuw bestand (met watermerk): zoekt in alle sheets naar de eerste
+    met een Dag/Datum-header — sheetnaam maakt niet meer uit.
+  * Oud bestand (zonder watermerk): werkt precies zoals voorheen via
+    het 'Indeling YYYY'-patroon als fallback.
 
 TE UPLOADEN NAAR GITHUB
 ------------------------
 - app/export.js
+- app/import.js
 - config.js
 - sw.js

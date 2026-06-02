@@ -153,12 +153,47 @@ export async function actImportFile(input, renderGebView) {
     const XLSX = await laadSheetJS();
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { cellComments: true, cellDates: true });
-    const sheetNaam = state.importJaar
-      ? IMPORT_SHEET.replace(/\d{4}/, state.importJaar)
-      : (wb.SheetNames.find(n => /^Indeling \d{4}$/.test(n)) || IMPORT_SHEET);
-    if (!wb.Sheets[sheetNaam]) {
-      throw new Error(`Sheet '${sheetNaam}' niet gevonden. Aanwezig: ${wb.SheetNames.join(', ')}`);
+
+    // ---- Sheetnaam bepalen --------------------------------------------------
+    // Volgorde:
+    // 1. Watermerk aanwezig (named range 'RoosterApp') → zoek sheet met Dag/Datum-header
+    // 2. Klassiek patroon 'Indeling YYYY' → gebruik die sheet
+    // 3. Geforceerd jaar via state.importJaar → gebruik die sheet
+    // 4. Geen herkenning → foutmelding
+
+    const heeftWatermerk = wb.Defined && wb.Defined.some(d => d.Name === 'RoosterApp');
+
+    let sheetNaam = null;
+
+    if (heeftWatermerk) {
+      // Nieuw formaat: zoek in alle sheets naar de eerste met Dag/Datum-header
+      for (const naam of wb.SheetNames) {
+        const ws = wb.Sheets[naam];
+        if (!ws || !ws['!ref']) continue;
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let r = range.s.r; r <= Math.min(range.s.r + 60, range.e.r); r++) {
+          const aCel = ws[XLSX.utils.encode_cell({ c: 0, r })];
+          const bCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
+          if (_celStr(aCel) === 'Dag' && _celStr(bCel) === 'Datum') {
+            sheetNaam = naam;
+            break;
+          }
+        }
+        if (sheetNaam) break;
+      }
+      if (!sheetNaam) throw new Error('Rooster-bestand herkend (watermerk aanwezig) maar geen sheet met Dag/Datum-header gevonden.');
+    } else {
+      // Oud formaat of handmatig jaar: zoek op sheetnaam-patroon
+      if (state.importJaar) {
+        sheetNaam = IMPORT_SHEET.replace(/\d{4}/, state.importJaar);
+      } else {
+        sheetNaam = wb.SheetNames.find(n => /^Indeling \d{4}$/.test(n)) || IMPORT_SHEET;
+      }
+      if (!wb.Sheets[sheetNaam]) {
+        throw new Error(`Sheet '${sheetNaam}' niet gevonden. Aanwezig: ${wb.SheetNames.join(', ')}\n\nTip: zorg dat het hoofdblad 'Indeling [jaar]' heet, of exporteer opnieuw vanuit de app.`);
+      }
     }
+
     const ws = wb.Sheets[sheetNaam];
     const ref = ws['!ref'];
     const range = XLSX.utils.decode_range(ref);
