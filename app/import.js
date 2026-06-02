@@ -161,7 +161,8 @@ export async function actImportFile(input, renderGebView) {
     // 3. Geforceerd jaar via state.importJaar → gebruik die sheet
     // 4. Geen herkenning → foutmelding
 
-    const heeftWatermerk = wb.Defined && wb.Defined.some(d => d.Name === 'RoosterApp');
+    const heeftWatermerk = wb.SheetNames.includes('_RoosterApp') ||
+                           (wb.Defined && wb.Defined.some(d => d.Name === 'RoosterApp'));
 
     let sheetNaam = null;
 

@@ -397,8 +397,9 @@ export async function actExportJaar(jaar, naamParam) {
     wb.created = new Date();
     // Vertel Excel dat formules herberekend moeten worden bij openen
     wb.calcProperties = { fullCalcOnLoad: true };
-    // Watermerk: named range zodat import het bestand herkent ongeacht sheetnaam
-    wb.definedNames.add('RoosterApp', { formula: '"1"' });
+    // Watermerk: verborgen sheet zodat import het bestand herkent ongeacht sheetnaam
+    const wsWatermerk = wb.addWorksheet('_RoosterApp', { state: 'veryHidden' });
+    wsWatermerk.getCell('A1').value = '1';
     const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
     const ws = wb.addWorksheet(sheetNaam);
 
