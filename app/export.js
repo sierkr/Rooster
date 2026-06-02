@@ -337,7 +337,7 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
 }
 
 // ---- Hoofd-export -----------------------------------------------------------
-export async function actExportJaar(jaar) {
+export async function actExportJaar(jaar, naamParam) {
   if (!jaar) { alert('Kies eerst een jaar.'); return; }
 
   try {
@@ -593,7 +593,11 @@ export async function actExportJaar(jaar) {
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();
-    downloadBlob(buffer, `Indeling_${jaar}.xlsx`);
+    const defaultNaam = `Indeling_${jaar}.xlsx`;
+    const bestandsnaam = (naamParam && naamParam.trim())
+      ? (naamParam.trim().endsWith('.xlsx') ? naamParam.trim() : naamParam.trim() + '.xlsx')
+      : defaultNaam;
+    downloadBlob(buffer, bestandsnaam);
 
   } catch (e) {
     console.error('actExportJaar', e);

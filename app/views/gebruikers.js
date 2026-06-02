@@ -194,12 +194,17 @@ export async function renderGebView() {
       <div class="summary-label" style="margin-bottom: 6px;">Excel-export</div>
       <div class="card">
         <p class="muted" style="margin: 0 0 10px;">Exporteer de Firestore-indeling van een jaar naar een <code>.xlsx</code> in hetzelfde formaat als de import.</p>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
           <select class="select" id="expJaar" style="width: auto; padding: 6px 8px; font-size: 13px;">
             ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${j===new Date().getFullYear()?'selected':''}>${j}</option>`).join('')}
           </select>
-          <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value)">⬇ Exporteer</button>
+          <input type="text" id="expBestandsnaam" class="input" placeholder="Bestandsnaam (optioneel)"
+            style="width: 220px; padding: 6px 8px; font-size: 13px;"
+            value="${(localStorage.getItem('rooster_export_naam') || '')}"
+            oninput="localStorage.setItem('rooster_export_naam', this.value.trim())" />
+          <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value, document.getElementById('expBestandsnaam').value.trim())">⬇ Exporteer</button>
         </div>
+        <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Laat leeg voor de standaardnaam (<code>Indeling_[jaar].xlsx</code>).</p>
       </div>
     </div>
   `;
