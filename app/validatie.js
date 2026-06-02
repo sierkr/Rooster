@@ -61,6 +61,26 @@ export function valideerWeek(week) {
       });
     });
 
+    // Verplichte functies: check of alle functies met verplicht=true aanwezig zijn op werkdagen
+    if (!isWeekend) {
+      const verplichteFuncties = (state.functies || []).filter(f => f.verplicht === true);
+      verplichteFuncties.forEach(f => {
+        const code = (f.code || f.id).toUpperCase();
+        const alleRadsCheck = [...VASTE_RAD_IDS, ...SLOTS];
+        const aanwezig = alleRadsCheck.some(radId => {
+          const codes = toewijzingVoor(datum, radId);
+          return codes.some(c => hoofdLetterCode(c) === code);
+        });
+        if (!aanwezig) {
+          conflicten.push({
+            datum, dagNl, radId: null, codes: [code],
+            regelId: `verplicht_${code}`, ernst: 'waarschuwing',
+            bericht: `Verplichte functie ${code} (${f.naam || code}) ontbreekt`
+          });
+        }
+      });
+    }
+
     // Per-dag regels: bezetting & uniciteit
     actieveRegels.forEach(regel => {
       if (regel.type === 'bezetting' && regel.dag === dagNl && !isWeekend) {

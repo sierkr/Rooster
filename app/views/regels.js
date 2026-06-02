@@ -109,6 +109,7 @@ export function renderRegView() {
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Dag-<br>teller</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Maat-<br>schaps</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Werk-<br>vloer</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Ver-<br>plicht</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Actief</th>
                 <th style="padding: 8px 4px; width: 28px;"></th>
               </tr>
@@ -142,6 +143,7 @@ function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
   const isTel     = telCodes.includes(code);
   const isMts     = mtsCodes.includes(code);
   const isWerk    = functieFlags(code).werkvloer;
+  const isVerp    = f.verplicht === true;
   const isActief  = f.actief !== false;
 
   return `
@@ -150,7 +152,7 @@ function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
         value="${code}" id="fcode-${id}" placeholder="Code">
     </td>
     <td style="padding: 5px 8px;">
-      <input class="input" style="width: 100%; min-width: 60px; font-size: 12px; padding: 3px 5px;"
+      <input class="input" style="width: 120px; font-size: 12px; padding: 3px 5px;"
         value="${naam}" id="fnaam-${id}" placeholder="Naam">
     </td>
     <td style="padding: 5px 4px; text-align: center;">
@@ -165,6 +167,9 @@ function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
     </td>
     <td style="padding: 5px 4px; text-align: center;">
       <input type="checkbox" id="fwerkvloer-${id}" ${isWerk ? 'checked' : ''} style="width: 15px; height: 15px;">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="checkbox" id="fverplicht-${id}" ${isVerp ? 'checked' : ''} style="width: 15px; height: 15px;">
     </td>
     <td style="padding: 5px 4px; text-align: center;">
       <input type="checkbox" id="factief-${id}" ${isActief ? 'checked' : ''} style="width: 15px; height: 15px;">
@@ -233,10 +238,11 @@ window.opslaanAlleCheckboxes = async function() {
       const naam      = document.getElementById(`fnaam-${id}`)?.value?.trim() || f.naam;
       const kleur     = document.getElementById(`fkleur-${id}`)?.value || f.kleur;
       const werkvloer = document.getElementById(`fwerkvloer-${id}`)?.checked || false;
+      const verplicht = document.getElementById(`fverplicht-${id}`)?.checked || false;
       const actief    = document.getElementById(`factief-${id}`)?.checked !== false;
       if (document.getElementById(`ftel-${id}`)?.checked) telCodes.push(id);
       if (document.getElementById(`fmts-${id}`)?.checked) mtsCodes.push(id);
-      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, actief }, { merge: true });
+      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, verplicht, actief }, { merge: true });
     }));
     await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: telCodes, mtsdagen_codes: mtsCodes }, { merge: true });
     alert('Opgeslagen.');
