@@ -143,15 +143,19 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
     );
   }
 
+  // Geciteerde sheetnaam voor gebruik in cross-sheet formule-referenties.
+  // Excel vereist single quotes om sheetnamen met spaties: 'Indeling 2026'!A$2
+  const quotedSheet = `'${mainSheetNaam}'`;
+
   // Formule: tel hoofd-letter in hoofdblad-kolom
   function telHoofdFormule(letter, mainKol) {
-    const rng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const rng = `${quotedSheet}!${mainKol}$2:${mainKol}$${eindRij}`;
     return `=SUMPRODUCT(${bevatLetterCheck(letter, rng)})`;
   }
 
   // Formule: exacte variant-code tellen (bijv. ".WB")
   function telVariantFormule(code, mainKol) {
-    const rng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const rng = `${quotedSheet}!${mainKol}$2:${mainKol}$${eindRij}`;
     return `=COUNTIF(${rng},"${code}")`;
   }
 
@@ -163,8 +167,8 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   // Formule: werkvloer-aanwezigheid op weekdag (1=ma … 5=vr)
   function weekdagFormule(dagNr, mainKol) {
     if (werkCodes.length === 0) return '=0';
-    const datRng = `${mainSheetNaam}!$B$2:$B$${eindRij}`;
-    const celRng = `${mainSheetNaam}!${mainKol}$2:${mainKol}$${eindRij}`;
+    const datRng = `${quotedSheet}!$B$2:$B$${eindRij}`;
+    const celRng = `${quotedSheet}!${mainKol}$2:${mainKol}$${eindRij}`;
     const checks = werkCodes.map(c => bevatLetterCheck(c, celRng)).join('+');
     return (
       `=SUMPRODUCT(` +
@@ -172,12 +176,6 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
       `*(WEEKDAY(${datRng},2)<6)` +
       `*(${checks}>0)*1)`
     );
-  }
-
-  // Formule: dienst-teller (COUNTIF op slotId in dienst-kolom)
-  function dienstFormule(mainKol, slotId) {
-    const rng = `${mainSheetNaam}!${mainDienstKol}$2:${mainDienstKol}$${eindRij}`;
-    return `=COUNTIF(${rng},"${slotId}")`;
   }
 
   // Gemiddelde-formule voor huidige rij
@@ -223,8 +221,10 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
   function schrijfSectie(label) {
     const r = ws.getRow(rij); r.height = 15;
     ws.mergeCells(rij, 1, rij, totaalKol);
-    for (let c = 1; c <= totaalKol; c++) r.getCell(c).fill = SECT_F;
-    r.getCell(1).value = label; r.getCell(1).font = SECT_FO;
+    const lc = r.getCell(1);
+    lc.fill  = SECT_F;
+    lc.value = label;
+    lc.font  = SECT_FO;
     rij++;
   }
 
@@ -304,8 +304,7 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
 
   // Dienst (COUNTIF op radioloog-kolomletter in dienst-kolom van hoofdblad)
   schrijfRij('Dienst', (mainKol) => {
-    const rng = `${mainSheetNaam}!${mainDienstKol}$2:${mainDienstKol}$${eindRij}`;
-    // Dienst-kolom bevat de kolomletter (bijv. "L","P") van de dienstdoende radioloog
+    const rng = `${quotedSheet}!${mainDienstKol}$2:${mainDienstKol}$${eindRij}`;
     return `=COUNTIF(${rng},"${mainKol}")`;
   });
 
