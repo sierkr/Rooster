@@ -1,15 +1,15 @@
-Rooster v3.27.94 — Release notes
+Rooster v3.27.95 — Release notes
 ==================================
 
-Activiteit-sheet tijdelijk uitgeschakeld
------------------------------------------
-Analyse van twee exportbestanden toonde aan dat de Activiteit-sheet
-(sheet2) de enige oorzaak is van de Excel-foutmeldingen. Bestanden
-zonder dit sheet openen foutloos.
-
-Het sheet is uitgecommentarieerd voor testdoeleinden. Als de export
-nu foutloos werkt, wordt het sheet structureel opgelost (statische
-waarden i.p.v. cross-sheet formules).
+Veilige features toegevoegd op v85-basis (Activiteit-sheet blijft uit)
+------------------------------------------------------------------------
+- bgColor → fgColor in alle conditionele opmaak (correcte ExcelJS-syntax)
+- UPPER() in telLetterFormule: lowercase celwaarden geven geen fouten meer
+- wb.calcProperties fullCalcOnLoad: Excel herberekent correct bij openen
+- Watermerk als verborgen sheet _RoosterApp
+- FUNCTIE_LETTERS alleen functies met verplicht=true
+- Indicator-kolommen rood+vet als verplichte functie ontbreekt
+- Datumcel rood als verplichte functie ontbreekt op werkdag
 
 TE UPLOADEN NAAR GITHUB
 ------------------------

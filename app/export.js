@@ -56,10 +56,10 @@ function telLetterFormule(letter, range) {
   const l = letter.toUpperCase();
   return (
     `SUMPRODUCT(` +
-    `((${range}="${l}")+` +
-    `(LEFT(${range},1)="${l}")+` +
-    `((LEFT(${range},1)=".")*(MID(${range},2,1)="${l}"))+` +
-    `((ISNUMBER(VALUE(LEFT(${range},1))))*(MID(${range},2,1)="${l}"))>0)*1)`
+    `((UPPER(${range})="${l}")+` +
+    `(UPPER(LEFT(${range},1))="${l}")+` +
+    `((UPPER(LEFT(${range},1))=".")*(UPPER(MID(${range},2,1))="${l}"))+` +
+    `((ISNUMBER(VALUE(LEFT(${range},1))))*(UPPER(MID(${range},2,1))="${l}"))>0)*1)`
   );
 }
 
@@ -381,8 +381,9 @@ export async function actExportJaar(jaar, naamParam) {
     const COL_INTERV   = COL_RAD_EIND + 3;
     const COL_OPM      = COL_RAD_EIND + 4;
     const COL_AANTAL   = COL_RAD_EIND + 5;
+    // Alleen functies met verplicht=true verschijnen als indicator-kolommen
     const FUNCTIE_LETTERS = (state.functies || [])
-      .filter(f => isHoofd(f) && functieFlags(f.code || f.id).werkvloer)
+      .filter(f => isHoofd(f) && f.verplicht === true)
       .map(f => (f.code || f.id).toUpperCase())
       .sort();
     const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => COL_AANTAL + 2 + i);
@@ -391,6 +392,11 @@ export async function actExportJaar(jaar, naamParam) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Rooster-app';
     wb.created = new Date();
+    // Vertel Excel dat formules herberekend moeten worden bij openen
+    wb.calcProperties = { fullCalcOnLoad: true };
+    // Watermerk: verborgen sheet zodat import het bestand herkent ongeacht sheetnaam
+    const wsWatermerk = wb.addWorksheet('_RoosterApp', { state: 'veryHidden' });
+    wsWatermerk.getCell('A1').value = '1';
     const sheetNaam = IMPORT_SHEET.replace(/\d{4}/, jaar);
     const ws = wb.addWorksheet(sheetNaam);
 
@@ -538,7 +544,7 @@ export async function actExportJaar(jaar, naamParam) {
         type: 'expression',
         formulae: [`AND(${aantalLetter}2<IF(WEEKDAY(B2,2)=5,4,5),WEEKDAY(B2,2)<6)`],
         style: {
-          fill:   { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
+          fill:   { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
           font:   { color: { argb: 'FF9C0006' }, bold: true },
         },
         priority: 1,
@@ -551,19 +557,19 @@ export async function actExportJaar(jaar, naamParam) {
       rules: [
         {
           type: 'cellIs', operator: 'greaterThanOrEqual', formulae: [5],
-          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFC6EFCE' } },
+          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } },
                    font: { color: { argb: 'FF276221' } } },
           priority: 3,
         },
         {
           type: 'cellIs', operator: 'equal', formulae: [4],
-          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFEB9C' } },
+          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } },
                    font: { color: { argb: 'FF9C5700' } } },
           priority: 2,
         },
         {
           type: 'cellIs', operator: 'lessThan', formulae: [4],
-          style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
+          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
                    font: { color: { argb: 'FF9C0006' }, bold: true } },
           priority: 1,
         },
@@ -579,13 +585,49 @@ export async function actExportJaar(jaar, naamParam) {
         type: 'expression',
         formulae: [`OR(C2="${code}",LEFT(C2,1)="${code}",(LEFT(C2,1)=".")*(MID(C2,2,1)="${code}"))`],
         style: {
-          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF' + hex.toUpperCase() } },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex.toUpperCase() } },
           font: { color: { argb: tekstArgb(hex) } },
         },
         priority: 20 + i,
       }));
     if (functieCfRules.length > 0) {
       ws.addConditionalFormatting({ ref: radRef, rules: functieCfRules });
+    }
+
+    // 4. Indicator-kolommen: rood+vet als cel niet leeg (= verplichte functie ontbreekt)
+    FUNCTIE_LETTERS.forEach((letter, li) => {
+      const indKol = kolLetter(COL_FUNCTIES[li]);
+      const indRef = `${indKol}2:${indKol}${excelRij - 1}`;
+      ws.addConditionalFormatting({
+        ref: indRef,
+        rules: [{
+          type: 'expression',
+          formulae: [`${indKol}2<>""`],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
+            font: { color: { argb: 'FF9C0006' }, bold: true, size: 10 },
+          },
+          priority: 1,
+        }],
+      });
+    });
+
+    // 5. Datumcel rood als verplichte functie ontbreekt op werkdag
+    if (FUNCTIE_LETTERS.length > 0) {
+      const indLetters = FUNCTIE_LETTERS.map((_, li) => kolLetter(COL_FUNCTIES[li]));
+      const ontbreektFormule = indLetters.map(k => `${k}2<>""`).join(',');
+      ws.addConditionalFormatting({
+        ref: dataRef,
+        rules: [{
+          type: 'expression',
+          formulae: [`AND(WEEKDAY(B2,2)<6,OR(${ontbreektFormule}))`],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
+            font: { color: { argb: 'FF9C0006' }, bold: true },
+          },
+          priority: 2,
+        }],
+      });
     }
 
     // ---- Activiteit-sheet ---------------------------------------------------

@@ -1,3 +1,17 @@
+## v3.27.95 — Export: veilige features toegevoegd op v85-basis
+
+### Wijzigingen
+- **export.js**: `bgColor` → `fgColor` in alle conditionele opmaak (correcte ExcelJS-syntax)
+- **export.js**: `UPPER()` in `telLetterFormule` — lowercase celwaarden (bijv. `bo`) geven geen fouten meer
+- **export.js**: `wb.calcProperties = { fullCalcOnLoad: true }` — Excel herberekent formules correct bij openen
+- **export.js**: Watermerk als verborgen sheet `_RoosterApp` (state: veryHidden)
+- **export.js**: `FUNCTIE_LETTERS` filtert nu alleen functies met `verplicht=true` (i.p.v. alle werkvloer-functies)
+- **export.js**: Indicator-kolommen worden rood+vet als verplichte functie ontbreekt op werkdag
+- **export.js**: Datumcel (kolom B) kleurt rood als verplichte functie ontbreekt
+- Activiteit-sheet blijft uitgeschakeld
+
+---
+
 ## v3.27.94 — Activiteit-sheet tijdelijk uitgeschakeld
 
 ### Wijzigingen
