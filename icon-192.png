@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help Beheerder – Rooster radiologen</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.65; color: #1a1a18; background: #f5f5f3; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { color: #5f5e5a; font-size: 14px; margin-bottom: 2rem; }
+    h2 { font-size: 18px; font-weight: 600; margin: 2.75rem 0 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(0,0,0,0.08); }
+    h3 { font-size: 15px; font-weight: 600; margin: 1.25rem 0 0.4rem; color: #2c2c2a; }
+    h4 { font-size: 14px; font-weight: 600; margin: 1rem 0 0.3rem; color: #5f5e5a; }
+    p { margin-bottom: 0.75rem; }
+    ul, ol { margin: 0.5rem 0 0.75rem 1.4rem; }
+    li { margin-bottom: 0.35rem; }
+    .toc { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
+    .toc h2 { margin-top: 0; border-top: none; font-size: 14px; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; }
+    .toc ol { margin-top: 0.5rem; }
+    .toc li { margin-bottom: 0.2rem; }
+    .toc a { color: #2c82d2; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .tip  { background: #eef6ff; border-left: 3px solid #2c82d2; border-radius: 0 6px 6px 0; padding: 0.75rem 1rem; margin: 0.75rem 0; font-size: 14px; }
+    .warn { background: #fff8e6; border-left: 3px solid #e6a817; border-radius: 0 6px 6px 0; padding: 0.75rem 1rem; margin: 0.75rem 0; font-size: 14px; }
+    .danger { background: #fff0f0; border-left: 3px solid #d94040; border-radius: 0 6px 6px 0; padding: 0.75rem 1rem; margin: 0.75rem 0; font-size: 14px; }
+    .tip b { color: #1a5fa8; }
+    .warn b { color: #8a6000; }
+    .danger b { color: #9c0000; }
+    .badge { display: inline-block; background: #e8edf5; color: #2c2c2a; border-radius: 4px; padding: 1px 7px; font-size: 12px; font-weight: 500; font-family: monospace; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0.75rem 0; }
+    th { background: rgba(0,0,0,0.04); text-align: left; padding: 6px 10px; font-weight: 600; border-bottom: 1px solid rgba(0,0,0,0.1); }
+    td { padding: 6px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .steps { counter-reset: step; list-style: none; margin-left: 0; }
+    .steps li { counter-increment: step; padding-left: 2rem; position: relative; margin-bottom: 0.5rem; }
+    .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 1.4rem; height: 1.4rem; background: #2c82d2; color: #fff; border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .back { display: inline-block; margin-top: 2.5rem; color: #2c82d2; text-decoration: none; font-size: 14px; }
+    .back:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1a; color: #e5e5e3; }
+      .toc { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
+      .tip { background: #1a2a3a; } .warn { background: #2a2000; } .danger { background: #2a0000; }
+      h2 { border-color: rgba(255,255,255,0.08); }
+      .badge { background: #333; color: #e5e5e3; }
+      .toc a { color: #6ab0f5; }
+      th { background: rgba(255,255,255,0.06); }
+      td { border-color: rgba(255,255,255,0.06); }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Rooster radiologen – Beheerder</h1>
+  <p class="subtitle">Beheerdershandleiding · versie mei 2026</p>
+
+  <div class="toc">
+    <h2>Inhoud</h2>
+    <ol>
+      <li><a href="#rollen">Rollen en rechten</a></li>
+      <li><a href="#overzicht">Overzicht – weekrooster bewerken</a></li>
+      <li><a href="#afdeling">Afdeling en Dienst</a></li>
+      <li><a href="#activiteit">Activiteit – bezettingsanalyse</a></li>
+      <li><a href="#wensen">Wensen beheren</a></li>
+      <li><a href="#vakantie">Vakantieplanning</a></li>
+      <li><a href="#regels">Regels – functies en validatie</a></li>
+      <li><a href="#gebruikers">Gebruikers beheren</a></li>
+      <li><a href="#excel-export">Excel-export – workflow en formaat</a></li>
+      <li><a href="#excel-import">Excel-import – workflow en beperkingen</a></li>
+      <li><a href="#beperkingen">Beperkingen en bekende limieten</a></li>
+      <li><a href="#workflow">Aanbevolen workflow</a></li>
+    </ol>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="rollen">1. Rollen en rechten</h2>
+  <p>De app kent drie niveaus:</p>
+  <table>
+    <tr><th>Rol</th><th>Wat mag de gebruiker?</th></tr>
+    <tr><td><strong>Radioloog</strong></td><td>Eigen rooster zien, wensen indienen, Afdeling en Dienst raadplegen</td></tr>
+    <tr><td><strong>Overzicht – bekijken</strong></td><td>Alle roosters zien, geen wijzigingen</td></tr>
+    <tr><td><strong>Overzicht – wijzigen</strong></td><td>Roosters bewerken, opmerkingen plaatsen, wensen verwerken</td></tr>
+    <tr><td><strong>Gebruikersbeheer</strong></td><td>Alle bovenstaande + gebruikers aanmaken/verwijderen, Excel import/export, functies en validatieregels beheren</td></tr>
+  </table>
+  <p>Elke gebruiker krijgt precies de tabs te zien die bij zijn rol horen. Rollen stel je in via de tab <span class="badge">Gebruikers</span> → gebruiker aantikken → permissies aanpassen.</p>
+  <div class="warn"><b>Let op:</b> Er moet altijd minimaal één gebruiker met Gebruikersbeheer-rechten actief zijn. De app blokkeert een opslaan dat die situatie zou creëren.</div>
+
+  <!-- 2 -->
+  <h2 id="overzicht">2. Overzicht – weekrooster bewerken</h2>
+  <p>De tab <span class="badge">Overzicht</span> is het centrale werkscherm voor het dagelijkse roosterbeheer.</p>
+
+  <h3>Cel aanpassen</h3>
+  <ol class="steps">
+    <li>Navigeer naar de juiste week via de pijltjes of tik op de datum.</li>
+    <li>Tik op de cel van de betreffende radioloog en dag.</li>
+    <li>Kies een functiecode uit het kiezervenster. Meerdere codes zijn mogelijk (ochtend/middag).</li>
+    <li>Tik op <em>Opslaan</em>. De wijziging is direct zichtbaar voor iedereen.</li>
+  </ol>
+  <p>Wijzigingen binnen 30 dagen worden automatisch gemarkeerd als <em>ongelezen</em> voor de betreffende radioloog — die ziet dan een melding op zijn cel.</p>
+
+  <h3>Opmerkingen</h3>
+  <p>Tik op een cel en scroll omlaag voor het opmerkingenveld. Opmerkingen zijn zichtbaar voor alle gebruikers met leesrechten en worden ook meegenomen in de Excel-export.</p>
+
+  <h3>Validatie-meldingen</h3>
+  <p>Boven het rooster verschijnen automatisch waarschuwingen als de bezetting afwijkt van de ingestelde regels (zie <a href="#regels">Regels</a>). Rode meldingen zijn conflicten die aandacht vereisen; oranje zijn waarschuwingen.</p>
+
+  <!-- 3 -->
+  <h2 id="afdeling">3. Afdeling en Dienst</h2>
+  <p><span class="badge">Afdeling</span> toont wie er op een specifieke dag op elke plek staat, gegroepeerd per functietype. Handig als referentie voor dagelijkse afstemming. Je kunt de weergave ook exporteren als wekelijks Excel-overzicht via het map-icoontje rechtsboven.</p>
+  <p><span class="badge">Dienst</span> toont de dienstdoende radiologen met hun DECT-nummers. Als beheerder kun je hier ook de dienstrooster invullen en dienst-toewijzingen aanpassen.</p>
+
+  <!-- 4 -->
+  <h2 id="activiteit">4. Activiteit – bezettingsanalyse</h2>
+  <p>De tab <span class="badge">Activiteit</span> geeft een kwantitatieve analyse over een gekozen periode:</p>
+  <ul>
+    <li>Aantal werkvloer-/vakantie-/cursusdagen per radioloog</li>
+    <li>Vergelijking met normen op basis van parttimefactor</li>
+    <li>Kleurcodering: groen = voldoende, oranje = licht afwijkend, rood = aanzienlijk afwijkend</li>
+  </ul>
+  <p>Selecteer een periode (kwartaal, maand of eigen bereik) via de knoppen bovenaan. De tabel toont automatisch invallers naast vaste radiologen als die actief zijn in de periode.</p>
+  <div class="tip"><b>Tip:</b> Gebruik de activiteittab als check vóór het maken van een nieuw roosterblok: zo zie je in één oogopslag wie relatief weinig of veel heeft gedaan.</div>
+
+  <!-- 5 -->
+  <h2 id="wensen">5. Wensen beheren</h2>
+  <p>De tab <span class="badge">Wensen</span> toont als beheerder alle openstaande wensen van alle radiologen, gegroepeerd per datum.</p>
+  <h3>Wens verwerken</h3>
+  <ol class="steps">
+    <li>Tik op een wens om de details te zien.</li>
+    <li>Pas het rooster aan in de Overzicht-tab zodat het overeenkomt met de wens.</li>
+    <li>De app detecteert dit automatisch bij een Excel-import. Bij handmatige wijziging kun je de wens ook handmatig op <em>Verwerkt</em> zetten.</li>
+  </ol>
+  <p>Een wens afwijzen doe je via de knop <em>Afwijzen</em> in het detailvenster. De radioloog ziet dan de status <em>Afgewezen</em>.</p>
+
+  <!-- 6 -->
+  <h2 id="vakantie">6. Vakantieplanning</h2>
+  <p>De tab <span class="badge">Vakantie</span> toont de maandelijkse vakantieplanning en de volgorderotatie. Als beheerder zie je alle radiologen en kun je vakantiedagen toekennen of blokkeren.</p>
+  <p>De rotatiepositie bepaalt de volgorde bij conflicterende vakantieaanvragen: de radioloog die dit jaar het laagst in de volgorde staat heeft voorrang in het volgende jaar.</p>
+
+  <!-- 7 -->
+  <h2 id="regels">7. Regels – functies en validatie</h2>
+  <p>De tab <span class="badge">Regels</span> is alleen zichtbaar voor beheerders met Gebruikersbeheer-rechten.</p>
+
+  <h3>Functies</h3>
+  <p>Elke functie heeft:</p>
+  <table>
+    <tr><th>Eigenschap</th><th>Betekenis</th></tr>
+    <tr><td><strong>Code</strong></td><td>Korte afkorting (max. 3 tekens). Codes die beginnen met een punt, cijfer of "YY" zijn subvarianten en worden niet in de legenda getoond.</td></tr>
+    <tr><td><strong>Naam</strong></td><td>Volledige naam. Gebruik "/" voor een ochtend/middag-variant: <em>Werkvloer/Middag</em>.</td></tr>
+    <tr><td><strong>Kleur</strong></td><td>Achtergrondkleur in het rooster en de Excel-export.</td></tr>
+    <tr><td><strong>Werkvloer</strong></td><td>Telt mee in de bezettingsberekening (kolom "Aantal" in Excel). Standaard aan voor alle functies behalve V, P, K, Z, T, A.</td></tr>
+    <tr><td><strong>Actief</strong></td><td>Inactieve functies verdwijnen uit de keuzelijst maar blijven bestaan in historische data.</td></tr>
+  </table>
+  <div class="tip"><b>Tip:</b> Na het aanmaken van een nieuwe functie verschijnt die automatisch in de legenda (Overzicht-tab), de keuzelijsten (Wensen) en de Excel-export. Geen herstart nodig.</div>
+  <div class="warn"><b>Let op:</b> Wijzig een functiecode nooit nadat die al in het rooster is gebruikt. Bestaande toewijzingen verwijzen naar de oude code en worden niet automatisch bijgewerkt.</div>
+
+  <h3>Validatieregels</h3>
+  <p>De validatieregels controleren het rooster automatisch op conflicten. Per regel kun je instellen:</p>
+  <ul>
+    <li><strong>Aan/uit</strong> – schakelaar rechtsboven in de regel-kaart</li>
+    <li><strong>Ernst</strong> – <em>Waarschuwing</em> (oranje) of <em>Blokkeren</em> (rood blokkeer-icoon)</li>
+  </ul>
+  <p>Verouderde bezettingsregels (type "bezetting") kunnen in bulk worden verwijderd via de knop onderaan de pagina.</p>
+
+  <!-- 8 -->
+  <h2 id="gebruikers">8. Gebruikers beheren</h2>
+  <p>Via de tab <span class="badge">Gebruikers</span> beheer je accounts, koppel je gebruikers aan radioloog-profielen en stel je permissies in.</p>
+
+  <h3>Nieuwe gebruiker aanmaken</h3>
+  <ol class="steps">
+    <li>Tik op <em>+ Nieuwe gebruiker</em>.</li>
+    <li>Vul naam en e-mailadres in. Het e-mailadres wordt gebruikt als inlognaam en kan later niet worden gewijzigd.</li>
+    <li>Stel een tijdelijk wachtwoord in (of gebruik het gegenereerde wachtwoord).</li>
+    <li>Koppel de gebruiker aan een radioloog-profiel als die er al is.</li>
+    <li>Stel de permissies in en tik op <em>Opslaan</em>.</li>
+    <li>Deel het wachtwoord veilig met de gebruiker en vraag hem het bij eerste inlog te wijzigen.</li>
+  </ol>
+
+  <h3>Radiologen</h3>
+  <p>Radiologen zijn de "stoelen" in het rooster. Een gebruiker (inlog) is gekoppeld aan een radioloog-profiel. Eén radioloog-profiel kan maar aan één gebruiker tegelijk gekoppeld zijn. Invallers en tijdelijke krachten krijgen een apart profiel.</p>
+
+  <!-- 9 -->
+  <h2 id="excel-export">9. Excel-export – workflow en formaat</h2>
+  <p>De export maakt een volledig opgemaakte <code>.xlsx</code> aan op basis van de Firestore-indeling.</p>
+
+  <h3>Export starten</h3>
+  <ol class="steps">
+    <li>Ga naar <span class="badge">Gebruikers</span> → scroll naar <em>Excel</em>.</li>
+    <li>Selecteer het exportjaar.</li>
+    <li>Tik op <em>Exporteer</em>. De download start automatisch.</li>
+  </ol>
+
+  <h3>Structuur van het exportbestand</h3>
+  <table>
+    <tr><th>Kolom(men)</th><th>Inhoud</th></tr>
+    <tr><td>A – Dag</td><td>Dagnaam (ma, di, …)</td></tr>
+    <tr><td>B – Datum</td><td>Datum in DD-MM-YYYY formaat</td></tr>
+    <tr><td>C t/m … – Radiologen</td><td>Eén kolom per radioloog, header = radioloog-code. Aantal kolommen is dynamisch (afhankelijk van actieve radiologen).</td></tr>
+    <tr><td>… – P (Dienst)</td><td>Dienstdoende radioloog</td></tr>
+    <tr><td>… – Q (Bespreking)</td><td>Besprekingsnotitie</td></tr>
+    <tr><td>… – R (Interventie)</td><td>Interventie-opmerking</td></tr>
+    <tr><td>… – S (Opmerking)</td><td>Dag-opmerking</td></tr>
+    <tr><td>… – Aantal</td><td>Formule: werkvloerbezetting (telt alle werkvloer-functies)</td></tr>
+    <tr><td>… – (spacer)</td><td>Lege kolom als visuele scheiding</td></tr>
+    <tr><td>… – Functie-indicatoren</td><td>Eén kolom per werkvloer-functie. Toont de functiecode als die functie die dag NIET bezet is (tekort-indicator).</td></tr>
+  </table>
+
+  <h3>Conditionele opmaak in de export</h3>
+  <ul>
+    <li><strong>Datumkolom rood:</strong> bezetting onder de norm (maandag–donderdag &lt; 5, vrijdag &lt; 4)</li>
+    <li><strong>Aantal-kolom groen/oranje/rood:</strong> ≥5 / =4 / &lt;4</li>
+    <li><strong>Radioloogcellen lichtgeel:</strong> bij V (vakantie) of K (cursus)</li>
+    <li><strong>Weekendrijen lichtgrijs</strong></li>
+  </ul>
+
+  <h3>Cel-opmerkingen</h3>
+  <p>Opmerkingen die via de app per cel zijn ingevoerd verschijnen als Excel-noten (kleine rode driehoekjes). Ze worden ook teruggekoppeld bij een import.</p>
+
+  <div class="tip"><b>Tip:</b> Voeg geen kolommen toe of verwijder geen kolommen in het exportbestand als je het later wilt reimporteren. De import detecteert kolommen op basis van de kolomheaders.</div>
+
+  <!-- 10 -->
+  <h2 id="excel-import">10. Excel-import – workflow en beperkingen</h2>
+  <p>Via de import laad je een bewerkt rooster terug in de app. <strong>Dit overschrijft alle Firestore-data voor de betrokken periode.</strong></p>
+
+  <h3>Aanbevolen workflow</h3>
+  <ol class="steps">
+    <li>Exporteer het rooster voor het gewenste jaar (zie vorige sectie).</li>
+    <li>Pas het rooster aan in Excel. Gebruik uitsluitend geldige functiecodes in de radioloogkolommen.</li>
+    <li>Sla het bestand op als <code>.xlsx</code> (niet als <code>.csv</code> of <code>.xls</code>).</li>
+    <li>Ga in de app naar <span class="badge">Gebruikers</span> → <em>Importeer</em> → kies je bestand.</li>
+    <li>Controleer de preview: aantal dagen, opmerkingen en eventuele waarschuwingen.</li>
+    <li>Tik op <em>Importeer (vervangt Firestore)</em> en bevestig.</li>
+  </ol>
+
+  <h3>Wat er bij import gebeurt</h3>
+  <ul>
+    <li>Alle dagdocumenten voor het geselecteerde jaar worden vervangen.</li>
+    <li>Cel-opmerkingen (Excel-noten) worden meegenomen.</li>
+    <li>Wens-statussen worden automatisch bijgewerkt: een wens die nu overeenkomt met de indeling wordt op <em>Verwerkt</em> gezet; een eerder verwerkte wens die niet meer klopt wordt teruggezet naar <em>Open</em>.</li>
+    <li>Wijzigingen binnen 30 dagen worden als <em>ongelezen</em> gemarkeerd voor de betreffende radioloog.</li>
+  </ul>
+
+  <h3>Kolomdetectie bij import</h3>
+  <p>De import leest kolommen op basis van de kolomheader (rij 1):</p>
+  <ul>
+    <li>Radioloogkolommen worden herkend op basis van de radioloog-codes die in de app zijn ingesteld.</li>
+    <li>De kolommen P, Q, R en S worden herkend op naam (respectievelijk Dienst, Bespreking, Interventie, Opmerking).</li>
+    <li>Als een kolom niet herkend wordt, wordt die overgeslagen zonder foutmelding.</li>
+  </ul>
+
+  <h3>Waarschuwingen in de preview</h3>
+  <p>De app toont maximaal 25 waarschuwingen als een dienst-ID in kolom P niet overeenkomt met een bekende radioloog-ID. Dit blokkeert de import niet.</p>
+  <p>Als er wijzigingen binnen 30 dagen zitten, toont de bevestigingsdialoog een expliciete melding met het aantal gewijzigde cellen.</p>
+
+  <h4>Beperkingen</h4>
+  <ul>
+    <li>Alleen <code>.xlsx</code> en <code>.xlsm</code> worden ondersteund. Geen <code>.csv</code> of oudere <code>.xls</code>.</li>
+    <li>Het sheetblad moet de naam <em>Indeling [jaar]</em> hebben (bijv. <em>Indeling 2026</em>). Bij een afwijkende naam zoekt de app automatisch naar een sheet met dat patroon.</li>
+    <li>Formules in cellen worden als waarde geïmporteerd (de berekende waarde, niet de formule zelf). Zorg dat cellen met formules correct uitgerekend zijn vóór het opslaan.</li>
+    <li>De import vervangt <em>alles</em> voor de betrokken periode — er is geen partiële import per week of per radioloog.</li>
+    <li>Een annuleren na de preview werkt altijd; na het bevestigen is de actie niet ongedaan te maken.</li>
+  </ul>
+
+  <div class="danger"><b>Let op:</b> Maak altijd eerst een export vóór je importeert. Er is geen automatische back-up en de import is onomkeerbaar.</div>
+
+  <!-- 11 -->
+  <h2 id="beperkingen">11. Beperkingen en bekende limieten</h2>
+  <table>
+    <tr><th>Beperking</th><th>Detail</th></tr>
+    <tr><td>Functiecodes wijzigen</td><td>Verander nooit een functiecode van een reeds gebruikte functie. Historische toewijzingen raken dan los van de definitie.</td></tr>
+    <tr><td>Meerdere codes per cel</td><td>Komma-gescheiden codes (bijv. <code>W,V</code>) worden ondersteund. De eerste code bepaalt de kleur en telt mee voor de bezetting.</td></tr>
+    <tr><td>Importgrootte</td><td>Bestanden tot ~5 MB worden probleemloos verwerkt. Grotere bestanden kunnen traag zijn op mobiel.</td></tr>
+    <tr><td>Offline gebruik</td><td>De app werkt offline met gecachede data. Wijzigingen zijn alleen mogelijk met een actieve verbinding.</td></tr>
+    <tr><td>Gebruikersaantal</td><td>Geen hard limiet, maar bij meer dan ~50 actieve gebruikers kan de real-time synchronisatie merkbaar trager worden.</td></tr>
+    <tr><td>Histori</td><td>Alle roosterdata blijft bewaard in Firestore. Gebruik de opschoonfunctie in de Gebruikers-tab om verlopen wensen en oude indelingen te verwijderen.</td></tr>
+  </table>
+
+  <!-- 12 -->
+  <h2 id="workflow">12. Aanbevolen workflow voor roosterbeheer</h2>
+  <ol class="steps">
+    <li><strong>Plan maken in Excel.</strong> Exporteer het huidige rooster als startpunt. Vul de nieuwe periode in — gebruik alleen geldige functiecodes.</li>
+    <li><strong>Wensen checken.</strong> Raadpleeg de Wensen-tab vóór het finaliseren van het rooster. Verwerk open wensen zoveel mogelijk.</li>
+    <li><strong>Activiteit controleren.</strong> Gebruik de Activiteit-tab om te zien of de werkvloerverdeling in balans is.</li>
+    <li><strong>Importeren.</strong> Importeer het definitieve rooster. Controleer de preview zorgvuldig, let op de waarschuwing bij wijzigingen binnen 30 dagen.</li>
+    <li><strong>Validatie checken.</strong> Open de Overzicht-tab en kijk of er conflicten zijn (rode/oranje meldingen). Pas indien nodig handmatig aan.</li>
+    <li><strong>Wensen synchroniseren.</strong> De app heeft de wens-statussen automatisch bijgewerkt. Check of er wensen zijn teruggezet naar <em>Open</em> die aandacht vereisen.</li>
+  </ol>
+
+  <a class="back" href="../index.html">← Terug naar de app</a>
+
+</div>
+</body>
+</html>

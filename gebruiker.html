@@ -1,0 +1,441 @@
+// Entry point van de app. Laadt alle modules in juiste volgorde, registreert
+// algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, doc, getDoc, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { auth, db } from './firebase-init.js';
+import { state, VASTE_RAD_IDS } from './state.js';
+import {
+  vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
+  magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien, magWijzigen,
+  magVakantieZien, valideerWachtwoord,
+} from './helpers.js';
+import { openSheet, closeSheet } from './sheets.js';
+
+// Importeer alle render-functies (modules registreren ook hun window-handlers)
+import { renderRadView } from './views/radioloog.js';
+import { renderJaaView } from './views/jaaroverzicht.js';
+import { renderAfdView } from './views/afdeling.js';
+import { renderDieView } from './views/dienst.js';
+import { renderActView } from './views/activiteit.js';
+import { renderWenView } from './views/wensen.js';
+import { renderVakView } from './views/vakantie.js';
+import { renderBehView } from './views/overzicht.js';
+import { renderRegView } from './views/regels.js';
+import { renderGebView } from './views/gebruikers.js';
+
+// ==== Sheet helpers op window (voor inline onclick="window.closeSheet()") ====
+
+window.openSheet  = openSheet;
+window.closeSheet = closeSheet;
+
+// ==== Help-pagina opener =====================================================
+window.toonHelp = function() {
+  const isBeheerder = typeof magGebruikersBeheren === 'function'
+    ? magGebruikersBeheren()
+    : false;
+  // Bouw absolute URL op basis van de huidige paginalocatie
+  // zodat het ook werkt als de app in een submap staat (bijv. GitHub Pages)
+  const base = window.location.href.replace(/\/[^\/]*$/, '/');
+  const url = base + (isBeheerder ? 'help/beheerder.html' : 'help/gebruiker.html');
+  window.open(url, '_blank', 'noopener');
+};
+
+// ==== Auth handlers ==========================================================
+
+window.doLogin = async function() {
+  const invoer = document.getElementById('loginEmail').value.trim();
+  // Voeg @rooster.intern toe als de gebruiker alleen voornaam.achternaam typt
+  const email = invoer.includes('@') ? invoer : invoer + '@rooster.intern';
+  const pw    = document.getElementById('loginPassword').value;
+  const err   = document.getElementById('loginError');
+  err.style.display = 'none';
+  if (!invoer || !pw) {
+    err.textContent = 'Vul naam en wachtwoord in';
+    err.style.display = 'block';
+    return;
+  }
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+  } catch (e) {
+    err.textContent = vertalFirebaseFout(e.code);
+    err.style.display = 'block';
+  }
+};
+
+window.doLogout = async function() {
+  if (!confirm('Uitloggen?')) return;
+  state.unsubscribers.forEach(fn => fn());
+  state.unsubscribers = [];
+  await signOut(auth);
+};
+
+// ==== Eerste aanmelding: wachtwoord wijzigen ================================
+
+window.cpValideer = function() {
+  const nieuw    = document.getElementById('cpNieuw')?.value || '';
+  const herhaal  = document.getElementById('cpHerhaal')?.value || '';
+  const akkoord  = document.getElementById('cpAkkoord')?.checked || false;
+  const btn      = document.getElementById('cpBtn');
+  const fout     = valideerWachtwoord(nieuw);
+  const geldig   = !fout && nieuw === herhaal && akkoord;
+  if (btn) btn.disabled = !geldig;
+};
+
+window.toonVoorwaarden = function() {
+  document.getElementById('voorwaardenModal').style.display = 'flex';
+};
+
+window.sluitVoorwaarden = function() {
+  document.getElementById('voorwaardenModal').style.display = 'none';
+};
+
+window.doChangePassword = async function() {
+  const nieuw   = document.getElementById('cpNieuw').value;
+  const herhaal = document.getElementById('cpHerhaal').value;
+  const err     = document.getElementById('cpError');
+  err.style.display = 'none';
+
+  const fout = valideerWachtwoord(nieuw);
+  if (fout) { err.textContent = fout; err.style.display = 'block'; return; }
+  if (nieuw !== herhaal) { err.textContent = 'Wachtwoorden komen niet overeen'; err.style.display = 'block'; return; }
+
+  const btn = document.getElementById('cpBtn');
+  btn.disabled = true;
+  btn.textContent = 'Bezig…';
+
+  try {
+    await updatePassword(state.user, nieuw);
+    await updateDoc(doc(db, 'gebruikers', state.user.uid), { wachtwoord_gewijzigd: true });
+    document.getElementById('change-password').style.display = 'none';
+    startApp();
+  } catch (e) {
+    err.textContent = vertalFirebaseFout(e.code) || e.message;
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Opslaan en doorgaan';
+  }
+};
+
+window.kopieerLink = async function(link) {
+  try {
+    await navigator.clipboard.writeText(link);
+    alert('Link gekopieerd naar klembord');
+  } catch (e) {
+    alert('Kopiëren mislukte. Selecteer de link handmatig.');
+  }
+};
+
+// ==== Navigatie-handlers (gedeeld door alle views) ===========================
+
+window.showView = function(v) {
+  state.huidigeView = v;
+  renderTabs();
+  render();
+};
+
+window.navigeerWeek = function(delta) {
+  state.weekMaandag = plusDagen(state.weekMaandag || mandagVanIso(vandaagIso()), delta * 7);
+  render();
+};
+
+window.navigeerDag = function(delta) {
+  const huidig = state.huidigeDatum || vandaagIso();
+  state.huidigeDatum = plusDagen(huidig, delta);
+  state.weekMaandag = mandagVanIso(state.huidigeDatum);
+  render();
+};
+
+window.naarVandaag = function() {
+  state.huidigeDatum = vandaagIso();
+  state.weekMaandag = mandagVanIso(state.huidigeDatum);
+  render();
+};
+
+window.toggleWeekRads = function() {
+  state.toonWeekRads = !state.toonWeekRads;
+  render();
+};
+
+window.weekKiezerWissel = function(input) {
+  const v = input.value;
+  if (!v) return;
+  state.huidigeDatum = v;
+  state.weekMaandag = mandagVanIso(v);
+  render();
+};
+
+window.springNaarBeheer = function(datum) {
+  if (!magBeheerLezen()) return;
+  state.huidigeDatum = datum;
+  state.weekMaandag = mandagVanIso(datum);
+  state.huidigeView = 'beh';
+  render();
+};
+
+window.toonGebruikerSheet = function() {
+  const p = state.profiel;
+  const voornaam = p.naam?.split('.')[0] || p.email?.split('@')[0]?.split('.')[0] || '?';
+  document.getElementById('sheetTitle').textContent = voornaam;
+  document.getElementById('sheetSub').textContent = `Ingelogd als ${p.rol}`;
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="summary"><div class="summary-label">Account</div><div class="summary-text">${voornaam}</div></div>
+    <div class="summary"><div class="summary-label">Rol</div><div class="summary-text">${p.rol}</div></div>
+    ${p.radioloog_id ? `<div class="summary"><div class="summary-label">Gekoppeld als radioloog</div><div class="summary-text">${p.radioloog_id}</div></div>` : ''}
+    <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.doLogout()">Uitloggen</button>
+  `;
+  openSheet();
+};
+
+// ==== Tabs + user chip =======================================================
+
+function renderTabs() {
+  const tabs = [
+    { id: 'beh', label: (() => {
+      const eigenRadId = state.profiel?.radioloog_id;
+      if (eigenRadId && !magWijzigen()) {
+        const n = (state.wijzigingen || []).length;
+        if (n > 0) return `Overzicht<span class="tab-badge tab-badge-oranje">${n}</span>`;
+      }
+      return 'Overzicht';
+    })() },
+    { id: 'rad', label: 'Radioloog' },
+  ];
+  if (window.TOON_JAAROVERZICHT) tabs.push({ id: 'jaa', label: 'Jaaroverzicht' });
+  tabs.push({ id: 'afd', label: 'Afdeling' });
+  tabs.push({ id: 'die', label: 'Dienst' });
+  const rol = state.profiel?.rol;
+  tabs.push({ id: 'act', label: 'Activiteit' });
+  if (rol === 'radioloog' || magAlleWensenZien()) {
+    let label = 'Wensen';
+    if (magAlleWensenZien()) {
+      const open = state.wensen.filter(w => (w.status || 'open') === 'open' && w.datum >= vandaagIso()).length;
+      if (open > 0) label += `<span class="tab-badge">${open}</span>`;
+    }
+    tabs.push({ id: 'wen', label });
+  }
+  // Vakantie-tab: zichtbaar als gebruiker mag_vakantie heeft
+  if (magVakantieZien()) tabs.push({ id: 'vak', label: 'Vakantie' });
+  if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
+  if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
+
+  document.getElementById('tabs').innerHTML = tabs.map(t => `
+    <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
+  `).join('');
+
+  ['rad', 'jaa', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'reg', 'geb'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
+  });
+}
+
+function renderUserChip() {
+  const el = document.getElementById('userChip');
+  if (!el || !state.profiel) return;
+  const p = state.profiel;
+  const rad = p.radioloog_id ? radiologenMap()[p.radioloog_id] : null;
+  const naam = rad ? rad.code : (p.naam?.split('.')[0] || p.email?.split('@')[0]?.split('.')[0] || '?');
+  el.textContent = `${naam} · ${p.rol}`;
+}
+
+// ==== Render-dispatcher ======================================================
+
+function render() {
+  renderUserChip();
+  renderTabs();
+  if      (state.huidigeView === 'rad') renderRadView();
+  else if (state.huidigeView === 'jaa') renderJaaView();
+  else if (state.huidigeView === 'afd') renderAfdView();
+  else if (state.huidigeView === 'die') renderDieView();
+  else if (state.huidigeView === 'act') renderActView();
+  else if (state.huidigeView === 'wen') renderWenView();
+  else if (state.huidigeView === 'vak') renderVakView();
+  else if (state.huidigeView === 'beh') renderBehView();
+  else if (state.huidigeView === 'reg') renderRegView();
+  else if (state.huidigeView === 'geb') renderGebView();
+}
+
+// Maak render globaal toegankelijk voor modules die zelf willen re-renderen
+window.__rooster_render = render;
+
+// ==== Data loading ===========================================================
+
+async function laadProfiel(uid) {
+  const snap = await getDoc(doc(db, 'gebruikers', uid));
+  if (!snap.exists()) {
+    throw new Error('Jouw account heeft nog geen profiel. Vraag een beheerder om je toe te voegen.');
+  }
+  return { id: uid, ...snap.data() };
+}
+
+function luisterNaarData() {
+  // render() mag pas lopen als functies geladen zijn (kleuren nodig voor weergave)
+  let functiesGeladen = false;
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'radiologen'), (snap) => {
+    state.radiologen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!state.huidigeRadId) {
+      state.huidigeRadId = state.profiel?.radioloog_id && VASTE_RAD_IDS.includes(state.profiel.radioloog_id)
+        ? state.profiel.radioloog_id
+        : VASTE_RAD_IDS[0];
+    }
+    if (functiesGeladen) render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'functies'), (snap) => {
+    state.functies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    window.injecteerNieuweKleuren(state.functies);
+    functiesGeladen = true;
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'besprekingen'), (snap) => {
+    state.besprekingen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'indeling'), (snap) => {
+    const map = {};
+    snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
+    state.indelingMap = map;
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'validatie_regels'), (snap) => {
+    state.validatieRegels = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'instellingen'), (snap) => {
+    state.instellingen = {};
+    snap.docs.forEach(d => {
+      const data = d.data();
+      Object.assign(state.instellingen, data);  // spiegel alles (incl. migratie-vlaggen)
+      if (data.dect_speciaal)      window.DECT_SPECIAAL = data.dect_speciaal;
+      if (data.tellen_codes)       window.TELLEN_CODES = data.tellen_codes;
+      if (data.mtsdagen_codes)     window.MTSDAGEN_CODES = data.mtsdagen_codes;
+      if (data.toon_jaaroverzicht !== undefined) window.TOON_JAAROVERZICHT = data.toon_jaaroverzicht;
+    });
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'wensen'), (snap) => {
+    state.wensen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
+
+  state.unsubscribers.push(onSnapshot(collection(db, 'vakantie_rankings'), (snap) => {
+    state.vakantieRankings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }));
+
+  // Ongelezen wijzigingen: gefilterde query op eigen radioloog_id + gezien===false.
+  // Volledige collectie-scan werkt niet: Firestore verwerpt de query zodra er
+  // ook docs zijn die de radioloog niet mag lezen.
+  const eigenRadId = state.profiel?.radioloog_id;
+  if (eigenRadId && !magWijzigen()) {
+    const wijzQuery = query(
+      collection(db, 'wijzigingen'),
+      where('radioloog_id', '==', eigenRadId),
+      where('gezien', '==', false)
+    );
+    state.unsubscribers.push(onSnapshot(wijzQuery, (snap) => {
+      const vandaag = vandaagIso();
+      state.wijzigingen = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(w => w.datum >= vandaag);
+      render();
+    }));
+  } else {
+    state.wijzigingen = [];
+  }
+}
+
+// ==== App starten (na eventuele wachtwoord-wissel) ===========================
+
+// ==== Dynamische kleuren voor nieuwe functies ================================
+// Voegt alleen CSS-klassen toe voor functies die nog geen .f-X klasse hebben.
+// Bestaande hardcoded kleuren in index.html worden nooit overschreven.
+
+window.injecteerNieuweKleuren = function(functies) {
+  let styleEl = document.getElementById('functie-kleuren-extra');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'functie-kleuren-extra';
+    document.head.appendChild(styleEl);
+  }
+
+  const regels = (functies || [])
+    .filter(f => f.kleur && (f.code || f.id))
+    .map(f => {
+      const code = f.code || f.id;
+      const hex = f.kleur.replace('#', '');
+      if (hex.length !== 6) return '';
+      const r = parseInt(hex.slice(0,2), 16);
+      const g = parseInt(hex.slice(2,4), 16);
+      const b = parseInt(hex.slice(4,6), 16);
+      const bg = f.kleur;
+      // Tekstkleur: donker op lichte achtergrond, licht op donkere achtergrond
+      const helderheid = (r * 299 + g * 587 + b * 114) / 1000;
+      const tekst = helderheid > 160 ? '#1a1a18' : '#ffffff';
+      return `.f-${code} { background: ${bg}; color: ${tekst}; }`;
+    })
+    .filter(Boolean);
+
+  // Dedupliceer — laatste wint
+  const gezien = new Set();
+  const uniek = [];
+  for (const r of regels) {
+    const cls = r.match(/\.f-\S+/)?.[0];
+    if (cls && !gezien.has(cls)) { gezien.add(cls); uniek.push(r); }
+  }
+
+  styleEl.textContent = uniek.join('\n');
+};
+
+
+function startApp() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('change-password').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  state.huidigeDatum = vandaagIso();
+  state.weekMaandag = mandagVanIso(state.huidigeDatum);
+  state.huidigeView = 'beh';
+  renderTabs();
+  luisterNaarData();
+}
+
+// ==== Boot ===================================================================
+
+document.getElementById('versieLabel').textContent = window.APP_VERSIE;
+// Versielabel ook in het change-password scherm
+document.querySelectorAll('.versieLabel2').forEach(el => el.textContent = window.APP_VERSIE);
+
+onAuthStateChanged(auth, async (user) => {
+  document.getElementById('loading').style.display = 'none';
+  if (!user) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('change-password').style.display = 'none';
+    document.getElementById('login').style.display = 'flex';
+    return;
+  }
+
+  try {
+    const profiel = await laadProfiel(user.uid);
+    state.user = user;
+    state.profiel = profiel;
+
+    if (profiel.wachtwoord_gewijzigd === false) {
+      // Eerste aanmelding: wachtwoord wijzigen + akkoord
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('change-password').style.display = 'flex';
+      window.cpValideer();
+    } else {
+      startApp();
+    }
+  } catch (e) {
+    const err = document.getElementById('loginError');
+    err.textContent = e.message;
+    err.style.display = 'block';
+    await signOut(auth);
+  }
+});
