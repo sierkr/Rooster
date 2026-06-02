@@ -624,7 +624,7 @@ window.actHerstelBackup = async function(input) {
 window.actImportSchrijven   = ()      => actImportSchrijven(renderGebView);
 window.actImportAnnuleren   = ()      => actImportAnnuleren(renderGebView);
 window.actZetImportJaar     = (jaar)  => actZetImportJaar(jaar);
-window.actExportJaar        = (jaar)  => actExportJaar(jaar);
+window.actExportJaar        = (jaar, naam)  => actExportJaar(jaar, naam);
 
 // ==== Bezetting wisselen (zelfde stoel, nieuwe persoon) =====================
 
