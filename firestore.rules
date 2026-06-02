@@ -1,0 +1,197 @@
+// ============================================================================
+// Firestore Security Rules - Indeling Radiologen
+// ============================================================================
+//
+// Rollen:
+//   beheerder     - volledig beheer: planning, gebruikers, stamgegevens
+//   radioloog     - eigen week lezen, hele rooster lezen, vakantie/wensen/opm
+//   secretariaat  - alles lezen, opmerkingen toevoegen bij elke dag
+//   lezer         - alleen lezen
+//
+// De eerste beheerder wordt handmatig in Firestore aangemaakt door de project-
+// eigenaar. Daarna kunnen beheerders andere gebruikers aanmaken en rollen
+// toekennen via de app.
+// ============================================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------------
+    // Helper functies
+    // -----------------------------------------------------------------------
+    function isIngelogd() {
+      return request.auth != null;
+    }
+
+    function gebruiker() {
+      return get(/databases/$(database)/documents/gebruikers/$(request.auth.uid)).data;
+    }
+
+    function rolIs(rol) {
+      return isIngelogd() && gebruiker().rol == rol;
+    }
+
+    function isBeheerder() {
+      return rolIs('beheerder');
+    }
+
+    function isRadioloog() {
+      return rolIs('radioloog');
+    }
+
+    function isSecretariaat() {
+      return rolIs('secretariaat');
+    }
+
+    function isLezer() {
+      return rolIs('lezer') || rolIs('technician');
+    }
+
+    function magLezen() {
+      // Iedere ingelogde gebruiker met een geldige rol mag lezen
+      return isIngelogd() && gebruiker().rol in ['beheerder', 'radioloog', 'secretariaat', 'lezer', 'technician'];
+    }
+
+    function eigenRadioloogId() {
+      // Koppelt ingelogde gebruiker aan radioloog-document
+      return gebruiker().radioloog_id;
+    }
+
+    // Check: radioloog mag alleen vakantie_v op zijn eigen radId-kolom wijzigen.
+    // Alle andere velden moeten ongemoeid blijven.
+    function radioloogMagVakantieToggelen() {
+      let eigen = eigenRadioloogId();
+      let geraakt = request.resource.data.diff(resource.data).affectedKeys();
+      return eigen != null
+          && geraakt.hasOnly(['vakantie_v', 'datum'])
+          && (!geraakt.hasAny(['vakantie_v']) ||
+              request.resource.data.get('vakantie_v', {})
+                .diff(resource.data.get('vakantie_v', {}))
+                .affectedKeys().hasOnly([eigen]));
+    }
+
+    // -----------------------------------------------------------------------
+    // gebruikers/ - gebruikersprofielen (koppeling auth -> rol + radioloog)
+    // -----------------------------------------------------------------------
+    match /gebruikers/{uid} {
+      // Gebruiker mag eigen profiel lezen, beheerders mogen alles
+      allow read: if isBeheerder() || request.auth.uid == uid;
+
+      // Alleen beheerders mogen gebruikers aanmaken, rollen wijzigen, verwijderen
+      allow create, delete: if isBeheerder();
+
+      // Update: beheerders mogen alles, andere gebruikers alleen hun eigen
+      // email/naam (NIET hun rol, radioloog_id of permissies)
+      allow update: if isBeheerder()
+                    || (request.auth.uid == uid
+                        && request.resource.data.rol == resource.data.rol
+                        && request.resource.data.radioloog_id == resource.data.radioloog_id
+                        && request.resource.data.get('permissies', null) == resource.data.get('permissies', null));
+    }
+
+    // -----------------------------------------------------------------------
+    // radiologen/ - stamgegevens radiologen
+    // -----------------------------------------------------------------------
+    match /radiologen/{id} {
+      allow read: if magLezen();
+      allow write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
+    // functies/ - stamgegevens functiecodes
+    // -----------------------------------------------------------------------
+    match /functies/{id} {
+      allow read: if magLezen();
+      allow write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
+    // besprekingen/ - stamgegevens besprekingen
+    // -----------------------------------------------------------------------
+    match /besprekingen/{id} {
+      allow read: if magLezen();
+      allow write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
+    // validatie_regels/ - Crit.func regels
+    // -----------------------------------------------------------------------
+    match /validatie_regels/{id} {
+      allow read: if magLezen();
+      allow write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
+    // indeling/{datum} - het hoofdrooster, één doc per dag
+    // -----------------------------------------------------------------------
+    match /indeling/{datum} {
+      allow read: if magLezen();
+
+      // Create: beheerders mogen alles. Radiologen mogen een nieuw indeling-doc
+      // aanmaken om vakantie_v op een dag zonder bestaande indeling te zetten,
+      // maar alleen voor hun eigen radId-kolom.
+      allow create: if isBeheerder()
+                    || (isRadioloog()
+                        && eigenRadioloogId() != null
+                        && request.resource.data.keys().hasOnly(['datum', 'vakantie_v'])
+                        && request.resource.data.get('vakantie_v', {})
+                             .keys().hasOnly([eigenRadioloogId()]));
+      allow delete: if isBeheerder();
+
+      // Update regels per rol:
+      // - Beheerders: alles
+      // - Radiologen: alleen vakantie_v op eigen radId-kolom
+      // - Secretariaat / lezers: niets (alleen lezen)
+      allow update: if isBeheerder()
+                    || (isRadioloog() && radioloogMagVakantieToggelen());
+    }
+
+    // -----------------------------------------------------------------------
+    // vakantie_rankings/ - ranking-tabellen voor vakantie-blokken
+    // -----------------------------------------------------------------------
+    match /vakantie_rankings/{naam} {
+      allow read: if magLezen();
+      allow write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
+    // wensen/ - vakantie- en voorkeursverzoeken door radiologen
+    // -----------------------------------------------------------------------
+    match /wensen/{id} {
+      // Iedereen mag lezen (transparantie in de maatschap)
+      allow read: if magLezen();
+
+      // Radiologen mogen eigen wensen aanmaken; beheerders mogen alles
+      allow create: if isBeheerder()
+                    || (isRadioloog()
+                        && request.resource.data.radioloog_id == eigenRadioloogId());
+      allow update, delete: if isBeheerder()
+                            || (isRadioloog() && resource.data.radioloog_id == eigenRadioloogId());
+    }
+
+    // -----------------------------------------------------------------------
+    // wijzigingen/ - audit log (append-only)
+    // -----------------------------------------------------------------------
+    match /wijzigingen/{id} {
+      allow read: if isBeheerder()
+                  || (isRadioloog() && resource.data.radioloog_id == eigenRadioloogId());
+      allow create: if magLezen()
+                    && request.resource.data.uid == request.auth.uid;
+      // Geen updates of deletes - audit log is onveranderlijk
+      allow update: if isRadioloog()
+                    && resource.data.radioloog_id == eigenRadioloogId()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gezien']);
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // instellingen/ - globale app-instellingen
+    // -----------------------------------------------------------------------
+    match /instellingen/{id} {
+      allow read: if magLezen();
+      allow write: if isBeheerder();
+    }
+  }
+}
