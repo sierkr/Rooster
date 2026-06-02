@@ -1,20 +1,14 @@
-# Rooster v3.3.1 — Hotfix
+// ============================================================================
+// Firebase configuratie
+// ============================================================================
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCIp8T0-BNPlh3j9X2QbXkQsaq7F91xoOA",
+  authDomain: "rooster-radiologie.firebaseapp.com",
+  projectId: "rooster-radiologie",
+  storageBucket: "rooster-radiologie.firebasestorage.app",
+  messagingSenderId: "798466630775",
+  appId: "1:798466630775:web:65252d0d0a606ab9141272"
+};
 
-Bugfix voor de "pijltje vooruit"-knop op het Afdeling-tabblad.
-
-## Inhoud
-
-```
-rooster-v3.3.1/
-├── README.md
-├── CHANGELOG.md
-├── index.html      ← naar GitHub
-└── config.js       ← naar GitHub (versie 3.3.1)
-```
-
-## Twee stappen
-
-1. **GitHub**: vervang `index.html` en `config.js`
-2. **Hard refresh**: Ctrl+F5
-
-Geen Firestore-data of Cloud Functions wijzigingen nodig.
+// Versie van de app - wordt gebruikt voor cache-busting
+window.APP_VERSIE = "3.27.96";
