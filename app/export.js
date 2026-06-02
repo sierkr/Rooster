@@ -589,7 +589,8 @@ export async function actExportJaar(jaar, naamParam) {
     }
 
     // ---- Activiteit-sheet ---------------------------------------------------
-    voegActiviteitSheetToe(wb, sheetNaam, radKolommen, dynKolomMap, COL_DIENST, excelRij - 1);
+    // Activiteit-sheet tijdelijk uitgeschakeld (formule-bugs in sheet2)
+    // voegActiviteitSheetToe(wb, sheetNaam, radKolommen, dynKolomMap, COL_DIENST, excelRij - 1);
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();

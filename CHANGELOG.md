@@ -1,3 +1,10 @@
+## v3.27.94 — Activiteit-sheet tijdelijk uitgeschakeld
+
+### Wijzigingen
+- **export.js**: `voegActiviteitSheetToe` uitgecommentarieerd. De Activiteit-sheet (sheet2) bleek de enige oorzaak van de Excel-foutmeldingen — bestanden zonder dit sheet openen foutloos. Test of export nu foutloos werkt voordat het sheet structureel wordt opgelost.
+
+---
+
 ## v3.27.93 — Export.js teruggezet naar v3.27.85-basis
 
 ### Wijzigingen

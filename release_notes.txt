@@ -1,14 +1,15 @@
-Rooster v3.27.93 — Release notes
+Rooster v3.27.94 — Release notes
 ==================================
 
-Export.js teruggezet naar v3.27.85-basis
+Activiteit-sheet tijdelijk uitgeschakeld
 -----------------------------------------
-De Excel-export werkte foutloos in v3.27.85. Alle wijzigingen die
-daarna aan export.js zijn gedaan (UPPER, calcProperties, watermerk
-via named range en verborgen sheet, verplicht-filter) zijn verwijderd.
+Analyse van twee exportbestanden toonde aan dat de Activiteit-sheet
+(sheet2) de enige oorzaak is van de Excel-foutmeldingen. Bestanden
+zonder dit sheet openen foutloos.
 
-Enige toevoeging t.o.v. v85: de bestandsnaam-parameter zodat de
-gebruiker zelf een naam kan opgeven voor het exportbestand.
+Het sheet is uitgecommentarieerd voor testdoeleinden. Als de export
+nu foutloos werkt, wordt het sheet structureel opgelost (statische
+waarden i.p.v. cross-sheet formules).
 
 TE UPLOADEN NAAR GITHUB
 ------------------------
