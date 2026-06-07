@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help – Rooster radiologen</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.65; color: #1a1a18; background: #f5f5f3; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { color: #5f5e5a; font-size: 14px; margin-bottom: 2rem; }
+    h2 { font-size: 18px; font-weight: 600; margin: 2.5rem 0 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(0,0,0,0.08); }
+    h3 { font-size: 15px; font-weight: 600; margin: 1.25rem 0 0.4rem; color: #2c2c2a; }
+    p { margin-bottom: 0.75rem; }
+    ul, ol { margin: 0.5rem 0 0.75rem 1.4rem; }
+    li { margin-bottom: 0.3rem; }
+    .card { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+    .toc { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
+    .toc h2 { margin-top: 0; border-top: none; font-size: 15px; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.05em; }
+    .toc ol { margin-top: 0.5rem; }
+    .toc a { color: #2c82d2; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .tip { background: #eef6ff; border-left: 3px solid #2c82d2; border-radius: 0 6px 6px 0; padding: 0.75rem 1rem; margin: 0.75rem 0; font-size: 14px; }
+    .tip b { color: #1a5fa8; }
+    .badge { display: inline-block; background: #e8edf5; color: #2c2c2a; border-radius: 4px; padding: 1px 7px; font-size: 12px; font-weight: 500; font-family: monospace; }
+    .back { display: inline-block; margin-top: 2.5rem; color: #2c82d2; text-decoration: none; font-size: 14px; }
+    .back:hover { text-decoration: underline; }
+    a[href^="#"] { color: inherit; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1a; color: #e5e5e3; }
+      .card, .toc { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
+      .tip { background: #1a2a3a; border-color: #2c82d2; }
+      h2 { border-color: rgba(255,255,255,0.08); }
+      .badge { background: #333; color: #e5e5e3; }
+      .toc a { color: #6ab0f5; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Rooster radiologen</h1>
+  <p class="subtitle">Gebruikershandleiding · versie mei 2026</p>
+
+  <div class="toc">
+    <h2>Inhoud</h2>
+    <ol>
+      <li><a href="#inloggen">Inloggen en profiel</a></li>
+      <li><a href="#overzicht">Overzicht – het weekrooster</a></li>
+      <li><a href="#eigen">Mijn rooster (Radioloog-tab)</a></li>
+      <li><a href="#afdeling">Afdeling – wie doet wat vandaag</a></li>
+      <li><a href="#dienst">Dienst – bereikbaarheidsoverzicht</a></li>
+      <li><a href="#wensen">Wensen – verlof en voorkeuren indienen</a></li>
+      <li><a href="#vakantie">Vakantie – vakantieplanning</a></li>
+      <li><a href="#notificaties">Notificaties en wijzigingen</a></li>
+      <li><a href="#tips">Praktische tips</a></li>
+    </ol>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="inloggen">1. Inloggen en profiel</h2>
+  <p>Open de app via de gedeelde link. Je logt in met de gebruikersnaam en het wachtwoord dat de beheerder voor jou heeft aangemaakt.</p>
+  <h3>Wachtwoord vergeten</h3>
+  <p>Neem contact op met de beheerder zodat je wachtwoord gereset kan worden.</p>
+  <h3>Je profielchip</h3>
+  <p>Rechtsboven staat een ronde chip met je initialen. Tik erop voor een overzicht van je account: naam, gekoppeld radioloog-profiel en de optie om je wachtwoord te wijzigen of uit te loggen.</p>
+
+  <!-- 2 -->
+  <h2 id="overzicht">2. Overzicht – het weekrooster</h2>
+  <p>De tab <span class="badge">Overzicht</span> toont het rooster van de lopende week. Navigeer met de pijltjesknopjes naar andere weken, of tik op <em>Vandaag</em> om terug te springen.</p>
+
+  <h3>Het raster</h3>
+  <p>Elke rij is een dag (ma–vr), elke kolom een radioloog. In de cel staat de functiecode voor die dag, bijvoorbeeld <span class="badge">W</span> (werkvloer), <span class="badge">V</span> (vakantie) of <span class="badge">K</span> (cursus). Kleuren komen overeen met de functiecodes zoals ingesteld door de beheerder.</p>
+
+  <h3>Jouw cel</h3>
+  <p>Je eigen cel is licht gemarkeerd. Tik erop voor een detailvenster met je volledige toewijzing, eventuele opmerkingen en je ingediende wens voor die dag.</p>
+
+  <h3>Wijzigingsmarkering</h3>
+  <p>Een klein oranje bolletje op een cel geeft aan dat jouw toewijzing recent is gewijzigd. Tik op de cel om de details te zien en de melding als gelezen te markeren. Het getal op de <span class="badge">Overzicht</span>-tab geeft aan hoeveel ongelezen wijzigingen er zijn.</p>
+
+  <div class="tip"><b>Tip:</b> Het rooster is altijd actueel — bij elke aanpassing door de beheerder zie je direct de nieuwe indeling zonder de pagina te verversen.</div>
+
+  <h3>Validatie-meldingen</h3>
+  <p>Boven het raster kan een gele of rode balk verschijnen met waarschuwingen of conflicten voor die week (bijvoorbeeld een bezetting die te laag is). Dit is ter informatie; alleen de beheerder kan het rooster aanpassen.</p>
+
+  <!-- 3 -->
+  <h2 id="eigen">3. Mijn rooster (Radioloog-tab)</h2>
+  <p>De tab met jouw naam toont jouw persoonlijke weekoverzicht: per dag je functie, eventuele opmerkingen en de status van je wensen.</p>
+  <p>Je kunt hier ook je agenda-link kopiëren om het rooster toe te voegen aan je eigen agenda-app (Google Calendar, Outlook, Apple Kalender). De link blijft actueel: wijzigingen in het rooster verschijnen automatisch in je agenda.</p>
+  <div class="tip"><b>Let op:</b> De agenda-link is persoonsgebonden en privé. Deel hem niet met anderen.</div>
+
+  <!-- 4 -->
+  <h2 id="afdeling">4. Afdeling – wie doet wat vandaag</h2>
+  <p>De tab <span class="badge">Afdeling</span> toont voor een gekozen dag een overzicht per functie: welke radioloog is die dag aan welke plek gekoppeld. Handig om snel te zien wie er op de werkvloer staat.</p>
+  <p>Navigeer met de pijltjes naar een andere dag. Het overzicht groepeert automatisch op functietype (werkvloer, afwezig, overig).</p>
+
+  <!-- 5 -->
+  <h2 id="dienst">5. Dienst – bereikbaarheidsoverzicht</h2>
+  <p>De tab <span class="badge">Dienst</span> toont de dienstdoende radiologen voor de komende dagen: naam, DECT-nummer en eventuele opmerkingen. Je kunt direct bellen via de DECT-knop als je de app op een telefoon gebruikt.</p>
+
+  <!-- 6 -->
+  <h2 id="wensen">6. Wensen – verlof en voorkeuren indienen</h2>
+  <p>Via de tab <span class="badge">Wensen</span> dien je verlofaanvragen of roostervoorkeuren in. Je kunt drie soorten wensen aanmaken:</p>
+  <ul>
+    <li><strong>Vakantie</strong> – aanvraag voor een V-dag</li>
+    <li><strong>Niet beschikbaar</strong> – dag waarop je niet ingepland wilt worden</li>
+    <li><strong>Voorkeur</strong> – geef aan welke functie je die dag bij voorkeur doet</li>
+  </ul>
+  <h3>Wens indienen</h3>
+  <ol>
+    <li>Tik op <em>+ Nieuwe wens</em></li>
+    <li>Kies het type, de datum en eventueel een toelichting</li>
+    <li>Tik op <em>Opslaan</em></li>
+  </ol>
+  <h3>Status van je wens</h3>
+  <ul>
+    <li><strong>Open</strong> – ingediend, nog niet verwerkt</li>
+    <li><strong>Verwerkt</strong> – de beheerder heeft het rooster passend gemaakt</li>
+    <li><strong>Afgewezen</strong> – de wens kon niet worden gehonoreerd</li>
+  </ul>
+  <p>Na een Excel-import past de app wens-statussen automatisch aan: als de geïmporteerde indeling overeenkomt met je wens, wordt die automatisch op <em>Verwerkt</em> gezet.</p>
+  <div class="tip"><b>Tip:</b> Dien wensen zo vroeg mogelijk in — het rooster wordt normaliter weken vooruit gepland.</div>
+
+  <!-- 7 -->
+  <h2 id="vakantie">7. Vakantie – vakantieplanning</h2>
+  <p>De tab <span class="badge">Vakantie</span> toont een maandoverzicht van alle vakantieplanningen. Je ziet per radioloog hoeveel vakantiedagen er in een maand zijn ingepland en wat je eigen positie is in de volgorderotatie.</p>
+  <p>Vanuit dit scherm kun je vakantieblokken aanvragen. De beheerder verwerkt deze in het definitieve rooster.</p>
+
+  <!-- 8 -->
+  <h2 id="notificaties">8. Notificaties en wijzigingen</h2>
+  <p>Wanneer de beheerder een Excel-rooster importeert en jouw indeling binnen 30 dagen wordt gewijzigd, verschijnt er een markering op je cel in het Overzicht. Het tabblad toont dan ook een getal.</p>
+  <ol>
+    <li>Tik op de gemarkeerde cel</li>
+    <li>Lees de details van de wijziging</li>
+    <li>Tik op <em>Gezien</em> om de melding te wissen</li>
+  </ol>
+
+  <!-- 9 -->
+  <h2 id="tips">9. Praktische tips</h2>
+  <ul>
+    <li>De app werkt ook offline zolang je de app niet afsluit — eerder geladen data blijft dan beschikbaar. Zodra je weer verbinding hebt, wordt alles gesynchroniseerd.</li>
+    <li>Installeer de app op je telefoon via <em>Toevoegen aan beginscherm</em> in je browser voor snelle toegang.</li>
+    <li>Het rooster ververst automatisch als er een wijziging is — je hoeft de pagina nooit handmatig te verversen.</li>
+    <li>Heb je een vraag of zie je een fout in het rooster? Neem contact op met de beheerder, niet met de app-ontwikkelaar.</li>
+  </ul>
+
+  <a class="back" href="../index.html">← Terug naar de app</a>
+
+</div>
+</body>
+</html>

@@ -1,22 +1,14 @@
-Rooster v3.27.96 — Release notes
-==================================
+// ============================================================================
+// Firebase configuratie
+// ============================================================================
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCIp8T0-BNPlh3j9X2QbXkQsaq7F91xoOA",
+  authDomain: "rooster-radiologie.firebaseapp.com",
+  projectId: "rooster-radiologie",
+  storageBucket: "rooster-radiologie.firebasestorage.app",
+  messagingSenderId: "798466630775",
+  appId: "1:798466630775:web:65252d0d0a606ab9141272"
+};
 
-BUGFIX: WATERMERK VERWIJDERD
------------------------------
-De verborgen _RoosterApp sheet (toegevoegd in v3.27.95) stond als eerste
-sheet in het werkboek. Daardoor verschoof de hoofdsheet naar positie 2,
-waardoor Excel comments en drawings hernummerde (comments2.xml,
-vmlDrawing2.vml). Dit verstoorde de interne structuur en veroorzaakte
-foutmeldingen bij openen. Het watermerk is volledig verwijderd.
-
-BUGFIX: FUNCTIE_LETTERS FALLBACK
-----------------------------------
-Als geen functies als "Verplicht" zijn aangevinkt in de Regels-tab,
-wordt teruggevallen op alle werkvloer-functies (gedrag zoals v3.27.85).
-Zo toont de Aantal-kolom altijd zinvolle waarden.
-
-TE UPLOADEN NAAR GITHUB
-------------------------
-- app/export.js
-- config.js
-- sw.js
+// Versie van de app - wordt gebruikt voor cache-busting
+window.APP_VERSIE = "3.27.97";
