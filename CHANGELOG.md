@@ -1,3 +1,14 @@
+## v3.27.97 — Testomgeving: named Firestore-database + guard
+
+### Wijzigingen
+- **firebase-init.js**: database-selectie via `window.FIRESTORE_DB`. Productie blijft de `(default)`-database; de testomgeving gebruikt een named database (`test`) binnen hetzelfde project, zodat live data ongewijzigd blijft tijdens testen. Nieuw export: `IS_TEST_DB`.
+- **firebase-init.js**: veiligheidsguard — de account-Cloud-Functions (`gebruikerAanmaken`, `gebruikerVerwijderen`, `gebruikerResetWachtwoord`) worden in de testomgeving geblokkeerd met een duidelijke foutmelding, omdat ze server-side altijd de live database + Auth zouden raken.
+- **config.test.js** (nieuw): drop-in config voor de test-branch (`FIRESTORE_DB = 'test'`, versielabel `-TEST`).
+- **TESTOMGEVING.md** (nieuw): inrichting, data verversen via de ingebouwde backup/restore, en reviewer-instructies.
+- **sw.js**: cache-versie 3.27.96 → 3.27.97.
+
+---
+
 ## v3.27.96 — Bugfix: watermerk verwijderd + FUNCTIE_LETTERS fallback
 
 ### Wijzigingen

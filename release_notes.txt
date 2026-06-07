@@ -1,14 +1,25 @@
-// ============================================================================
-// Firebase configuratie
-// ============================================================================
-window.FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCIp8T0-BNPlh3j9X2QbXkQsaq7F91xoOA",
-  authDomain: "rooster-radiologie.firebaseapp.com",
-  projectId: "rooster-radiologie",
-  storageBucket: "rooster-radiologie.firebasestorage.app",
-  messagingSenderId: "798466630775",
-  appId: "1:798466630775:web:65252d0d0a606ab9141272"
-};
+Rooster v3.27.97 — Release notes
+==================================
 
-// Versie van de app - wordt gebruikt voor cache-busting
-window.APP_VERSIE = "3.27.97";
+TESTOMGEVING TOEGEVOEGD
+-----------------------------
+Er is een geïsoleerde testomgeving mogelijk gemaakt om structurele en
+interface-wijzigingen te bekijken voordat ze live gaan (bv. kolom/radioloog
+verwijderen en het opschuiven in het overzicht, of een nieuwe interface-opzet).
+
+WERKING
+-----------------------------
+- Hetzelfde Firebase-project (dezelfde inlog-accounts), maar de app wijst via
+  window.FIRESTORE_DB naar een aparte Firestore named database 'test'. De live
+  (default) database blijft ongewijzigd tijdens testen.
+- config.test.js: drop-in config voor de test-branch (FIRESTORE_DB = 'test',
+  versielabel met -TEST zodat de testmodus in de UI zichtbaar is).
+- Veiligheidsguard: gebruiker aanmaken/verwijderen/wachtwoord-reset zijn in de
+  testomgeving geblokkeerd, omdat die server-side altijd de live database +
+  Auth raken. Alle overige acties werken volledig in de test-database.
+
+INRICHTING & DATA
+-----------------------------
+Zie TESTOMGEVING.md voor het aanmaken van de named database, het publiceren van
+de rules op die database, het bootstrappen van de eerste beheerder, en het
+verversen van de testdata via de ingebouwde backup/restore.

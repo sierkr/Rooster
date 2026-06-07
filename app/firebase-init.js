@@ -8,12 +8,43 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 
 export const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
 export const auth = getAuth(firebaseApp);
-export const db = getFirestore(firebaseApp);
+
+// ----------------------------------------------------------------------------
+// Database-selectie: productie gebruikt de (default) database; de testomgeving
+// zet window.FIRESTORE_DB = 'test' in config.test.js, waardoor de app een
+// aparte named Firestore-database binnen hetzelfde project gebruikt. De live
+// data blijft daardoor volledig ongemoeid tijdens het testen.
+// ----------------------------------------------------------------------------
+const FIRESTORE_DB = (typeof window !== 'undefined' && window.FIRESTORE_DB)
+  ? window.FIRESTORE_DB
+  : '(default)';
+export const IS_TEST_DB = FIRESTORE_DB !== '(default)';
+
+export const db = IS_TEST_DB
+  ? getFirestore(firebaseApp, FIRESTORE_DB)
+  : getFirestore(firebaseApp);
+
 export const functions = getFunctions(firebaseApp, 'europe-west1');
 
+// ----------------------------------------------------------------------------
+// Veiligheidsguard voor account-Cloud-Functions in de testomgeving.
+// gebruikerAanmaken / gebruikerVerwijderen / gebruikerResetWachtwoord draaien
+// server-side via de Admin SDK en werken ALTIJD op de live (default) database
+// + Firebase Auth — ongeacht window.FIRESTORE_DB. In de testomgeving zouden ze
+// dus productiegegevens raken. Daarom blokkeren we ze hard met een duidelijke
+// foutmelding; de aanroepende UI vangt deze error af en toont hem.
+// ----------------------------------------------------------------------------
+function accountFunctie(naam) {
+  const callable = httpsCallable(functions, naam);
+  if (!IS_TEST_DB) return callable;
+  return async () => {
+    throw new Error('Gebruikersbeheer is uitgeschakeld in de testomgeving — dit zou de live database raken.');
+  };
+}
+
 // Callable Cloud Functions
-export const fnGebruikerAanmaken      = httpsCallable(functions, 'gebruikerAanmaken');
-export const fnGebruikerVerwijderen   = httpsCallable(functions, 'gebruikerVerwijderen');
-export const fnGebruikerResetWachtwoord = httpsCallable(functions, 'gebruikerResetWachtwoord');
+export const fnGebruikerAanmaken        = accountFunctie('gebruikerAanmaken');
+export const fnGebruikerVerwijderen     = accountFunctie('gebruikerVerwijderen');
+export const fnGebruikerResetWachtwoord = accountFunctie('gebruikerResetWachtwoord');
 
 export { reauthenticateWithCredential, EmailAuthProvider };
