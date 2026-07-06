@@ -1,10 +1,11 @@
 // Gebruikers-view: gebruikers beheren, parttime, waarnemers, Excel-import.
 import { collection, doc, getDocs, query, where, setDoc, updateDoc, writeBatch, deleteField, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { db, fnGebruikerAanmaken, fnGebruikerVerwijderen, fnGebruikerResetWachtwoord } from '../firebase-init.js';
+import { db, fnGebruikerAanmaken, fnGebruikerVerwijderen, fnGebruikerResetWachtwoord, IS_TEST_DB } from '../firebase-init.js';
 import { state, SLOTS, VASTE_RAD_IDS, VASTE_BEHEERDER_EMAIL } from '../state.js';
 import {
-  vasteRads, actieveInvallers, radiologenMap, parttimeFactor, defaultPermissies,
+  vasteRads, vasteRadsOpDatum, actieveInvallers, radiologenMap, parttimeFactor, defaultPermissies,
   magGebruikersBeheren, genereerWachtwoord, bezettingOpDatum, vandaagIso, plusDagen, formatDatum,
+  alleVasteStoelIds, isVasteStoel, nieuwPersoonId,
 } from '../helpers.js';
 import { STANDAARD_WACHTWOORD } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
@@ -66,9 +67,10 @@ export async function renderGebView() {
       <div class="summary-label" style="margin-bottom: 6px;">Vaste radiologen — parttime &amp; vakantierecht</div>
       <div class="card">
         <p class="muted" style="margin: 0 0 10px;">Parttime: percentage van fulltime (default 100%). Vakantierecht: aantal V-dagen per jaar (default 40). Tik <b>Wissel</b> om een persoon op de stoel te wisselen vanaf een datum.</p>
-        <div style="display: grid; grid-template-columns: 50px 1fr 56px 56px 70px; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); font-size: 11px; font-weight: 600; color: #5f5e5a;">
+        <div style="display: grid; grid-template-columns: 50px 1fr 120px 56px 56px 120px; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); font-size: 11px; font-weight: 600; color: #5f5e5a;">
           <div>Code</div>
           <div>Naam</div>
+          <div style="text-align: center;">In dienst</div>
           <div style="text-align: center;">Parttime</div>
           <div style="text-align: center;">Vakantie</div>
           <div></div>
@@ -80,29 +82,77 @@ export async function renderGebView() {
           const stoel = state.radiologen.find(x => x.id === r.id);
           const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie : [];
           const open = hist.find(e => !e.tot);
-          const sinds = open?.van ? `vast sinds ${formatDatum(open.van, 'kort')}` : '';
+          // In-dienst (anciënniteit) bepaalt de kolomvolgorde (oudste = links).
+          // Placeholder behoudt de huidige vaste volgorde tot je echte data invult.
+          const idx = VASTE_RAD_IDS.indexOf(r.id);
+          const indienstPlaceholder = idx < 0 ? '9999-01-01' : `${2000 + idx}-01-01`;
+          const indienstWaarde = open?.in_dienst || stoel?.in_dienst || indienstPlaceholder;
+          // Gepland vertrek: de bezetter van vandaag heeft een einddatum (tot) in
+          // de toekomst. De stoel is dan nog zichtbaar tot die datum.
+          const geplandVertrek = r.tot ? plusDagen(r.tot, 1) : null;
           return `
-            <div style="display: grid; grid-template-columns: 50px 1fr 56px 56px 70px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+            <div style="display: grid; grid-template-columns: 50px 1fr 120px 56px 56px 120px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <div style="font-weight: 500;">${r.code}</div>
               <div style="min-width: 0;">
                 <div class="muted" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.achternaam || ''}</div>
-                ${sinds ? `<div class="muted" style="font-size: 10px;">${sinds}</div>` : ''}
+                ${geplandVertrek ? `<div style="font-size: 10px; color: #b3261e;">vertrekt per ${formatDatum(geplandVertrek, 'kort')}</div>` : ''}
+              </div>
+              <div>
+                <input type="date" class="input" id="id_${r.id}" value="${indienstWaarde}" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 12px; width: 100%;">
               </div>
               <div style="display: flex; align-items: center; gap: 2px;">
-                <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" style="padding: 6px 4px; font-size: 13px; text-align: right;">
+                <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 13px; text-align: right;">
                 <span class="muted" style="font-size: 11px;">%</span>
               </div>
               <div>
-                <input type="number" class="input" id="vr_${r.id}" value="${vrecht}" min="0" max="100" step="1" style="padding: 6px 4px; font-size: 13px; text-align: right; width: 100%;">
+                <input type="number" class="input" id="vr_${r.id}" value="${vrecht}" min="0" max="100" step="1" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 13px; text-align: right; width: 100%;">
               </div>
-              <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openWisselSheet('${r.id}')">Wissel</button>
+              <div style="display: flex; gap: 4px;">
+                <button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.openWisselSheet('${r.id}')">Wissel</button>
+                ${geplandVertrek
+                  ? `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.vertrekIntrekken('${r.id}')" title="Gepland vertrek intrekken">Intrekken</button>`
+                  : `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.openVertrekSheet('${r.id}')" title="Stoel laten vertrekken per datum">Vertrek</button>`}
+              </div>
             </div>
           `;
         }).join('')}
-        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanParttime()">Opslaan</button>
+        <button id="btnOpslaanVast" class="btn" disabled style="width: 100%; margin-top: 10px; opacity: 0.5; cursor: not-allowed;" onclick="window.opslaanParttime()">Opslaan</button>
+        <button class="btn" style="width: 100%; margin-top: 6px; font-size: 11px; opacity: 0.85;" onclick="window.initialiseerPersoonIds()" title="Eenmalig: ken persoon-id's toe aan de huidige bezetters">Persoon-id's toekennen</button>
       </div>
     </div>
   `;
+
+  // Vertrokken stoelen — stoelen met historie maar zonder actieve bezetter
+  // vandaag (vertrekdatum al gepasseerd). Herstellen zet de bezetting weer open.
+  const vertrokken = alleVasteStoelIds().map(id => {
+    const st = state.radiologen.find(r => r.id === id);
+    if (!st || bezettingOpDatum(id, vandaagIso())) return null;
+    const h = Array.isArray(st.bezetting_historie) ? st.bezetting_historie : [];
+    if (h.length === 0) return null;
+    let li = -1, bv = '';
+    h.forEach((e, i) => { const v = e.van || '0000-00-00'; if (li === -1 || v >= bv) { bv = v; li = i; } });
+    const e = h[li];
+    if (!e || !e.tot) return null;
+    return { id, code: e.code || id, achternaam: e.achternaam || '', tot: e.tot };
+  }).filter(Boolean);
+
+  if (vertrokken.length > 0) {
+    html += `
+      <div style="margin-top: 1.5rem;">
+        <div class="summary-label" style="margin-bottom: 6px;">Vertrokken stoelen</div>
+        <div class="card">
+          <p class="muted" style="margin: 0 0 10px;">De bezetter is vertrokken en de kolom is verdwenen. <b>Herstellen</b> trekt het vertrek in: de stoel wordt weer doorlopend actief en de kolom komt terug.</p>
+          ${vertrokken.map(v => `
+            <div style="display: grid; grid-template-columns: 50px 1fr 110px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+              <div style="font-weight: 500;">${v.code}</div>
+              <div class="muted" style="font-size: 13px;">${v.achternaam} <span style="font-size: 11px;">· weg sinds ${formatDatum(plusDagen(v.tot, 1), 'kort')}</span></div>
+              <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.vertrekIntrekken('${v.id}')">Herstellen</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
 
   // Waarnemers-sectie
   html += `
@@ -117,15 +167,15 @@ export async function renderGebView() {
           return `
             <div style="display: grid; grid-template-columns: 32px 1fr 1fr 38px 60px 60px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <div style="font-weight: 500; color: #5f5e5a;">${slotId}</div>
-              <input type="text" class="input" id="inv_code_${slotId}" placeholder="Code" maxlength="4" value="${(slot.code||'').replace(/"/g,'&quot;')}" style="padding: 6px 8px; font-size: 13px;">
-              <input type="text" class="input" id="inv_naam_${slotId}" placeholder="Achternaam" value="${(slot.achternaam||'').replace(/"/g,'&quot;')}" style="padding: 6px 8px; font-size: 13px;">
-              <span class="toggle-switch ${isActief ? 'aan' : ''}" id="inv_act_${slotId}" onclick="this.classList.toggle('aan')"></span>
+              <input type="text" class="input" id="inv_code_${slotId}" placeholder="Code" maxlength="4" value="${(slot.code||'').replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
+              <input type="text" class="input" id="inv_naam_${slotId}" placeholder="Achternaam" value="${(slot.achternaam||'').replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
+              <span class="toggle-switch ${isActief ? 'aan' : ''}" id="inv_act_${slotId}" onclick="this.classList.toggle('aan'); window.gebMarkDirty('wnr')"></span>
               <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openWisselSheet('${slotId}')">Wissel</button>
               <button class="btn" style="font-size: 11px; padding: 6px 4px; ${isLeeg ? 'opacity:0.4; cursor:not-allowed;' : ''}" ${isLeeg ? 'disabled' : ''} onclick="window.openMaakVastSheet('${slotId}')" title="Maak vast in een vaste-stoel">→ Vast</button>
             </div>
           `;
         }).join('')}
-        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="window.opslaanInvallers()">Waarnemers opslaan</button>
+        <button id="btnOpslaanWnr" class="btn" disabled style="width: 100%; margin-top: 10px; opacity: 0.5; cursor: not-allowed;" onclick="window.opslaanInvallers()">Waarnemers opslaan</button>
       </div>
     </div>
   `;
@@ -258,10 +308,14 @@ export async function renderGebView() {
         <div class="card">
           ${_wHtml}
           <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">${_lbTxt}${_lbRStr}</div>
-          <div style="font-size:12px;color:#5f5e5a;margin-bottom:8px;">
-            Klik op <b>Nu backup maken</b> om een versleutelde snapshot van de hele database te downloaden.
-            Vóór elke Excel-import wordt automatisch een backup gemaakt.
-          </div>
+          ${IS_TEST_DB
+            ? `<div style="font-size:12px;color:#9c5700;background:#fff6e0;border:1px solid #e6a817;border-radius:6px;padding:8px 10px;margin-bottom:10px;">
+                 In de <b>testomgeving</b> kan geen backup gemaakt worden. Maak een backup in de live-agenda; die kun je hier wél terugzetten om met actuele data te oefenen.
+               </div>`
+            : `<div style="font-size:12px;color:#5f5e5a;margin-bottom:8px;">
+                 Klik op <b>Nu backup maken</b> om een versleutelde snapshot van de hele database te downloaden.
+                 Vóór elke Excel-import wordt automatisch een backup gemaakt.
+               </div>`}
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-primary" onclick="window.actMaakBackup()">⬇ Nu backup maken</button>
             <button class="btn" onclick="document.getElementById('herstelFileInput').click()">↩ Backup terugzetten</button>
@@ -330,11 +384,71 @@ export async function renderGebView() {
 
 // ==== Handlers ===============================================================
 
+// Maakt de Opslaan-knop van een sectie zichtbaar/actief zodra er iets wijzigt.
+// 'vast' = vaste radiologen, 'wnr' = waarnemers.
+window.gebMarkDirty = function(sectie) {
+  const btn = document.getElementById(sectie === 'wnr' ? 'btnOpslaanWnr' : 'btnOpslaanVast');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.classList.add('btn-primary');
+  btn.style.opacity = '1';
+  btn.style.cursor = 'pointer';
+};
+
+// Eenmalig: ken een persoon_id toe aan alle huidige bezetters die er nog geen
+// hebben. Idempotent — bestaande persoon_id's blijven ongemoeid. Vaste stoelen
+// via hun bezetting-entries (+ top-level), W-stoelen via top-level.
+window.initialiseerPersoonIds = async function() {
+  const teDoen = [];
+  (state.radiologen || []).forEach(stoel => {
+    const hist = Array.isArray(stoel.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+    let gewijzigd = false;
+    let topPid = stoel.persoon_id || null;
+    if (hist.length > 0) {
+      const perKey = {};
+      hist.forEach(e => {
+        // Alleen entries met een echte naam zijn een persoon. Lege/kale entries
+        // (bv. een vrijgekomen stoel) krijgen géén persoon-id.
+        if (!e.persoon_id && (e.achternaam || '').trim()) {
+          const k = `${(e.achternaam || '').toLowerCase()}|${(e.code || '').toLowerCase()}`;
+          if (!perKey[k]) perKey[k] = nieuwPersoonId();
+          e.persoon_id = perKey[k];
+          gewijzigd = true;
+        }
+      });
+      const opn = hist.find(e => !e.tot) || hist[hist.length - 1];
+      if (opn && opn.persoon_id && stoel.persoon_id !== opn.persoon_id) { topPid = opn.persoon_id; gewijzigd = true; }
+    } else if ((stoel.achternaam || '').trim() && !stoel.persoon_id) {
+      // Stoel zonder historie (bv. W-stoel): alleen als er een echte bezetter
+      // is. Een leeg slot waarvan de 'code' standaard de slotnaam is, telt niet.
+      topPid = nieuwPersoonId();
+      gewijzigd = true;
+    }
+    if (gewijzigd) {
+      const upd = { persoon_id: topPid };
+      if (hist.length > 0) upd.bezetting_historie = hist;
+      teDoen.push({ id: stoel.id, upd });
+    }
+  });
+  if (teDoen.length === 0) { alert("Alle bezetters met een naam hebben al een persoon-id."); return; }
+  if (!confirm(`${teDoen.length} bezetter(s) krijgen een persoon-id. Doorgaan?`)) return;
+  try {
+    for (const t of teDoen) {
+      await setDoc(doc(db, 'radiologen', t.id), t.upd, { merge: true });
+    }
+    alert(`Persoon-id's toegekend aan ${teDoen.length} bezetter(s).`);
+    renderGebView();
+  } catch (e) {
+    alert('Mislukt: ' + (e.message || e));
+  }
+};
+
 window.opslaanParttime = async function() {
   try {
     for (const r of vasteRads()) {
       const elPf = document.getElementById('pf_' + r.id);
       const elVr = document.getElementById('vr_' + r.id);
+      const elId = document.getElementById('id_' + r.id);
       const update = {};
       if (elPf) {
         const pct = Math.max(10, Math.min(100, parseInt(elPf.value, 10) || 100));
@@ -344,11 +458,45 @@ window.opslaanParttime = async function() {
         const dgn = Math.max(0, Math.min(100, parseInt(elVr.value, 10) || 40));
         update.vakantierecht = dgn;
       }
+      // In-dienst (anciënniteit) op de open bezetting-entry zetten; die bepaalt
+      // de kolomvolgorde (oudste = links). Geen historie? Dan maken we een open
+      // entry aan uit de top-level velden.
+      if (elId && elId.value) {
+        const stoel = state.radiologen.find(x => x.id === r.id);
+        const hist = Array.isArray(stoel?.bezetting_historie)
+          ? stoel.bezetting_historie.map(e => ({ ...e }))
+          : [];
+        // Doel-entry: de open (lopende) entry, of — bij een gepland vertrek
+        // zonder open entry — de laatste entry. Zo voorkomen we een dubbele
+        // open entry.
+        let doel = hist.find(e => !e.tot);
+        if (!doel && hist.length > 0) {
+          let li = -1, bv = '';
+          hist.forEach((e, i) => { const v = e.van || '0000-00-00'; if (li === -1 || v >= bv) { bv = v; li = i; } });
+          doel = hist[li];
+        }
+        if (doel) {
+          doel.in_dienst = elId.value;
+        } else {
+          hist.push({
+            voornaam: stoel?.voornaam || '',
+            achternaam: stoel?.achternaam || '',
+            code: stoel?.code || r.id,
+            vakantierecht: typeof stoel?.vakantierecht === 'number' ? stoel.vakantierecht : 40,
+            parttime_factor: typeof stoel?.parttime_factor === 'number' ? stoel.parttime_factor : 1,
+            in_dienst: elId.value,
+            persoon_id: stoel?.persoon_id || nieuwPersoonId(),
+            van: null, tot: null,
+          });
+        }
+        update.bezetting_historie = hist;
+        update.in_dienst = elId.value;
+      }
       if (Object.keys(update).length > 0) {
         await setDoc(doc(db, 'radiologen', r.id), update, { merge: true });
       }
     }
-    alert('Parttime &amp; vakantierecht opgeslagen.');
+    alert('Parttime, vakantierecht en in-dienst opgeslagen.');
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
@@ -360,9 +508,29 @@ window.opslaanInvallers = async function() {
       const code = document.getElementById('inv_code_' + slotId).value.trim();
       const achternaam = document.getElementById('inv_naam_' + slotId).value.trim();
       const actief = document.getElementById('inv_act_' + slotId).classList.contains('aan');
-      await setDoc(doc(db, 'radiologen', slotId), {
+      const stoel = state.radiologen.find(r => r.id === slotId);
+      const update = {
         id: slotId, code: code || slotId, achternaam: achternaam || '', actief, isSlot: true,
-      }, { merge: true });
+      };
+      // Bezette W-stoel (échte naam ingevuld) zonder persoon_id krijgt er één,
+      // zodat de identiteit meeloopt als deze waarnemer later vast in dienst
+      // komt. Een leeg slot (alleen een kale slotnaam) krijgt er géén.
+      if (achternaam && !stoel?.persoon_id) update.persoon_id = nieuwPersoonId();
+
+      // Zodra er een bezetting_historie is, geeft de weergave (bezettingOpDatum)
+      // altijd voorrang aan de code/achternaam van de open (lopende) entry —
+      // dus die moet hier ook worden bijgewerkt. Anders wordt deze invoer
+      // stilzwijgend genegeerd zodra de stoel ooit gewisseld/gemigreerd is.
+      const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+      let open = hist.find(e => !e.tot);
+      if (open) {
+        open.code = code || slotId;
+        open.achternaam = achternaam || '';
+        if (update.persoon_id && !open.persoon_id) open.persoon_id = update.persoon_id;
+        update.bezetting_historie = hist;
+      }
+
+      await setDoc(doc(db, 'radiologen', slotId), update, { merge: true });
     }
     alert('Waarnemers opgeslagen.');
   } catch (e) {
@@ -594,6 +762,10 @@ window.gebruikerVerwijderen = async function(uid, email) {
 window.actImportFile        = (input) => actImportFile(input, renderGebView);
 
 window.actMaakBackup = async function() {
+  if (IS_TEST_DB) {
+    alert('In de testomgeving kan geen backup gemaakt worden.\n\nMaak een backup in de live-agenda; die kun je desgewenst in de testomgeving terugzetten om met actuele data te oefenen.');
+    return;
+  }
   try {
     const knop = document.querySelector('[onclick="window.actMaakBackup()"]');
     if (knop) { knop.disabled = true; knop.textContent = 'Bezig\u2026'; }
@@ -655,6 +827,7 @@ window.openWisselSheet = function(slotId) {
       <div class="form-field" style="flex: 1;"><label class="form-label">Vakantierecht</label><input type="number" class="input" id="wsVr" value="40" min="0" max="100" step="1"></div>
     </div>
     <div class="form-field"><label class="form-label">Ingangsdatum</label><input type="date" class="input" id="wsDatum" value="${defDatum}"></div>
+    <div class="form-field"><label class="form-label">In dienst / senioriteit <span class="muted" style="font-weight:400;">(bepaalt kolomvolgorde, oudste = links)</span></label><input type="date" class="input" id="wsInDienst" value="${defDatum}"></div>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
       <button class="btn btn-primary" style="flex: 1;" onclick="window.opslaanWissel('${slotId}')">Doorvoeren</button>
@@ -670,6 +843,7 @@ window.opslaanWissel = async function(slotId) {
   const pf = Math.max(10, Math.min(100, parseInt(document.getElementById('wsPf').value, 10) || 100)) / 100;
   const vr = Math.max(0, Math.min(100, parseInt(document.getElementById('wsVr').value, 10) || 40));
   const datum = document.getElementById('wsDatum').value;
+  const inDienst = document.getElementById('wsInDienst').value || datum;
   if (!code || !achternaam) { alert('Code en achternaam zijn verplicht.'); return; }
   if (!datum) { alert('Kies een ingangsdatum.'); return; }
 
@@ -683,6 +857,7 @@ window.opslaanWissel = async function(slotId) {
       code: stoel.code || slotId,
       vakantierecht: typeof stoel.vakantierecht === 'number' ? stoel.vakantierecht : 40,
       parttime_factor: typeof stoel.parttime_factor === 'number' ? stoel.parttime_factor : 1,
+      in_dienst: stoel.in_dienst || null,
       van: null, tot: null,
     });
   }
@@ -692,11 +867,15 @@ window.opslaanWissel = async function(slotId) {
     if (!e.tot) return { ...e, tot: dagVoor };
     return e;
   });
+  // Nieuwe persoon op deze stoel = nieuwe identiteit → vers persoon_id.
+  const nieuwPid = nieuwPersoonId();
   // Voeg nieuwe entry toe.
   nieuweHist.push({
     voornaam, achternaam, code,
     vakantierecht: vr,
     parttime_factor: pf,
+    in_dienst: inDienst || null,
+    persoon_id: nieuwPid,
     van: datum,
     tot: null,
   });
@@ -707,6 +886,8 @@ window.opslaanWissel = async function(slotId) {
       code, voornaam, achternaam,
       vakantierecht: vr,
       parttime_factor: pf,
+      in_dienst: inDienst || null,
+      persoon_id: nieuwPid,
       actief: true,
       isSlot: SLOTS.includes(slotId),
       bezetting_historie: nieuweHist,
@@ -746,10 +927,9 @@ window.openMaakVastSheet = function(wSlotId) {
 
   const huidig = bezettingOpDatum(wSlotId, vandaagIso());
   const defDatum = vandaagIso();
-  const opties = VASTE_RAD_IDS.map(id => {
-    const b = bezettingOpDatum(id, vandaagIso());
-    return `<option value="${id}">${id} — ${b ? `${b.code} · ${b.achternaam}` : '(leeg)'}</option>`;
-  }).join('');
+  const opties = vasteRadsOpDatum(vandaagIso()).map(r => {
+    return `<option value="${r.id}">${r.code || r.id} · ${r.achternaam || ''} (vervangen)</option>`;
+  }).join('') + `<option value="__NIEUW__">➕ Nieuwe stoel (kolom erbij)</option>`;
 
   document.getElementById('sheetTitle').textContent = `Maak ${huidig?.code || wSlotId} vast`;
   document.getElementById('sheetSub').textContent = `${huidig?.achternaam || ''} verhuist van ${wSlotId} naar een vaste stoel`;
@@ -763,6 +943,9 @@ window.openMaakVastSheet = function(wSlotId) {
     </div>
     <div class="form-field"><label class="form-label">Ingangsdatum</label>
       <input type="date" class="input" id="mvDatum" value="${defDatum}" onchange="window.mvUpdatePreview('${wSlotId}')">
+    </div>
+    <div class="form-field"><label class="form-label">In dienst / senioriteit <span class="muted" style="font-weight:400;">(bepaalt kolomvolgorde, oudste = links)</span></label>
+      <input type="date" class="input" id="mvInDienst" value="${huidig?.in_dienst || defDatum}">
     </div>
     <div id="mvPreview" class="form-info" style="font-size: 12px; margin-bottom: 12px;">Tik <b>Preview</b> om te zien wat er verschuift.</div>
     <div style="display: flex; gap: 8px;">
@@ -795,19 +978,43 @@ window.mvUpdatePreview = function(wSlotId) {
 };
 
 window.maakVastDoorvoeren = async function(wSlotId) {
-  const naarSlot = document.getElementById('mvSlot').value;
+  let naarSlot = document.getElementById('mvSlot').value;
   const datum = document.getElementById('mvDatum').value;
+  const inDienst = document.getElementById('mvInDienst').value || datum;
   if (!datum || !naarSlot) { alert('Kies stoel en datum.'); return; }
-  if (!VASTE_RAD_IDS.includes(naarSlot)) { alert('Ongeldige doel-stoel.'); return; }
-  if (!confirm(`Maak ${wSlotId} vast in ${naarSlot} per ${formatDatum(datum, 'kort')}?\n\nToewijzingen, vakantie-V, diensten, wensen en gebruikerskoppeling vanaf die datum verhuizen mee. Niet ongedaan te maken zonder handmatig terugdraaien.`)) return;
+
+  const nieuweStoel = (naarSlot === '__NIEUW__');
+  if (!nieuweStoel && !isVasteStoel(naarSlot)) { alert('Ongeldige doel-stoel.'); return; }
+
+  // Max 12 gelijktijdig actieve vaste stoelen (op de ingangsdatum).
+  if (nieuweStoel && vasteRadsOpDatum(datum).length >= 12) {
+    alert('Er zijn al 12 actieve stoelen op die datum — dat is het maximum. Hef eerst een stoel op (Vertrek).');
+    return;
+  }
+
+  const bevestiging = nieuweStoel
+    ? `Maak ${wSlotId} vast op een NIEUWE stoel per ${formatDatum(datum, 'kort')}?\n\nEr komt een kolom bij. Toewijzingen, vakantie-V, diensten, wensen en gebruikerskoppeling vanaf die datum verhuizen mee.`
+    : `Maak ${wSlotId} vast in ${naarSlot} per ${formatDatum(datum, 'kort')}?\n\nDe doelstoel toont vanaf die datum uitsluitend de indeling van ${wSlotId} (eventuele resten van de vorige bezetter worden gewist). Toewijzingen, vakantie-V, diensten, wensen en gebruikerskoppeling verhuizen mee. Niet ongedaan te maken zonder handmatig terugdraaien.`;
+  if (!confirm(bevestiging)) return;
 
   const btn = document.querySelector('#sheetBody .btn-primary');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
 
   try {
-    await migreerBezetting(wSlotId, naarSlot, datum);
+    if (nieuweStoel) {
+      // Vers, uniek stoel-id (nooit hergebruikt). Eerst het lege stoel-document
+      // met de vaste-stoel-markering aanmaken, daarna de persoon erop migreren.
+      naarSlot = 'VS' + Date.now().toString(36);
+      await setDoc(doc(db, 'radiologen', naarSlot), {
+        id: naarSlot, vaste_stoel: true, isSlot: false, type: 'radioloog',
+        actief: true, code: '', voornaam: '', achternaam: '', bezetting_historie: [],
+      }, { merge: true });
+    }
+    await migreerBezetting(wSlotId, naarSlot, datum, inDienst);
     closeSheet();
-    alert(`${wSlotId} → ${naarSlot} doorgevoerd per ${formatDatum(datum, 'kort')}.`);
+    alert(nieuweStoel
+      ? `${wSlotId} → nieuwe stoel doorgevoerd per ${formatDatum(datum, 'kort')}.`
+      : `${wSlotId} → ${naarSlot} doorgevoerd per ${formatDatum(datum, 'kort')}.`);
     renderGebView();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Doorvoeren'; }
@@ -815,9 +1022,91 @@ window.maakVastDoorvoeren = async function(wSlotId) {
   }
 };
 
+// ==== Vertrek: vaste stoel verdwijnt per datum =============================
+
+window.openVertrekSheet = function(slotId) {
+  const huidig = bezettingOpDatum(slotId, vandaagIso());
+  const defDatum = vandaagIso();
+  document.getElementById('sheetTitle').textContent = `Vertrek ${huidig?.code || slotId}`;
+  document.getElementById('sheetSub').textContent = 'De stoel verdwijnt vanaf de opgegeven datum';
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-info" style="margin-bottom: 12px; font-size: 12px;">
+      <b>${huidig?.code || ''}</b> · ${huidig?.achternaam || ''} verlaat de stoel. Vanaf de vertrekdatum verdwijnt de kolom uit het overzicht; de historie van vóór die datum blijft zichtbaar.
+    </div>
+    <div class="form-field"><label class="form-label">Vertrekdatum <span class="muted" style="font-weight:400;">(vanaf deze dag is de stoel weg)</span></label>
+      <input type="date" class="input" id="vtDatum" value="${defDatum}">
+    </div>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="window.vertrekDoorvoeren('${slotId}')">Doorvoeren</button>
+    </div>
+  `;
+  openSheet();
+};
+
+window.vertrekDoorvoeren = async function(slotId) {
+  const datum = document.getElementById('vtDatum').value;
+  if (!datum) { alert('Kies een vertrekdatum.'); return; }
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  if (!stoel) { alert('Stoel niet gevonden.'); return; }
+  if (!confirm(`Laat stoel ${slotId} vertrekken per ${formatDatum(datum, 'kort')}?\n\nDe kolom verdwijnt vanaf die datum. De historie ervóór blijft behouden.`)) return;
+
+  // De bezetter is actief t/m de dag vóór de vertrekdatum.
+  const dagVoor = plusDagen(datum, -1);
+  const hist = Array.isArray(stoel.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+  if (hist.length === 0) {
+    // Oud datamodel: maak een entry uit de top-level velden en sluit hem af.
+    hist.push({
+      voornaam: stoel.voornaam || '', achternaam: stoel.achternaam || '',
+      code: stoel.code || slotId,
+      vakantierecht: typeof stoel.vakantierecht === 'number' ? stoel.vakantierecht : 40,
+      parttime_factor: typeof stoel.parttime_factor === 'number' ? stoel.parttime_factor : 1,
+      in_dienst: stoel.in_dienst || null,
+      persoon_id: stoel.persoon_id || null,
+      van: null, tot: dagVoor,
+    });
+  } else {
+    const open = hist.find(e => !e.tot);
+    if (open) open.tot = dagVoor;
+  }
+
+  const btn = document.querySelector('#sheetBody .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
+  try {
+    await setDoc(doc(db, 'radiologen', slotId), { bezetting_historie: hist }, { merge: true });
+    closeSheet();
+    alert(`Stoel ${slotId} vertrekt per ${formatDatum(datum, 'kort')}.`);
+    renderGebView();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Doorvoeren'; }
+    alert('Opslaan mislukt: ' + (e.message || e));
+  }
+};
+
+window.vertrekIntrekken = async function(slotId) {
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  if (!stoel) { alert('Stoel niet gevonden.'); return; }
+  const hist = Array.isArray(stoel.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+  if (hist.length === 0) { alert('Geen bezetting om te herstellen.'); return; }
+  // Laatste (meest recente) entry zoeken.
+  let li = -1, bv = '';
+  hist.forEach((e, i) => { const v = e.van || '0000-00-00'; if (li === -1 || v >= bv) { bv = v; li = i; } });
+  if (li < 0 || !hist[li].tot) { alert('Deze stoel heeft geen vertrek om in te trekken.'); return; }
+  const e = hist[li];
+  if (!confirm(`Vertrek van ${e.code || slotId} (${e.achternaam || ''}) intrekken?\n\nDe stoel wordt weer doorlopend actief en de kolom komt terug.`)) return;
+  hist[li] = { ...e, tot: null };
+  try {
+    await setDoc(doc(db, 'radiologen', slotId), { bezetting_historie: hist }, { merge: true });
+    alert(`Vertrek van ${slotId} ingetrokken.`);
+    renderGebView();
+  } catch (err) {
+    alert('Herstellen mislukt: ' + (err.message || err));
+  }
+};
+
 // Doet de daadwerkelijke batch-migratie. Schrijft in <500-doc batches om
 // firestore-limieten te respecteren.
-async function migreerBezetting(vanSlot, naarSlot, datum) {
+async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
   const dagVoor = plusDagen(datum, -1);
 
   // 1. Bezetting van vanSlot ophalen
@@ -830,11 +1119,15 @@ async function migreerBezetting(vanSlot, naarSlot, datum) {
       code: vanStoel.code || vanSlot,
       vakantierecht: typeof vanStoel.vakantierecht === 'number' ? vanStoel.vakantierecht : 40,
       parttime_factor: typeof vanStoel.parttime_factor === 'number' ? vanStoel.parttime_factor : 1,
+      in_dienst: vanStoel.in_dienst || null,
+      persoon_id: vanStoel.persoon_id || null,
       van: null, tot: null,
     });
   }
   const persoon = vanHist.find(e => !e.tot) || vanHist[vanHist.length - 1];
   if (!persoon) throw new Error('Geen persoon gevonden in ' + vanSlot);
+  // Persoon_id loopt mee zodat de persoon over stoelen heen herleidbaar blijft.
+  const pid = persoon.persoon_id || vanStoel?.persoon_id || nieuwPersoonId();
 
   // 2. Bezetting van naarSlot
   const naarStoel = state.radiologen.find(r => r.id === naarSlot);
@@ -860,6 +1153,8 @@ async function migreerBezetting(vanSlot, naarSlot, datum) {
     code: persoon.code || vanSlot,
     vakantierecht: typeof persoon.vakantierecht === 'number' ? persoon.vakantierecht : 40,
     parttime_factor: typeof persoon.parttime_factor === 'number' ? persoon.parttime_factor : 1,
+    in_dienst: inDienst || persoon.in_dienst || null,
+    persoon_id: pid,
     van: datum, tot: null,
   });
 
@@ -872,33 +1167,56 @@ async function migreerBezetting(vanSlot, naarSlot, datum) {
     achternaam: persoon.achternaam || '',
     vakantierecht: persoon.vakantierecht ?? 40,
     parttime_factor: persoon.parttime_factor ?? 1,
+    in_dienst: inDienst || persoon.in_dienst || null,
+    persoon_id: pid,
     bezetting_historie: naarHistNieuw,
   }, { merge: true });
   batch1.set(doc(db, 'radiologen', vanSlot), {
     id: vanSlot,
     code: '', voornaam: '', achternaam: '',
     actief: false,
+    in_dienst: null,
+    persoon_id: null,
     isSlot: SLOTS.includes(vanSlot),
     bezetting_historie: vanHistNieuw,
   }, { merge: true });
   await batch1.commit();
 
-  // 4. Migreer indelingen vanaf datum: rename van → naar in toewijzingen, vakantie_v, dienst.
+  // 4. Migreer indelingen vanaf datum. "Schoon overnemen": de doelstoel toont
+  // vanaf de ingangsdatum uitsluitend de indeling van de nieuwe bezetter.
+  // - Had de waarnemer (vanSlot) op een dag een toewijzing → die verhuist naar
+  //   de doelstoel (overschrijft een eventuele rest van de vertrekker).
+  // - Had de waarnemer niets, maar de doelstoel wél (rest van de vertrekker) →
+  //   die rest wordt gewist. Zo blijven er geen mengvormen staan.
+  // Bij een nieuwe (lege) stoel is dit automatisch een no-op.
   const updates = [];
   Object.values(state.indelingMap).forEach(dag => {
     if (!dag?.datum || dag.datum < datum) return;
     const upd = { datum: dag.datum };
     let raak = false;
-    if (dag.toewijzingen && dag.toewijzingen[vanSlot]) {
+
+    const vanToew  = dag.toewijzingen && dag.toewijzingen[vanSlot];
+    const naarToew = dag.toewijzingen && (naarSlot in dag.toewijzingen);
+    if (vanToew) {
       upd[`toewijzingen.${naarSlot}`] = dag.toewijzingen[vanSlot];
       upd[`toewijzingen.${vanSlot}`] = deleteField();
       raak = true;
+    } else if (naarToew) {
+      upd[`toewijzingen.${naarSlot}`] = deleteField();
+      raak = true;
     }
-    if (dag.vakantie_v && (vanSlot in dag.vakantie_v)) {
+
+    const vanVk  = dag.vakantie_v && (vanSlot in dag.vakantie_v);
+    const naarVk = dag.vakantie_v && (naarSlot in dag.vakantie_v);
+    if (vanVk) {
       upd[`vakantie_v.${naarSlot}`] = dag.vakantie_v[vanSlot];
       upd[`vakantie_v.${vanSlot}`] = deleteField();
       raak = true;
+    } else if (naarVk) {
+      upd[`vakantie_v.${naarSlot}`] = deleteField();
+      raak = true;
     }
+
     if (dag.dienst) {
       ['dag','avond','nacht'].forEach(s => {
         if (dag.dienst[s] === vanSlot) {

@@ -7,7 +7,7 @@
 //  - Open wens die nu matcht met de geïmporteerde code → status 'verwerkt'
 //  - Verwerkte wens die nu gebroken wordt door de import → status terug naar 'open'
 import { doc, writeBatch, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { db } from './firebase-init.js';
+import { db, IS_TEST_DB } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode, vandaagIso, plusDagen, kolomNaarRadId } from './helpers.js';
 import { maakClientBackup } from './backup-client.js';
@@ -207,16 +207,26 @@ export async function actImportFile(input, renderGebView) {
     }
     if (headerRij < 0) throw new Error("Header-rij ('Dag' / 'Datum') niet gevonden in sheet.");
 
-    const kolNaarRadId = {};
-    for (let c = 2; c <= range.e.c; c++) {
-      const headerVal = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
-      if (!headerVal) continue;
-      const dynMap = Object.keys(kolomNaarRadId()).length > 0 ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
-      const radId = dynMap[headerVal];
-      if (radId) kolNaarRadId[c] = radId;
-    }
+    const waarschuwingen = [];
 
-    // Zoek Dienst/Bespr/Interv/Opm op naam in header (robuust bij wisselend aantal radkolommen)
+    // Verborgen kolom-mapping (code → stoel-id) zoals geldig bij export. Hiermee
+    // koppelt de import elke kolom op de juiste, stabiele stoel — ook na een
+    // wissel, los van wie er nu op die stoel zit. Ontbreekt deze sheet (vreemd/
+    // oud bestand), dan valt de import terug op de code-mapping.
+    const fileKolMap = {};
+    const mapSheet = wb.Sheets['_kolommen'];
+    if (mapSheet && mapSheet['!ref']) {
+      const mr = XLSX.utils.decode_range(mapSheet['!ref']);
+      for (let r = mr.s.r + 1; r <= mr.e.r; r++) {
+        const code  = _celStr(mapSheet[XLSX.utils.encode_cell({ c: 0, r })]);
+        const stoel = _celStr(mapSheet[XLSX.utils.encode_cell({ c: 1, r })]);
+        if (code && stoel) fileKolMap[code] = stoel;
+      }
+    }
+    const heeftFileMap = Object.keys(fileKolMap).length > 0;
+
+    // Zoek Dienst/Bespr/Interv/Opm eerst op naam — die markeren het einde van de
+    // radioloog-zone (kolommen C t/m vóór Dienst).
     let kolDienst = -1, kolBespr = -1, kolInterv = -1, kolOpm = -1;
     for (let c = 2; c <= range.e.c; c++) {
       const h = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
@@ -231,9 +241,35 @@ export async function actImportFile(input, renderGebView) {
     if (kolInterv < 0) kolInterv = XLSX.utils.decode_col(IMPORT_KOL_INTERV);
     if (kolOpm    < 0) kolOpm    = XLSX.utils.decode_col(IMPORT_KOL_OPM);
 
+    // Radioloog-kolommen: alleen de zone vóór de Dienst-kolom.
+    const radZoneEind = (kolDienst >= 2 ? kolDienst : range.e.c + 1) - 1;
+    const dynMap = Object.keys(kolomNaarRadId()).length > 0 ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
+    const kolNaarRadId = {};
+    const gevondenCodes = new Set();
+    for (let c = 2; c <= radZoneEind; c++) {
+      const headerVal = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
+      if (!headerVal) continue;
+      // Eerst stabiele stoel-id uit het bestand, anders code-fallback.
+      const radId = fileKolMap[headerVal] || dynMap[headerVal];
+      if (radId) {
+        kolNaarRadId[c] = radId;
+        gevondenCodes.add(headerVal);
+      } else {
+        waarschuwingen.push(`Kolom '${headerVal}' kon niet aan een stoel gekoppeld worden — die kolom is NIET geïmporteerd.`);
+      }
+    }
+    // Bij een app-bestand: meld kolommen die volgens de mapping verwacht werden
+    // maar ontbreken in het blad.
+    if (heeftFileMap) {
+      Object.keys(fileKolMap).forEach(code => {
+        if (!gevondenCodes.has(code)) {
+          waarschuwingen.push(`Verwachte kolom '${code}' (stoel ${fileKolMap[code]}) ontbreekt in het blad.`);
+        }
+      });
+    }
+
     const dagen = [];
     let celOpmsAantal = 0, dagOpmsAantal = 0, dienstAantal = 0, besprAantal = 0, intervAantal = 0;
-    const waarschuwingen = [];
 
     for (let r = headerRij + 1; r <= range.e.r; r++) {
       const datumCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
@@ -376,24 +412,28 @@ export async function actImportSchrijven(renderGebView) {
   state.importBezig = true;
   renderGebView();
   try {
-    // 0. Backup vóór schrijven — download JSON zodat altijd teruggedraaid kan worden
-    try {
-      const backupResultaat = await maakClientBackup('voor-import');
-      if (backupResultaat === null) {
-        // Gebruiker heeft wachtwoord-prompt geannuleerd — geen backup gemaakt
-        const doorgaan = confirm(
-          'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.\n\n' +
-          'Zonder backup kun je de import niet terugdraaien als er iets misgaat.\n\n' +
-          'Wil je toch doorgaan zonder backup?'
-        );
-        if (!doorgaan) {
-          state.importBezig = false;
-          renderGebView();
-          return;
+    // 0. Backup vóór schrijven — download JSON zodat altijd teruggedraaid kan worden.
+    //    In de testomgeving is een backup geblokkeerd; dan slaan we deze stap
+    //    over (testdata hoeft niet veiliggesteld te worden).
+    if (!IS_TEST_DB) {
+      try {
+        const backupResultaat = await maakClientBackup('voor-import');
+        if (backupResultaat === null) {
+          // Gebruiker heeft wachtwoord-prompt geannuleerd — geen backup gemaakt
+          const doorgaan = confirm(
+            'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.\n\n' +
+            'Zonder backup kun je de import niet terugdraaien als er iets misgaat.\n\n' +
+            'Wil je toch doorgaan zonder backup?'
+          );
+          if (!doorgaan) {
+            state.importBezig = false;
+            renderGebView();
+            return;
+          }
         }
+      } catch (backupErr) {
+        console.warn('Backup mislukt (import gaat wel door):', backupErr);
       }
-    } catch (backupErr) {
-      console.warn('Backup mislukt (import gaat wel door):', backupErr);
     }
 
     // 1. Indeling wegschrijven

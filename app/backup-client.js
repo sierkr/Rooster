@@ -10,7 +10,7 @@
 // LET OP: bij vergeten wachtwoord is de backup NIET te herstellen.
 
 import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { db } from './firebase-init.js';
+import { db, IS_TEST_DB } from './firebase-init.js';
 import { state } from './state.js';
 
 const BACKUP_COLLECTIES = [
@@ -36,7 +36,17 @@ function downloadBlob(inhoud, bestandsnaam) {
 // ---- Crypto helpers ---------------------------------------------------------
 
 function base64Encode(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+  // Bytes in vaste blokken verwerken i.p.v. in één keer spreaden: bij een grote
+  // backup (veel radiologen/indelingen/historie) overschrijdt
+  // String.fromCharCode(...bytes) anders de argumentenlimiet van de engine,
+  // wat zich uitte als "Maximum call stack size exceeded".
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000; // 32768 bytes per stuk, ruim onder elke argumentenlimiet
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 function base64Decode(str) {
   return Uint8Array.from(atob(str), c => c.charCodeAt(0));
@@ -115,6 +125,12 @@ function vraagWachtwoord(titel, bevestig = false) {
  * De beheerder kiest zelf een wachtwoord.
  */
 export async function maakClientBackup(reden = 'handmatig') {
+  // In de testomgeving kan geen backup gemaakt worden: een backup van testdata
+  // zou per ongeluk in de live-agenda teruggezet kunnen worden. Door het maken
+  // bij de bron te blokkeren, kan zo'n testbackup simpelweg niet bestaan.
+  if (IS_TEST_DB) {
+    return { geblokkeerd: true, reden: 'test' };
+  }
   // Wachtwoord opvragen (bij automatische voor-import backup ook)
   const wachtwoord = vraagWachtwoord(
     `Kies een wachtwoord voor deze backup (reden: ${reden}).`,

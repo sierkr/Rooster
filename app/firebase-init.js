@@ -11,7 +11,7 @@ export const auth = getAuth(firebaseApp);
 
 // ----------------------------------------------------------------------------
 // Database-selectie: productie gebruikt de (default) database; de testomgeving
-// zet window.FIRESTORE_DB = 'test' in config.test.js, waardoor de app een
+// zet window.FIRESTORE_DB = 'test' op basis van de URL (zie config.js), waardoor
 // aparte named Firestore-database binnen hetzelfde project gebruikt. De live
 // data blijft daardoor volledig ongemoeid tijdens het testen.
 // ----------------------------------------------------------------------------

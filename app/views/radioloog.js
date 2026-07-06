@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import {
   vasteRads, radiologenMap, vandaagIso, isoWeekVan, datumsVanWeek,
   weekRange, formatDatum, fclass, functieNaam, toewijzingVoor, magOpmerkingen,
-  magBeheerLezen, magWijzigen, esc,
+  magBeheerLezen, magWijzigen, esc, loopbaanVoorPersoon, persoonFallbackKey,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { auth, db, reauthenticateWithCredential, EmailAuthProvider } from '../firebase-init.js';
@@ -85,6 +85,32 @@ export function renderRadView() {
       </div>
     `;
   });
+
+  // Loopbaan: periodes van deze persoon over alle stoelen heen (read-only,
+  // alleen voor beheer/lezers). Match op persoon_id, fallback op naam+code.
+  if (magBeheerLezen()) {
+    const fbKey = persoonFallbackKey(rad.achternaam, rad.code);
+    const loopbaan = loopbaanVoorPersoon(rad.persoon_id, fbKey);
+    if (loopbaan.length > 0) {
+      const rows = loopbaan.map(p => {
+        const van = p.van ? formatDatum(p.van, 'kort') : 'begin';
+        const tot = p.tot ? formatDatum(p.tot, 'kort') : 'heden';
+        return `<div style="display: grid; grid-template-columns: 64px 1fr; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+            <div style="font-weight: 500;">${esc(p.stoelId)}</div>
+            <div class="muted" style="font-size: 12px;">${esc(p.code)} · ${van} – ${tot}</div>
+          </div>`;
+      }).join('');
+      html += `
+        <details class="card" style="margin-top: 4px;">
+          <summary style="cursor: pointer; font-weight: 500; font-size: 14px;">Loopbaan${rad.persoon_id ? '' : ' <span class="muted" style="font-weight: 400; font-size: 11px;">(o.b.v. naam — nog geen persoon-id)</span>'}</summary>
+          <div style="margin-top: 8px;">
+            <p class="muted" style="font-size: 11px; margin: 0 0 6px;">Periodes van deze persoon over alle stoelen heen.</p>
+            ${rows}
+          </div>
+        </details>
+      `;
+    }
+  }
 
   container.innerHTML = html;
 }

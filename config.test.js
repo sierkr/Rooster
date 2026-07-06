@@ -27,4 +27,4 @@ window.FIRESTORE_DB = "test";
 
 // Versie van de app - wordt gebruikt voor cache-busting. Het -TEST label maakt
 // in de UI (versielabel) direct zichtbaar dat dit de testomgeving is.
-window.APP_VERSIE = "3.27.97-TEST";
+window.APP_VERSIE = "3.27.100-TEST";

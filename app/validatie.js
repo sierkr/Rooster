@@ -1,6 +1,6 @@
 // Validatie-engine: past actieve validatieregels toe op een week.
 import { state, VASTE_RAD_IDS, SLOTS, DAGEN_NL } from './state.js';
-import { datumsVanWeek, hoofdLetterCode, toewijzingVoor } from './helpers.js';
+import { datumsVanWeek, hoofdLetterCode, toewijzingVoor, alleVasteStoelIds } from './helpers.js';
 
 /**
  * Valideer alle dagen in een week.
@@ -20,7 +20,7 @@ export function valideerWeek(week) {
     const isWeekend = dagNl === 'za' || dagNl === 'zo';
 
     // Voor elke radioloog: check zijn/haar codes
-    const alleRads = [...VASTE_RAD_IDS, ...SLOTS];
+    const alleRads = [...alleVasteStoelIds(), ...SLOTS];
     alleRads.forEach(radId => {
       const codes = toewijzingVoor(datum, radId);
       if (!codes.length) return;
@@ -66,7 +66,7 @@ export function valideerWeek(week) {
       const verplichteFuncties = (state.functies || []).filter(f => f.verplicht === true);
       verplichteFuncties.forEach(f => {
         const code = (f.code || f.id).toUpperCase();
-        const alleRadsCheck = [...VASTE_RAD_IDS, ...SLOTS];
+        const alleRadsCheck = [...alleVasteStoelIds(), ...SLOTS];
         const aanwezig = alleRadsCheck.some(radId => {
           const codes = toewijzingVoor(datum, radId);
           return codes.some(c => hoofdLetterCode(c) === code);
@@ -85,7 +85,7 @@ export function valideerWeek(week) {
     actieveRegels.forEach(regel => {
       if (regel.type === 'bezetting' && regel.dag === dagNl && !isWeekend) {
         let aantalAanwezig = 0;
-        VASTE_RAD_IDS.forEach(radId => {
+        alleVasteStoelIds().forEach(radId => {
           const codes = toewijzingVoor(datum, radId);
           if (codes.some(c => hoofdLetterCode(c) === regel.code || c === regel.code)) {
             aantalAanwezig += 1;
@@ -102,7 +102,7 @@ export function valideerWeek(week) {
 
       if (regel.type === 'uniciteit') {
         const counts = {};
-        VASTE_RAD_IDS.forEach(radId => {
+        alleVasteStoelIds().forEach(radId => {
           const codes = toewijzingVoor(datum, radId);
           codes.forEach(c => {
             const h = hoofdLetterCode(c);

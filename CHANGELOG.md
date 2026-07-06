@@ -1,3 +1,268 @@
+## v3.27.113 — Backup: "Maximum call stack size exceeded" bij grote database opgelost
+
+### Waarom
+"Nu backup maken" gaf de foutmelding "Backup mislukt: Maximum call stack size
+exceeded" en downloadde niets. Oorzaak: `base64Encode()` in
+`app/backup-client.js` zette de versleutelde backup in één keer om via
+`String.fromCharCode(...bytes)`. Bij een kleine database werkt dat, maar
+JavaScript-engines hebben een harde limiet op het aantal argumenten in één
+functieaanroep. Na lange tijd gebruik (meer radiologen, indelingen en
+historie) is de backup groot genoeg om die limiet te overschrijden, waardoor
+elke backup faalde — en dus ook de automatische backup vóór een Excel-import.
+
+### Fix
+- **Backup-client.js**: `base64Encode()` verwerkt de data nu in blokken van
+  32.768 bytes in plaats van in één keer, ongeacht hoe groot de database is.
+  Functioneel identiek resultaat, geen limiet meer op de databasegrootte.
+
+### Upgrade
+1. Vervang `app/backup-client.js`, `config.js` en `sw.js`.
+2. Hard refresh (versie is nu 3.27.113).
+
+## v3.27.112 — Excel-export: volledig jaar, senioriteitsvolgorde en herleidbare kolomkoppen
+
+### Waarom
+De Excel-export toonde bij een nieuw kalenderjaar alleen de al ingevulde dagen
+i.p.v. het hele jaar. Daarnaast gebruikte de export een vaste, hardgecodeerde
+kolomvolgorde (stoel-ID) i.p.v. de senioriteitsvolgorde die de rest van de app
+al gebruikt, waardoor een nieuwe radioloog op een seniore stoel niet naar
+rechts verschoof zoals in de app. Tot slot bleef bij een stoelwissel of een
+waarnemer die "→ Vast" ging, de kolomkop het hele jaar op één naam staan, ook
+voor de dagen van de vorige bezetter.
+
+### Fixes
+- **Export.js**: alle kalenderdagen van het gekozen jaar worden nu geëxporteerd,
+  ook dagen zonder Firestore-document (leeg = nog geen indeling).
+- **Export.js**: kolomvolgorde is nu gebaseerd op dezelfde senioriteits-logica
+  (`in_dienst`-datum van de huidige bezetter) als Overzicht/Afdeling, i.p.v. een
+  vaste stoel-ID-volgorde. Waarnemer-slots (W5..W1) blijven na de vaste stoelen
+  staan, in vaste volgorde.
+- **Export.js**: kolomkop is nu datum-bewust — bij een stoel/slot met meerdere
+  bezetters in het geëxporteerde jaar (wissel, of waarnemer → vaste stoel)
+  wordt een Excel-notitie op de kolomkop gezet met de volledige tijdlijn
+  (wie zat wanneer op deze stoel), zodat altijd herleidbaar blijft wie je op
+  welke dag hebt ingedeeld.
+- **Gebruikers.js**: het invullen van code/achternaam van een waarnemer via de
+  simpele Waarnemers-tabel wordt nu ook doorgeschreven naar de open
+  bezetting_historie-entry van die stoel. Voorheen kon dit stilzwijgend genegeerd
+  worden door de weergave zodra een stoel ooit gewisseld of gemigreerd was,
+  omdat de weergave altijd voorrang geeft aan de historie-entry boven het
+  top-level veld.
+
+### Upgrade
+1. Vervang `app/export.js`, `app/views/gebruikers.js` en `config.js`.
+2. Hard refresh (versie is nu 3.27.112).
+
+## v3.27.111 — Backups geblokkeerd in de testomgeving
+
+### Waarom
+Een backup van testdata zou per ongeluk in de live-agenda teruggezet kunnen worden. Door het maken van een backup in de testomgeving onmogelijk te maken, kan zo'n testbackup simpelweg niet bestaan — het gevaar is bij de bron weg.
+
+### Wijzigingen
+- **backup-client.js**: `maakClientBackup` stopt direct in de testomgeving (geen download, geen schrijf-actie).
+- **Gebruikers-tab**: klikken op "Nu backup maken" in test toont de melding *"In de testomgeving kan geen backup gemaakt worden."* De backup-kaart toont in test een duidelijke hint.
+- **Excel-import in test**: de automatische backup-vóór-import wordt overgeslagen (geen nag-prompt; testdata hoeft niet veiliggesteld te worden).
+- **Backup terugzetten blijft in test wél mogelijk**, zodat je een in de live-agenda gemaakte backup hier kunt herstellen om met actuele data te oefenen (de nuttige richting live → test).
+
+Versie 3.27.110 → 3.27.111 (config-basis, sw.js).
+
+---
+
+## v3.27.110 — Beheerdershandleiding bijgewerkt
+
+### Wijziging
+- Help-bestand `help/beheerder.html` geactualiseerd: datum/versie (juni 2026 · 3.27.110) en de uitgebreide beheerders-opties.
+- Nieuw/bijgewerkt beschreven: flexibele stoelen (toevoegen/opheffen, max 12, anciënniteit-volgorde), "Wissel"/→Vast met schoon overnemen, "Vertrek" + intrekken/herstellen ("Vertrokken stoelen"), persoon-id toekennen, loopbaan-weergave.
+- Export-sectie: regel-gedreven normen (geen vaste 5/4 meer), werkvloer = Aantal, indicator-monitor, celkleur uit functiekleur incl. live recolor, verborgen bladen `_kolommen` en `_regels`.
+- Import-sectie: koppeling via stabiel stoel-id met code-fallback, waarschuwingen i.p.v. stil overslaan.
+- Korte notitie over de testomgeving (oranje balk, eigen database).
+
+Alleen documentatie + versiebump. Versie 3.27.109 → 3.27.110 (config-basis, sw.js).
+
+---
+
+## v3.27.109 — Werkvloer-monitor terug, kleur-recolor & vakantie-waarschuwing
+
+### Wijzigingen
+- **Per-dag-monitor terug (Optie B)**: indicator-kolommen tonen weer álle werkvloer-functies (≥1 op werkdagen), niet alleen de verplichte. Zo zie je per dag weer welke functies niet bezet zijn.
+- **Datum/Aantal-rood blijft zuiver**: alleen de strikte app-criteria (verplichte functies + bezetting-regels) laten de datum/Aantal rood worden. Werkvloer-only functies kleuren alleen hun eigen indicator-kolom rood als ze ontbreken — een normale dag zonder bv. Mammo maakt niet de hele datum rood.
+- **Kleur-recolor in Excel hersteld**: de conditionele kleurregel herkent nu alle codevormen (exacte code, eerste letter, punt-prefix zoals `.WB`, én cijfer-prefix zoals `3W`/`5B`) en is hoofdletterongevoelig. Wijzig je een cel in Excel, dan krijgt die meteen de juiste functiekleur.
+- **Waarschuwing bij iedereen-vakantie**: doordat de werkvloer-indicatoren weer aanstaan, lichten op een dag waarop iedereen vrij is alle werkvloer-letters rood op (en de datum als er strikte criteria gelden).
+
+Versie 3.27.108 → 3.27.109 (config-basis, sw.js).
+
+---
+
+## v3.27.108 — Export volgt de app exact (regel-gedreven formules)
+
+### Probleem
+De Excel-export bakte vaste aannames in (norm 5/4, vaste Aantal-drempels, indicator-set, V/K-kleur). Na het wijzigen van regels, functies of kleuren in de app klopte de Excel niet meer.
+
+### Oplossing — alles op exporttijd uit de app afgeleid
+- **Aantal = werkvloerbezetting**: telt nu de codes met de werkvloer-vlag uit `state.functies` (i.p.v. de indicator-set).
+- **Normen uit de bezetting-regels**: de rode datum-markering en de Aantal-kleur volgen nu de actieve `bezetting`-regels (per dag/code/aantal) gecombineerd met de verplichte functies. Geen vaste 5/4 meer.
+- **Indicatoren tonen een tekort**: een indicator-kolom toont de code zolang de bezetting op die weekdag onder de vereiste (regel-)norm zit — niet alleen bij volledig ontbreken. Per weekdag wordt de vereiste op de spot in de formule gezet.
+- **Celkleuren (incl. V/K) volledig uit de functiekleur** van de app; de vaste lichtgeel-markering voor V/K is vervallen. Fallback-tabel alleen nog voor codes zonder ingestelde kleur.
+- **Verborgen `_regels`-blad**: legt de gebruikte functies (kleur/werkvloer/verplicht) en normen vast, puur ter controle.
+- **Vangnet**: export stopt met een melding als de functies nog niet geladen zijn.
+
+Layout (kolommen, kleuren-aanpak, weekendarcering, bevroren rij/kolommen, notities, `_kolommen`-blad) blijft ongewijzigd. `fullCalcOnLoad` blijft aan zodat Excel bij openen herberekent.
+
+Versie 3.27.107 → 3.27.108 (config-basis, sw.js).
+
+---
+
+## v3.27.107 — Persoon-id toekenning aangescherpt
+
+### Probleem
+De eenmalige toekenning telde te ruim: lege W-stoelen (waarvan de 'code' standaard de slotnaam is) en restdocumenten werden meegeteld (bv. 17 i.p.v. 10).
+
+### Wijziging
+- Toekenning gebeurt nu alleen voor bezetters met een **echte achternaam**. Lege slots en kale restdocumenten worden overgeslagen.
+- `opslaanInvallers` kent alleen een persoon-id toe als er een achternaam is ingevuld (niet bij een kale slotnaam).
+- Tekst en telling spreken nu over "bezetters" i.p.v. "stoelen".
+
+Versie 3.27.106 → 3.27.107 (config-basis, sw.js).
+
+---
+
+## v3.27.106 — Schoon overnemen bij vervang-wissel
+
+### Wijziging
+Bij "→ Vast" op een **bestaande** stoel toont de doelstoel vanaf de ingangsdatum nog uitsluitend de indeling van de nieuwe bezetter:
+- Dagen waarop de waarnemer een toewijzing had → die verhuist mee (overschrijft een rest van de vertrekker).
+- Dagen waarop de waarnemer niets had maar de doelstoel nog een toewijzing van de vertrekker → die rest wordt **gewist**. Geen mengvormen meer.
+- Geldt ook voor vakantie-V. Diensten worden zoals voorheen hernoemd (vanSlot → naarSlot).
+- Bij de **nieuwe-stoel**-route is dit automatisch een no-op (de stoel is leeg).
+
+Bevestigingstekst bij vervangen vermeldt nu expliciet dat resten van de vorige bezetter worden gewist.
+
+Versie 3.27.105 → 3.27.106 (config-basis, sw.js).
+
+---
+
+## v3.27.105 — Export/import op stabiel stoel-id + waarschuwingen
+
+### Probleem dat dit oplost
+De koppeling Excel↔stoel liep via de huidige code (initialen). Na een wissel mapte een oude code (bv. 'BL') nergens meer op, waardoor die kolom bij import **stil werd overgeslagen** (dataverlies).
+
+### Oplossing
+- **Export** schrijft een verborgen blad **`_kolommen`** met de mapping code → stoel-id, zoals geldig op het moment van export. Het hoofdblad blijft ongewijzigd leesbaar (codes als kop).
+- **Import** koppelt elke kolom bij voorkeur via die stabiele stoel-id uit het bestand; **valt terug op de code** (huidige + vaste mapping) voor vreemde/oude bestanden. Zo komt elke kolom op de juiste stoel terecht, ook na een wissel.
+- **Waarschuwingen** i.p.v. stil overslaan: een kolom die niet gekoppeld kan worden, wordt expliciet gemeld ("kolom 'X' is NIET geïmporteerd"). Bij een app-bestand wordt ook een ontbrekende verwachte kolom gemeld.
+- Radioloog-kolommen worden nu strikt uit de zone vóór de Dienst-kolom gelezen, zodat Aantal/indicator-kolommen geen valse waarschuwingen geven.
+- Versie 3.27.104 → 3.27.105 (config-basis, sw.js).
+
+### Compatibiliteit
+Code-fallback blijft behouden: oudere Excel-bestanden zonder `_kolommen`-blad importeren zoals voorheen, nu mét waarschuwing bij niet-herkende kolommen.
+
+---
+
+## v3.27.104 — Persoon-id (Niveau 1) + loopbaan-weergave
+
+### Doel
+Een persoon over stoelen heen herleidbaar maken (waarnemer → vaste stoel, of stoelwissel), onafhankelijk van code-hergebruik.
+
+### Model (Niveau 1 — bewust gekozen, gedocumenteerd)
+- Nieuw veld **`persoon_id`** op elke `bezetting_historie`-entry (en top-level op stoelen zonder historie, zoals W-stoelen).
+- **Niveau 1 = GEEN aparte `personen`-collectie.** Stamgegevens (naam/code) blijven gedenormaliseerd op de entries. `persoon_id` groepeert ze tot één persoon. Later optioneel uitbreidbaar naar Niveau 2 (register) zonder dataverlies.
+- Een `persoon_id` wordt **nooit hergebruikt**; codes (initialen) mogen wel terugkomen.
+- **Geen terugwerkende migratie**: de situatie is stabiel (8 stoelen/8 radiologen, 2 waarnemers). Persoon-id wordt "vanaf nu" toegekend.
+
+### Wijzigingen
+- **helpers.js**: `nieuwPersoonId()`, `persoonFallbackKey()`, `loopbaanVoorPersoon()` (verzamelt periodes per persoon over alle stoelen).
+- **Persoon_id loopt mee** bij Wissel (nieuwe identiteit → vers id), bij →Vast/stoelwissel/nieuwe stoel (bestaand id verhuist mee via `migreerBezetting`), en bij waarnemer-opslag (top-level id).
+- **Knop "Persoon-id's toekennen"** (Gebruikers-tab, onder vaste radiologen): eenmalige, idempotente toekenning aan de huidige bezetters.
+- **Loopbaan-weergave** geïntegreerd in de Radioloog-tab (read-only, alleen beheer): periodes per persoon over alle stoelen (stoel · code · van–tot). Werkt met fallback op naam+code zolang persoon-id's nog niet zijn toegekend.
+- Versie 3.27.103 → 3.27.104 (config-basis, sw.js).
+
+### Indeling blijft per stoel
+De dagindeling blijft per stoel-id opgeslagen. Persoon-id is een koppeling (persoon → stoel+periode → indeling van die stoel), geen nieuwe opslag van indeling.
+
+---
+
+## v3.27.103 — Vertrek herstellen / corrigeren
+
+### Wijzigingen
+- **Gepland vertrek (vertrekdatum nog niet gepasseerd)**: de stoel blijft zichtbaar met de melding "vertrekt per <datum>"; de Vertrek-knop wordt een **Intrekken**-knop waarmee je het geplande vertrek terugdraait.
+- **Vertrokken stoel (datum al gepasseerd)**: verschijnt in een nieuwe sectie **"Vertrokken stoelen"** met een **Herstellen**-knop; dat trekt het vertrek in en de kolom komt terug.
+- Intrekken/Herstellen zet de laatste bezetting-entry weer op lopend (`tot = null`); de bezetter is dan weer doorlopend actief.
+- **opslaanParttime** robuuster: bij een gepland vertrek (geen open entry) wordt de in-dienst datum op de laatste entry bijgewerkt i.p.v. een dubbele open entry aan te maken.
+- Versie 3.27.102 → 3.27.103 (config-basis, sw.js).
+
+---
+
+## v3.27.102 — Flexibele vaste stoelen (toevoegen/opheffen, datum-correct)
+
+### Wijzigingen
+- **Aantal vaste stoelen is niet langer vast op 8.** Stoelen ontstaan en verdwijnen vanuit acties op personen:
+  - **Nieuwe stoel**: in "→ Vast" kun je nu kiezen tussen een **bestaande stoel** (vervangen) of een **nieuwe stoel** (kolom erbij). Een nieuwe stoel krijgt een vers, uniek intern id (nooit hergebruikt).
+  - **Vertrek**: per vaste radioloog een knop **Vertrek** met een vertrekdatum. Vanaf die datum verdwijnt de kolom; de historie ervóór blijft zichtbaar.
+- **Maximum 12** gelijktijdig actieve vaste stoelen (gecontroleerd bij toevoegen).
+- **helpers.js**: `vasteRadsOpDatum` toont per datum alleen stoelen met een actieve bezetter (leeg = geen kolom); nieuwe helpers `alleVasteStoelIds()` en `isVasteStoel()`. Het kolom-aantal volgt nu per week uit de bezetting (8 nu, meer/minder na mutaties).
+- **activiteit.js, validatie.js, main.js**: gebruiken de dynamische stoelenset i.p.v. de vaste lijst, zodat nieuwe stoelen overal meetellen.
+- Versie 3.27.101 → 3.27.102 (config-basis, sw.js).
+
+### Model
+- Een extra stoel = een `radiologen`-document met `vaste_stoel: true`. De oorspronkelijke 8 blijven ongewijzigd (geen migratie). Codes mogen later terugkomen; interne stoel-id's worden nooit hergebruikt.
+- Geen rules-wijziging nodig.
+
+---
+
+## v3.27.101 — Veiliger deployen: automatische omgeving-detectie + fail-safe
+
+### Wijzigingen
+- **config.js**: één config voor productie én test. De omgeving wordt automatisch uit de URL bepaald (`/Rooster/` = productie, `/Rooster-test/` = test). Geen handmatige config-omzetting meer nodig bij het uploaden — dezelfde bestanden gaan naar beide repos.
+- **config.test.js**: verwijderd (overbodig geworden).
+- **main.js**: fail-safe — bij een **onbekende** URL blokkeert de app zichzelf met een rood scherm, zodat er nooit per ongeluk naar de verkeerde database wordt geschreven. In **test** verschijnt een opvallende oranje "TESTOMGEVING"-balk bovenaan.
+- **TESTOMGEVING.md**: bijgewerkt naar de nieuwe methode (zelfde zip naar beide repos).
+- Versie 3.27.100 → 3.27.101 (config.js basis, sw.js).
+
+### Waarom
+Voorheen moest je bij elke upload `config.js` handmatig omzetten naar de test-inhoud; dat vergeten schreef stilletjes naar productie. De URL-detectie haalt die foutgevoelige stap volledig weg.
+
+---
+
+## v3.27.100 — UX: directe kolomvolgorde + dirty-state Opslaan
+
+### Wijzigingen
+- **Gebruikers-tab**: het regeltje “vast sinds …” onder de naam is verwijderd; geen onderscheid meer tussen de maten in de lijst.
+- **helpers.js** (`vasteRadsOpDatum`): de “alles-of-niets”-fallback is vervangen door een **per-stoel** placeholder. Een stoel zonder in-dienst datum houdt zijn oorspronkelijke vaste positie; stoelen met een datum sorteren daar tussendoor. De kolomvolgorde klopt nu **altijd direct** — ook meteen na “Doorvoeren”, zonder dat eerst op Opslaan geklikt hoeft te worden.
+- **Gebruikers-tab**: beide Opslaan-knoppen (vaste radiologen + waarnemers) starten **grijs/uitgeschakeld** en worden pas **actief** zodra je een veld wijzigt (dirty-state). Na opslaan (re-render) staan ze weer grijs.
+- Versie 3.27.99 → 3.27.100 (config.js, sw.js).
+
+---
+
+## v3.27.99 — Historisch correcte kolomvolgorde (senioriteit per bezetter)
+
+### Wijzigingen
+- **helpers.js** (`bezettingOpDatum`): een afgesloten bezetting-entry gebruikt nu uitsluitend zijn **eigen** `in_dienst` (geen terugval meer op de stoel-datum). Daardoor klopt de kolomvolgorde ook als je terugbladert: oude weken sorteren op de senioriteit van wie er tóén zat, nieuwe weken op de huidige bezetter.
+- **Wissel-sheet** (`opslaanWissel`): nieuw veld "In dienst / senioriteit" voor de nieuwe persoon; wordt op diens bezetting-entry vastgelegd.
+- **Maak-vast-sheet** (`maakVastDoorvoeren` / `migreerBezetting`): nieuw veld "In dienst / senioriteit", los van de ingangsdatum. De nieuwe (juniore) vervanger krijgt zo zijn eigen senioriteit-datum mee i.p.v. de stoelpositie van de voorganger te erven.
+- Versie 3.27.98 → 3.27.99 (config.js, sw.js).
+
+### Model (verduidelijking)
+- `van`/`tot` op een bezetting-entry = wie er op welke datum op de stoel zit (historie).
+- `in_dienst` op de bezetting-entry = senioriteit van die persoon; bepaalt de kolomvolgorde (oudste = links).
+- Beide staan los van elkaar: senioriteit ≠ ingangsdatum op de stoel.
+
+---
+
+## v3.27.98 — Kolomvolgorde op anciënniteit (in-dienst datum)
+
+### Wijzigingen
+- **Gebruikers-tab**: nieuw datumveld **In dienst** per vaste radioloog, links van de Parttime-kolom. Voorgevuld met een placeholder-datum die de huidige vaste volgorde behoudt (oudste = links); aan te passen naar de echte anciënniteitsdata. Opslaan schrijft de datum naar de open `bezetting_historie`-entry van de stoel.
+- **helpers.js** (`vasteRadsOpDatum`): de vaste radiologen worden nu gesorteerd op de in-dienst datum van de bezetter op de getoonde datum (oudste = links). Fallback: zolang niet álle stoelen een datum hebben, blijft de oorspronkelijke vaste volgorde behouden. Werkt door in Overzicht, Afdeling, Dienst, Vakantie, Radioloog en Jaaroverzicht.
+- **helpers.js** (`bezettingOpDatum`): geeft `in_dienst` mee (uit de entry, met top-level fallback).
+- **Activiteit-tab**: kolomvolgorde van het vaste deel volgt nu dezelfde anciënniteit-sortering (gesorteerd op periode-einde); waarnemers blijven rechts.
+- **“Maak vast” / stoelwissel**: `in_dienst` verhuist mee met de persoon, zodat een nieuwe (juniore) vervanger automatisch rechts in het overzicht komt.
+- Versie 3.27.97 → 3.27.98 (config.js, sw.js).
+
+### Datamodel
+- Nieuw veld `in_dienst` (`YYYY-MM-DD`) op de `bezetting_historie`-entry (per persoon), met top-level spiegel op het stoel-record als fallback. Geen rules-wijziging nodig.
+
+---
+
 ## v3.27.97 — Testomgeving: named Firestore-database + guard
 
 ### Wijzigingen

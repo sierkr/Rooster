@@ -21,9 +21,12 @@
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
-import { state, HOOFD_FUNCTIES } from './state.js';
+import { state, HOOFD_FUNCTIES, VASTE_RAD_IDS, SLOTS } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
-import { isHoofd, functieFlags, kolomNaarRadId, hoofdLetterCode } from './helpers.js';
+import {
+  isHoofd, functieFlags, hoofdLetterCode, plusDagen, vandaagIso, huidigKalenderJaar,
+  bezettingOpDatum, bezettingenInRange, alleVasteStoelIds,
+} from './helpers.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -75,6 +78,28 @@ function aantalFormule(rij, letters, eindKol) {
 function ontbrekendFormule(letter, rij, eindKol) {
   const range = `C${rij}:${eindKol}${rij}`;
   return `=IF(${telLetterFormule(letter, range)}=0,"${letter}","")`;
+}
+
+// Bouwt een Excel-uitdrukking die voor de datum in cel B{rij} het VEREISTE aantal
+// van een code teruggeeft, op basis van de regels (per weekdag). reqPerDag is een
+// array met index 1..7 (ma..zo). Dagen zonder eis → 0. Zo volgt de norm exact de
+// in de app ingestelde bezetting-regels (en verplicht-vlaggen).
+function vereistExpr(reqPerDag, bcel) {
+  let expr = '0';
+  for (let d = 7; d >= 1; d--) {
+    const v = reqPerDag[d] || 0;
+    if (v > 0) expr = `IF(WEEKDAY(${bcel},2)=${d},${v},${expr})`;
+  }
+  return expr;
+}
+
+// Indicator-formule: toon de code zolang er op die dag een TEKORT is t.o.v. de
+// vereiste (regel-gedreven) bezetting. Leeg als de eis gehaald wordt of er geen
+// eis geldt voor die weekdag.
+function indicatorFormule(code, reqPerDag, rij, eindKol) {
+  const range = `C${rij}:${eindKol}${rij}`;
+  const req = vereistExpr(reqPerDag, `B${rij}`);
+  return `=IF(${telLetterFormule(code, range)}<${req},"${code}","")`;
 }
 
 // Converteert 1-based kolomnummer naar Excel-letter (bijv. 20 → 'T')
@@ -350,27 +375,85 @@ export async function actExportJaar(jaar, naamParam) {
       where('datum', '<=', `${jaar}-12-31`)
     );
     const snap = await getDocs(q);
-    const dagen = snap.docs
-      .map(d => d.data())
-      .sort((a, b) => a.datum.localeCompare(b.datum));
+    const dagenMap = new Map();
+    snap.docs.forEach(d => { const data = d.data(); dagenMap.set(data.datum, data); });
 
-    if (!dagen.length) {
-      alert(`Geen indeling-data gevonden voor ${jaar}.`);
-      return;
+    // Alle kalenderdagen van het jaar opbouwen — ook dagen zonder Firestore-
+    // document (nieuw jaar, nog niets ingevuld) krijgen een lege placeholder-rij
+    // zodat het hele jaar in de export staat, niet alleen de ingevulde dagen.
+    const dagen = [];
+    for (let d = `${jaar}-01-01`; d <= `${jaar}-12-31`; d = plusDagen(d, 1)) {
+      dagen.push(dagenMap.get(d) || { datum: d });
     }
 
     const kleurenMap = bouwKleurenMap();
-    const VASTE_VOLGORDE = ['L','P','V','F','K','H','S','J','W5','W4','W3','W2','W1'];
-    const dynKolomMap = Object.keys(kolomNaarRadId()).length > 0
-      ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
-    const radKolommen = Object.keys(dynKolomMap).sort((a, b) => {
-      const ia = VASTE_VOLGORDE.indexOf(dynKolomMap[a]);
-      const ib = VASTE_VOLGORDE.indexOf(dynKolomMap[b]);
-      if (ia >= 0 && ib >= 0) return ia - ib;
-      if (ia >= 0) return -1;
-      if (ib >= 0) return 1;
-      return a.localeCompare(b);
+
+    // ---- Kolommen (vaste stoelen + waarnemers), datum-bewust op senioriteit -
+    // Kolomvolgorde en kolomkop identiek aan hoe de app dit toont (Overzicht/
+    // Afdeling): gesorteerd op de in_dienst-datum van de HUIDIGE bezetter, met
+    // de waarnemer-slots (W5..W1) vast na de vaste stoelen. Een stoel/slot
+    // krijgt een kolom zodra hij in dit jaar minstens één bezetter heeft gehad
+    // — ook als die inmiddels via "→ Vast" is doorgeschoven.
+    const jaarStart = `${jaar}-01-01`;
+    const jaarEind  = `${jaar}-12-31`;
+    const REFDATUM  = (String(jaar) === String(huidigKalenderJaar())) ? vandaagIso() : jaarEind;
+    const stateGeladen = (state.radiologen || []).length > 0;
+
+    let kolomEntries;
+    if (stateGeladen) {
+      const kandidaten = [...alleVasteStoelIds(), ...SLOTS];
+      kolomEntries = kandidaten
+        .map(id => {
+          const bezetters = bezettingenInRange(id, jaarStart, jaarEind);
+          if (bezetters.length === 0) return null; // niet bezet dit jaar → geen kolom
+          const huidig  = bezettingOpDatum(id, REFDATUM);
+          const laatste = bezetters[bezetters.length - 1];
+          const bez     = huidig || laatste;
+          const isSlot  = SLOTS.includes(id);
+          const idx     = VASTE_RAD_IDS.indexOf(id);
+          const sortKey = bez?.in_dienst || (idx < 0 ? '9999-01-01' : `${2000 + idx}-01-01`);
+          let notitie = null;
+          if (bezetters.length > 1) {
+            notitie = 'Bezetters in ' + jaar + ':\n' + bezetters.map(b => {
+              const van = b.van ? b.van.split('-').reverse().join('-') : 'begin';
+              const tot = b.tot ? b.tot.split('-').reverse().join('-') : 'heden';
+              return `${b.code || id} · ${b.achternaam || ''} (${van} – ${tot})`;
+            }).join('\n');
+          }
+          return { id, isSlot, idx: idx < 0 ? 100 : idx, sortKey, code: bez?.code || id, notitie };
+        })
+        .filter(Boolean);
+    } else {
+      // Fallback: state nog niet geladen — geen datum-bewuste info mogelijk,
+      // val terug op de vaste code→stoel-mapping (identiek aan de import).
+      kolomEntries = Object.entries(IMPORT_KOLOM_NAAR_RADID).map(([code, id]) => {
+        const isSlot = SLOTS.includes(id);
+        const idx = VASTE_RAD_IDS.indexOf(id);
+        return { id, isSlot, idx: idx < 0 ? 100 : idx, sortKey: idx < 0 ? '9999-01-01' : `${2000 + idx}-01-01`, code, notitie: null };
+      });
+    }
+
+    // Vaste stoelen eerst (op senioriteit), waarnemer-slots daarna (vaste W5..W1-volgorde).
+    kolomEntries.sort((a, b) => {
+      if (a.isSlot !== b.isSlot) return a.isSlot ? 1 : -1;
+      if (a.isSlot && b.isSlot) return SLOTS.indexOf(a.id) - SLOTS.indexOf(b.id);
+      if (a.sortKey !== b.sortKey) return a.sortKey < b.sortKey ? -1 : 1;
+      return a.idx - b.idx;
     });
+
+    // Kolomkop-strings uniek maken (zeldzaam randgeval: twee kolommen met
+    // toevallig dezelfde code) zodat er nooit twee kolommen op dezelfde header
+    // samenvallen in dynKolomMap.
+    const gebruikteHeaders = new Set();
+    kolomEntries.forEach(e => {
+      let header = e.code || e.id;
+      if (gebruikteHeaders.has(header)) header = `${header} (${e.id})`;
+      gebruikteHeaders.add(header);
+      e.header = header;
+    });
+
+    const radKolommen = kolomEntries.map(e => e.header);
+    const dynKolomMap = Object.fromEntries(kolomEntries.map(e => [e.header, e.id]));
     // Kolom-indices (1-based in ExcelJS) — volledig dynamisch op basis van aantal radiologen:
     // 1=Dag, 2=Datum, 3..(2+n)=rads, (3+n)=Dienst, (4+n)=Bespr, (5+n)=Interv, (6+n)=Opm,
     // (7+n)=Aantal, (8+n)=Spacer, (9+n)..=functie-indicatoren
@@ -381,12 +464,56 @@ export async function actExportJaar(jaar, naamParam) {
     const COL_INTERV   = COL_RAD_EIND + 3;
     const COL_OPM      = COL_RAD_EIND + 4;
     const COL_AANTAL   = COL_RAD_EIND + 5;
-    // Functies met verplicht=true als indicator-kolommen; fallback op alle werkvloer-functies
-    const verplichteFuncties = (state.functies || []).filter(f => isHoofd(f) && f.verplicht === true);
-    const FUNCTIE_LETTERS = (verplichteFuncties.length > 0 ? verplichteFuncties : (state.functies || []).filter(f => isHoofd(f) && functieFlags(f.code || f.id).werkvloer))
-      .map(f => (f.code || f.id).toUpperCase())
-      .sort();
+    // ---- Regel-/functie-afgeleide logica (op exporttijd uit de app) --------
+    const DAGNR = { ma: 1, di: 2, wo: 3, do: 4, vr: 5, za: 6, zo: 7 };
+    const functiesActief  = (state.functies || []);
+    const actieveRegels   = (state.validatieRegels || []).filter(r => r.actief !== false);
+    const bezettingRegels = actieveRegels.filter(r => r.type === 'bezetting');
+
+    // "Aantal" = werkvloerbezetting: alle codes met werkvloer-vlag in de app.
+    const werkvloerUniek = [...new Set(
+      functiesActief
+        .filter(f => functieFlags(f.code || f.id).werkvloer)
+        .map(f => hoofdLetterCode(f.code || f.id))
+        .filter(Boolean)
+    )];
+
+    // Vereist aantal per code per weekdag (1..7), als basis voor de
+    // indicator-kolommen. Bronnen, gecombineerd via max:
+    //  - verplicht-vlag  → ≥1 op werkdagen
+    //  - bezetting-regel → aantal op die weekdag
+    //  - werkvloer-vlag  → ≥1 op werkdagen (per-dag-monitor: toon wat ontbreekt)
+    const reqByCode = {};
+    const ensureReq = (code) => (reqByCode[code] = reqByCode[code] || [0, 0, 0, 0, 0, 0, 0, 0]);
+    const verplichteCodes = functiesActief.filter(f => f.verplicht === true)
+      .map(f => hoofdLetterCode(f.code || f.id)).filter(Boolean);
+    verplichteCodes.forEach(code => { const a = ensureReq(code); for (let d = 1; d <= 5; d++) a[d] = Math.max(a[d], 1); });
+    bezettingRegels.forEach(r => {
+      const code = hoofdLetterCode(r.code || '');
+      const dn = DAGNR[r.dag];
+      const aantal = Number(r.aantal) || 0;
+      if (code && dn && aantal > 0) { const a = ensureReq(code); a[dn] = Math.max(a[dn], aantal); }
+    });
+    // Werkvloer-functies als per-dag-monitor (≥1 op werkdagen).
+    werkvloerUniek.forEach(code => { const a = ensureReq(code); for (let d = 1; d <= 5; d++) a[d] = Math.max(a[d], 1); });
+
+    // "Strikte" codes = de échte app-criteria (verplicht + bezetting-regels).
+    // Alleen déze laten de datum/Aantal rood worden; werkvloer-only codes dienen
+    // als overzicht (rode letter in hun eigen indicator-kolom als ze ontbreken),
+    // zodat een normale dag zonder bv. Mammo niet meteen de hele datum rood maakt.
+    const strictCodes = new Set([
+      ...verplichteCodes,
+      ...bezettingRegels.map(r => hoofdLetterCode(r.code || '')).filter(Boolean),
+    ]);
+
+    // Indicator-kolommen: elke code met een eis (verplicht, regel én/of werkvloer).
+    const FUNCTIE_LETTERS = Object.keys(reqByCode).sort();
     const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => COL_AANTAL + 2 + i);
+
+    if (functiesActief.length === 0) {
+      alert('Functies zijn nog niet geladen — open de app volledig (Regels/Functies-tab) en probeer de export opnieuw.');
+      return;
+    }
 
     // ---- Werkboek + werkblad ------------------------------------------------
     const wb = new ExcelJS.Workbook();
@@ -433,13 +560,22 @@ export async function actExportJaar(jaar, naamParam) {
     aantalHeaderCel.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
     aantalHeaderCel.border = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
 
+    // Kolomkop-notitie: als een stoel/slot in dit jaar meerdere bezetters had
+    // (wissel, of waarnemer → vaste stoel), staat de volledige tijdlijn in een
+    // Excel-notitie op de kolomkop, zodat altijd herleidbaar blijft wie je op
+    // welke dag daadwerkelijk hebt ingedeeld.
+    kolomEntries.forEach((entry, i) => {
+      if (!entry.notitie) return;
+      const cel = headerRij.getCell(3 + i);
+      cel.note = { texts: [{ text: entry.notitie }] };
+    });
+
     // ---- Bevroren rij 1 + kolommen A+B -------------------------------------
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1, topLeftCell: 'C2', activePane: 'bottomRight' }];
 
     // ---- Data-rijen ---------------------------------------------------------
     const DAGEN_NL_KORT = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
     const WEEKEND_FILL  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
-    const VK_FILL       = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF99' } }; // lichtgeel V/K
 
     let excelRij = 2; // rij 1 = header
 
@@ -481,17 +617,11 @@ export async function actExportJaar(jaar, naamParam) {
         if (codeStr) {
           const firstCode = Array.isArray(codes) ? codes[0] : codes;
           const letter = hoofdLetterCode(firstCode || '');
-
-          // V of K → lichtgeel (afwezigheid), overschrijft weekend-grijs
-          if (letter === 'V' || letter === 'K') {
-            cel.fill = VK_FILL;
-            cel.font = { color: { argb: 'FF5A4800' } };
-          } else {
-            const bg = kleurenMap[letter];
-            if (bg && bg.length === 6) {
-              cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg.toUpperCase() } };
-              cel.font = { color: { argb: tekstArgb(bg) } };
-            }
+          // Celkleur uit de functiekleur van de app (incl. V/K).
+          const bg = kleurenMap[letter];
+          if (bg && bg.length === 6) {
+            cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg.toUpperCase() } };
+            cel.font = { color: { argb: tekstArgb(bg) } };
           }
         }
 
@@ -509,16 +639,17 @@ export async function actExportJaar(jaar, naamParam) {
         rij.getCell(ci).alignment = { vertical: 'middle' };
       }
 
-      // Kolom Aantal: formule over alle radioloog-kolommen (C tot RAD_EIND_KOL)
+      // Kolom Aantal: werkvloerbezetting = som van alle werkvloer-codes (C..eind)
       const aantalCel = rij.getCell(COL_AANTAL);
-      aantalCel.value     = { formula: aantalFormule(excelRij, FUNCTIE_LETTERS, RAD_EIND_KOL) };
+      aantalCel.value     = { formula: aantalFormule(excelRij, werkvloerUniek, RAD_EIND_KOL) };
       aantalCel.alignment = { horizontal: 'center', vertical: 'middle' };
       aantalCel.font      = { bold: true };
 
-      // Functie-indicatoren: ontbrekende functies per rij
+      // Functie-indicatoren: toon de code zolang er een tekort is t.o.v. de
+      // (regel-gedreven) vereiste bezetting voor die weekdag.
       FUNCTIE_LETTERS.forEach((letter, li) => {
         const cel = rij.getCell(COL_FUNCTIES[li]);
-        cel.value     = { formula: ontbrekendFormule(letter, excelRij, RAD_EIND_KOL) };
+        cel.value     = { formula: indicatorFormule(letter, reqByCode[letter], excelRij, RAD_EIND_KOL) };
         cel.alignment = { horizontal: 'center', vertical: 'middle' };
         cel.font      = { color: { argb: 'FF888888' }, italic: true, size: 9 };
         if (isWeekend) cel.fill = WEEKEND_FILL;
@@ -528,59 +659,71 @@ export async function actExportJaar(jaar, naamParam) {
     }
 
     // ---- Conditionele opmaak ------------------------------------------------
-    const dataRef    = `B2:B${excelRij - 1}`;
-    const aantalLetter = kolLetter(COL_AANTAL);
-    const aantalRef  = `${aantalLetter}2:${aantalLetter}${excelRij - 1}`;
+    const dataRef       = `B2:B${excelRij - 1}`;
+    const aantalLetter  = kolLetter(COL_AANTAL);
+    const aantalRef     = `${aantalLetter}2:${aantalLetter}${excelRij - 1}`;
     const radEindLetter = kolLetter(2 + radKolommen.length);
-    const radRef     = `C2:${radEindLetter}${excelRij - 1}`;
+    const radRef        = `C2:${radEindLetter}${excelRij - 1}`;
 
-    // 1. Datum rood als bezetting te laag (weekdag + Aantal < norm)
-    ws.addConditionalFormatting({
-      ref: dataRef,
-      rules: [{
-        type: 'expression',
-        formulae: [`AND(${aantalLetter}2<IF(WEEKDAY(B2,2)=5,4,5),WEEKDAY(B2,2)<6)`],
-        style: {
-          fill:   { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
-          font:   { color: { argb: 'FF9C0006' }, bold: true },
-        },
-        priority: 1,
-      }],
-    });
+    // Indicator-kolomletters + "is er een tekort op deze dag?"-uitdrukkingen.
+    const indLetters   = FUNCTIE_LETTERS.map((_, li) => kolLetter(COL_FUNCTIES[li]));
+    // Voor datum/Aantal-rood tellen alleen de strikte criteria (verplicht +
+    // bezetting-regels) mee; werkvloer-only indicatoren dienen als overzicht.
+    const strictLetters = FUNCTIE_LETTERS
+      .map((code, li) => (strictCodes.has(code) ? kolLetter(COL_FUNCTIES[li]) : null))
+      .filter(Boolean);
+    const tekortOR     = strictLetters.length ? `OR(${strictLetters.map(k => `${k}2<>""`).join(',')})` : null;
+    const geenTekort   = strictLetters.length ? strictLetters.map(k => `${k}2=""`).join(',') : null;
 
-    // 2. Aantal-kolom: rood <4, oranje =4, groen ≥5
-    ws.addConditionalFormatting({
-      ref: aantalRef,
-      rules: [
-        {
-          type: 'cellIs', operator: 'greaterThanOrEqual', formulae: [5],
-          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } },
-                   font: { color: { argb: 'FF276221' } } },
-          priority: 3,
-        },
-        {
-          type: 'cellIs', operator: 'equal', formulae: [4],
-          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } },
-                   font: { color: { argb: 'FF9C5700' } } },
-          priority: 2,
-        },
-        {
-          type: 'cellIs', operator: 'lessThan', formulae: [4],
-          style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
-                   font: { color: { argb: 'FF9C0006' }, bold: true } },
+    // 1. Datum rood op een werkdag zodra een norm niet gehaald wordt (tekort).
+    //    De normen komen uit de bezetting-regels + verplichte functies (zie
+    //    indicator-kolommen). Geen vaste 5/4 meer.
+    if (tekortOR) {
+      ws.addConditionalFormatting({
+        ref: dataRef,
+        rules: [{
+          type: 'expression',
+          formulae: [`AND(WEEKDAY(B2,2)<6,${tekortOR})`],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
+            font: { color: { argb: 'FF9C0006' }, bold: true },
+          },
           priority: 1,
-        },
-      ],
-    });
+        }],
+      });
+    }
 
-    // 3. Radioloog-cellen: kleur per functiecode — dynamisch op basis van kleurenMap.
-    //    Zodat celopmaak mee verandert als een gebruiker een waarde aanpast in Excel.
-    //    Elke bekende functiecode krijgt een eigen regel met de kleur uit de app.
+    // 2. Aantal-kolom: rood bij tekort op een werkdag, groen als alle normen
+    //    gehaald worden. Volledig regel-gedreven (geen vaste drempels).
+    if (tekortOR) {
+      ws.addConditionalFormatting({
+        ref: aantalRef,
+        rules: [
+          {
+            type: 'expression',
+            formulae: [`AND(WEEKDAY(B2,2)<6,${tekortOR})`],
+            style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
+                     font: { color: { argb: 'FF9C0006' }, bold: true } },
+            priority: 1,
+          },
+          {
+            type: 'expression',
+            formulae: [`AND(WEEKDAY(B2,2)<6,AND(${geenTekort}))`],
+            style: { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } },
+                     font: { color: { argb: 'FF276221' } } },
+            priority: 2,
+          },
+        ],
+      });
+    }
+
+    // 3. Radioloog-cellen: kleur per functiecode — dynamisch uit de app-kleuren
+    //    (inclusief V/K). Verandert mee als je een waarde in Excel aanpast.
     const functieCfRules = Object.entries(kleurenMap)
       .filter(([, hex]) => hex && hex.length === 6)
       .map(([code, hex], i) => ({
         type: 'expression',
-        formulae: [`OR(C2="${code}",LEFT(C2,1)="${code}",(LEFT(C2,1)=".")*(MID(C2,2,1)="${code}"))`],
+        formulae: [`OR(UPPER(C2)="${code}",UPPER(LEFT(C2,1))="${code}",AND(LEFT(C2,1)=".",UPPER(MID(C2,2,1))="${code}"),AND(ISNUMBER(VALUE(LEFT(C2,1))),UPPER(MID(C2,2,1))="${code}"))`],
         style: {
           fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex.toUpperCase() } },
           font: { color: { argb: tekstArgb(hex) } },
@@ -591,7 +734,7 @@ export async function actExportJaar(jaar, naamParam) {
       ws.addConditionalFormatting({ ref: radRef, rules: functieCfRules });
     }
 
-    // 4. Indicator-kolommen: rood+vet als cel niet leeg (= verplichte functie ontbreekt)
+    // 4. Indicator-kolommen: rood+vet als de cel niet leeg is (= tekort op die functie).
     FUNCTIE_LETTERS.forEach((letter, li) => {
       const indKol = kolLetter(COL_FUNCTIES[li]);
       const indRef = `${indKol}2:${indKol}${excelRij - 1}`;
@@ -609,27 +752,57 @@ export async function actExportJaar(jaar, naamParam) {
       });
     });
 
-    // 5. Datumcel rood als verplichte functie ontbreekt op werkdag
-    if (FUNCTIE_LETTERS.length > 0) {
-      const indLetters = FUNCTIE_LETTERS.map((_, li) => kolLetter(COL_FUNCTIES[li]));
-      const ontbreektFormule = indLetters.map(k => `${k}2<>""`).join(',');
-      ws.addConditionalFormatting({
-        ref: dataRef,
-        rules: [{
-          type: 'expression',
-          formulae: [`AND(WEEKDAY(B2,2)<6,OR(${ontbreektFormule}))`],
-          style: {
-            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } },
-            font: { color: { argb: 'FF9C0006' }, bold: true },
-          },
-          priority: 2,
-        }],
-      });
-    }
-
     // ---- Activiteit-sheet ---------------------------------------------------
     // Activiteit-sheet tijdelijk uitgeschakeld (formule-bugs in sheet2)
     // voegActiviteitSheetToe(wb, sheetNaam, radKolommen, dynKolomMap, COL_DIENST, excelRij - 1);
+
+    // ---- Verborgen kolom-mapping (code → stoel-id) --------------------------
+    // Vastgelegd zoals geldig op het moment van export. Hiermee koppelt de
+    // import elke kolom op de juiste, stabiele stoel — ook nadat er later een
+    // wissel is geweest. Ontbreekt dit blad, dan valt de import terug op de code.
+    const mapWs = wb.addWorksheet('_kolommen');
+    mapWs.state = 'hidden';
+    mapWs.columns = [
+      { header: 'Code', key: 'code', width: 12 },
+      { header: 'StoelId', key: 'stoel', width: 12 },
+    ];
+    radKolommen.forEach(code => { mapWs.addRow({ code, stoel: dynKolomMap[code] }); });
+
+    // ---- Verborgen naslagblad _regels --------------------------------------
+    // Legt vast welke functie-instellingen en bezetting-normen zijn gebruikt om
+    // dit bestand op te bouwen (puur ter controle/herleidbaarheid).
+    const regWs = wb.addWorksheet('_regels');
+    regWs.state = 'hidden';
+    regWs.columns = [
+      { header: 'Soort',     key: 'soort',  width: 12 },
+      { header: 'Code',      key: 'code',   width: 8  },
+      { header: 'Dag',       key: 'dag',    width: 6  },
+      { header: 'Aantal',    key: 'aantal', width: 8  },
+      { header: 'Kleur',     key: 'kleur',  width: 10 },
+      { header: 'Werkvloer', key: 'werk',   width: 10 },
+      { header: 'Verplicht', key: 'verp',   width: 10 },
+    ];
+    functiesActief.forEach(f => {
+      const code = (f.code || f.id || '');
+      regWs.addRow({
+        soort: 'functie',
+        code,
+        dag: '',
+        aantal: '',
+        kleur: f.kleur || '',
+        werk: functieFlags(code).werkvloer ? 'ja' : 'nee',
+        verp: f.verplicht === true ? 'ja' : 'nee',
+      });
+    });
+    bezettingRegels.forEach(r => {
+      regWs.addRow({
+        soort: 'norm',
+        code: r.code || '',
+        dag: r.dag || '',
+        aantal: Number(r.aantal) || 0,
+        kleur: '', werk: '', verp: '',
+      });
+    });
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();

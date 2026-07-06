@@ -54,7 +54,7 @@
 <div class="wrap">
 
   <h1>Rooster radiologen – Beheerder</h1>
-  <p class="subtitle">Beheerdershandleiding · versie mei 2026</p>
+  <p class="subtitle">Beheerdershandleiding · juni 2026 · app-versie 3.27.110</p>
 
   <div class="toc">
     <h2>Inhoud</h2>
@@ -177,8 +177,32 @@
     <li>Deel het wachtwoord veilig met de gebruiker en vraag hem het bij eerste inlog te wijzigen.</li>
   </ol>
 
-  <h3>Radiologen</h3>
-  <p>Radiologen zijn de "stoelen" in het rooster. Een gebruiker (inlog) is gekoppeld aan een radioloog-profiel. Eén radioloog-profiel kan maar aan één gebruiker tegelijk gekoppeld zijn. Invallers en tijdelijke krachten krijgen een apart profiel.</p>
+  <h3>Radiologen (stoelen)</h3>
+  <p>Radiologen zijn de "stoelen" in het rooster. Een gebruiker (inlog) is gekoppeld aan een radioloog-profiel; één profiel kan maar aan één gebruiker tegelijk gekoppeld zijn. De indeling wordt per <em>stoel</em> bewaard, niet per persoon — zo blijft de historie van een stoel kloppen, ook als de bezetter verandert.</p>
+  <p>Het aantal vaste stoelen ligt niet vast op acht: je kunt stoelen toevoegen en laten vervallen. De kolomvolgorde in het rooster volgt de <strong>anciënniteit</strong> (in-dienst datum; oudste = links). Per vaste radioloog beheer je in deze sectie de in-dienst datum, parttimefactor en het vakantierecht.</p>
+
+  <h4>Waarnemer vast in dienst / wisselen — knop "Wissel"</h4>
+  <p>Met <span class="badge">Wissel</span> zet je een waarnemer (W-stoel) over naar een vaste stoel, of vervang je de bezetter van een stoel. Je kiest:</p>
+  <ul>
+    <li><strong>Een bestaande stoel</strong> (vervangen) — de nieuwe bezetter neemt de stoel over per de ingangsdatum. De stoel toont vanaf die datum <em>uitsluitend</em> de indeling van de nieuwe bezetter; eventuele resten van de vertrekker worden gewist (schoon overnemen). De waarnemer brengt zijn eigen indeling, vakantie-V, diensten, wensen en gebruikerskoppeling mee.</li>
+    <li><strong>Een nieuwe stoel</strong> (kolom erbij) — er komt een vers, leeg stoel met een uniek intern id. Maximaal 12 actieve stoelen tegelijk. Interne stoel-id's worden nooit hergebruikt; codes (initialen) mogen wel terugkomen.</li>
+  </ul>
+  <div class="tip"><b>Tip:</b> De historie vóór de ingangsdatum blijft onaangeroerd — de vertrekker blijft vóór die datum op zijn stoel staan en de waarnemer op zijn W-stoel.</div>
+
+  <h4>Vertrek en herstellen — knop "Vertrek"</h4>
+  <p>Met <span class="badge">Vertrek</span> geef je een vertrekdatum op; vanaf die dag verdwijnt de kolom uit het overzicht (een lege stoel = geen kolom). De historie vóór die datum blijft zichtbaar.</p>
+  <ul>
+    <li>Is de vertrekdatum nog <strong>niet gepasseerd</strong>, dan staat de stoel nog in de lijst met de melding "vertrekt per …" en kun je het vertrek met <em>Intrekken</em> terugdraaien.</li>
+    <li>Is de vertrekdatum al <strong>gepasseerd</strong>, dan verschijnt de stoel onder de sectie <em>Vertrokken stoelen</em> met een knop <em>Herstellen</em>. Een verkeerde datum corrigeer je door in te trekken/herstellen en daarna Vertrek opnieuw met de juiste datum uit te voeren.</li>
+  </ul>
+
+  <h4>Persoon-id en loopbaan</h4>
+  <p>Elke bezetter heeft een stabiel <strong>persoon-id</strong> dat met de persoon meeloopt over stoelen heen (bijvoorbeeld als een waarnemer later een vaste stoel overneemt). Zo is iemands verleden herleidbaar, ook als codes later hergebruikt worden.</p>
+  <ul>
+    <li>Klik eenmalig op <span class="badge">Persoon-id's toekennen</span> (onder de vaste radiologen) om de huidige bezetters met een naam een persoon-id te geven. De actie is idempotent — nogmaals klikken kan geen kwaad. Lege stoelen en bezetters zonder naam worden overgeslagen.</li>
+    <li>Daarna loopt het persoon-id automatisch mee bij elke wissel/→Vast.</li>
+    <li>In de tab <span class="badge">Radioloog</span> vind je per persoon een (uitklapbare) <em>Loopbaan</em>: de periodes over alle stoelen heen (stoel · code · van–tot). Alleen zichtbaar voor beheerders/lezers.</li>
+  </ul>
 
   <!-- 9 -->
   <h2 id="excel-export">9. Excel-export – workflow en formaat</h2>
@@ -201,23 +225,31 @@
     <tr><td>… – Q (Bespreking)</td><td>Besprekingsnotitie</td></tr>
     <tr><td>… – R (Interventie)</td><td>Interventie-opmerking</td></tr>
     <tr><td>… – S (Opmerking)</td><td>Dag-opmerking</td></tr>
-    <tr><td>… – Aantal</td><td>Formule: werkvloerbezetting (telt alle werkvloer-functies)</td></tr>
+    <tr><td>… – Aantal</td><td>Formule: werkvloerbezetting (telt alle functies met de werkvloer-vlag)</td></tr>
     <tr><td>… – (spacer)</td><td>Lege kolom als visuele scheiding</td></tr>
-    <tr><td>… – Functie-indicatoren</td><td>Eén kolom per werkvloer-functie. Toont de functiecode als die functie die dag NIET bezet is (tekort-indicator).</td></tr>
+    <tr><td>… – Functie-indicatoren</td><td>Eén kolom per werkvloer-functie (plus verplichte functies en functies met een bezetting-regel). Toont de code zolang die functie die dag onder de vereiste bezetting zit (per-dag-monitor).</td></tr>
+  </table>
+  <p>Daarnaast bevat het bestand twee <strong>verborgen</strong> bladen, puur voor een betrouwbare import en herleidbaarheid (rechtsklik op een tabblad → <em>Zichtbaar maken</em> om ze te zien):</p>
+  <table>
+    <tr><th>Blad</th><th>Inhoud</th></tr>
+    <tr><td><code>_kolommen</code></td><td>Koppeling code → stabiel stoel-id, zoals geldig op het moment van export. Hiermee landt elke kolom bij import op de juiste stoel, ook na een latere wissel.</td></tr>
+    <tr><td><code>_regels</code></td><td>De gebruikte functie-instellingen (kleur, werkvloer, verplicht) en bezetting-normen. Alleen ter controle.</td></tr>
   </table>
 
   <h3>Conditionele opmaak in de export</h3>
+  <p>De opmaak en normen worden bij elke export uit de <em>actuele</em> app-instellingen (functies en validatieregels) afgeleid — pas je in de app een regel, functie of kleur aan, dan weerspiegelt een nieuwe export dat automatisch.</p>
   <ul>
-    <li><strong>Datumkolom rood:</strong> bezetting onder de norm (maandag–donderdag &lt; 5, vrijdag &lt; 4)</li>
-    <li><strong>Aantal-kolom groen/oranje/rood:</strong> ≥5 / =4 / &lt;4</li>
-    <li><strong>Radioloogcellen lichtgeel:</strong> bij V (vakantie) of K (cursus)</li>
-    <li><strong>Weekendrijen lichtgrijs</strong></li>
+    <li><strong>Datumkolom rood:</strong> op een werkdag zodra een strikte norm niet gehaald wordt — een verplichte functie ontbreekt of een bezetting-regel (per dag/code/aantal) wordt niet gehaald. Er is geen vaste 5/4-norm meer.</li>
+    <li><strong>Aantal-kolom:</strong> rood bij zo'n tekort, groen als alle strikte normen gehaald worden.</li>
+    <li><strong>Functie-indicatoren rood:</strong> elke functie die die dag onder de vereiste bezetting zit. Werkvloer-functies zonder strikte norm kleuren alleen hun eigen indicator-kolom (ze maken de datum niet rood), zodat een gewone dag niet onnodig rood wordt.</li>
+    <li><strong>Radioloogcellen:</strong> achtergrondkleur uit de functiekleur in de app (inclusief V/K). De kleur werkt ook live in Excel: wijzig je een cel naar een functiecode (ook varianten als <code>.WB</code>, <code>3W</code>), dan kleurt die mee.</li>
+    <li><strong>Weekendrijen lichtgrijs.</strong></li>
   </ul>
 
   <h3>Cel-opmerkingen</h3>
   <p>Opmerkingen die via de app per cel zijn ingevoerd verschijnen als Excel-noten (kleine rode driehoekjes). Ze worden ook teruggekoppeld bij een import.</p>
 
-  <div class="tip"><b>Tip:</b> Voeg geen kolommen toe of verwijder geen kolommen in het exportbestand als je het later wilt reimporteren. De import detecteert kolommen op basis van de kolomheaders.</div>
+  <div class="tip"><b>Tip:</b> Je mag in Excel gerust kolommen aanpassen of verplaatsen — dankzij het verborgen <code>_kolommen</code>-blad wordt elke kolom bij import alsnog aan de juiste stoel gekoppeld. Verwijder dat verborgen blad echter niet als je het bestand wilt reimporteren.</div>
 
   <!-- 10 -->
   <h2 id="excel-import">10. Excel-import – workflow en beperkingen</h2>
@@ -242,15 +274,16 @@
   </ul>
 
   <h3>Kolomdetectie bij import</h3>
-  <p>De import leest kolommen op basis van de kolomheader (rij 1):</p>
+  <p>De import koppelt elke kolom aan de juiste stoel:</p>
   <ul>
-    <li>Radioloogkolommen worden herkend op basis van de radioloog-codes die in de app zijn ingesteld.</li>
-    <li>De kolommen P, Q, R en S worden herkend op naam (respectievelijk Dienst, Bespreking, Interventie, Opmerking).</li>
-    <li>Als een kolom niet herkend wordt, wordt die overgeslagen zonder foutmelding.</li>
+    <li>Eerst via het verborgen <code>_kolommen</code>-blad (stabiel stoel-id). Daardoor landt een kolom op de juiste stoel, óók als de bezetter sinds de export is gewisseld.</li>
+    <li>Ontbreekt dat blad (een ouder of extern bestand), dan valt de import terug op de radioloog-codes uit de kolomheader.</li>
+    <li>De kolommen P, Q, R en S worden herkend op naam (Dienst, Bespreking, Interventie, Opmerking).</li>
+    <li>Een kolom die niet aan een stoel gekoppeld kan worden, wordt <strong>niet geïmporteerd</strong> én met een waarschuwing in de preview gemeld (niet meer stil overgeslagen). Ook een verwachte kolom die ontbreekt, wordt gemeld.</li>
   </ul>
 
   <h3>Waarschuwingen in de preview</h3>
-  <p>De app toont maximaal 25 waarschuwingen als een dienst-ID in kolom P niet overeenkomt met een bekende radioloog-ID. Dit blokkeert de import niet.</p>
+  <p>De preview toont waarschuwingen bij niet-koppelbare of ontbrekende kolommen en wanneer een dienst-ID in kolom P niet overeenkomt met een bekende stoel. Waarschuwingen blokkeren de import niet.</p>
   <p>Als er wijzigingen binnen 30 dagen zitten, toont de bevestigingsdialoog een expliciete melding met het aantal gewijzigde cellen.</p>
 
   <h4>Beperkingen</h4>
@@ -286,6 +319,8 @@
     <li><strong>Validatie checken.</strong> Open de Overzicht-tab en kijk of er conflicten zijn (rode/oranje meldingen). Pas indien nodig handmatig aan.</li>
     <li><strong>Wensen synchroniseren.</strong> De app heeft de wens-statussen automatisch bijgewerkt. Check of er wensen zijn teruggezet naar <em>Open</em> die aandacht vereisen.</li>
   </ol>
+
+  <div class="tip"><b>Testomgeving:</b> Er is een aparte testomgeving die op een eigen database werkt, los van de live data. Herken je aan de oranje balk <em>TESTOMGEVING</em> bovenin en het label <code>-TEST</code> achter het versienummer. Acties daar (ook "Persoon-id's toekennen") raken de live versie niet. Probeer ingrijpende wijzigingen daar eerst uit voor je ze live doet.</div>
 
   <a class="back" href="../index.html">← Terug naar de app</a>
 

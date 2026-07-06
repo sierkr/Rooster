@@ -3,7 +3,7 @@
 import { state, VASTE_RAD_IDS, DAGEN_NL, HOOFD_FUNCTIES, BELASTING_GRENS } from '../state.js';
 import {
   vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
-  bezettingenInRange,
+  bezettingenInRange, alleVasteStoelIds, isVasteStoel,
   radiologenMap, vandaagIso, formatDatum, fclass,
   hoofdLetterCode, functieFlags, parttimeFactor, huidigKalenderJaar,
   magBeheerLezen,
@@ -33,7 +33,7 @@ function berekenActiviteit() {
   // Pak alle slot-IDs (vast + actieve W). De actieve-W lijst gebruikt
   // vandaag als peildatum — dat is OK omdat we ook werkvloerdata over de
   // hele periode ophalen, niet alleen voor de actuele bezetters.
-  const radIds = [...VASTE_RAD_IDS, ...actieveInvallers().map(r => r.id)];
+  const radIds = [...alleVasteStoelIds(), ...actieveInvallers().map(r => r.id)];
 
   const counts = {};
   const datums = {};
@@ -133,7 +133,7 @@ export function renderActView() {
   const toonInv = state.actInvallers;
   const invallers = toonInv ? actieveInvallers() : [];
   const slotIds = [
-    ...VASTE_RAD_IDS,
+    ...vasteRadsOpDatum(tot).map(r => r.id),
     ...(toonInv ? invallers.map(r => r.id) : []),
   ];
 
@@ -143,7 +143,7 @@ export function renderActView() {
   const kolommen = [];
   slotIds.forEach(slotId => {
     const entries = bezettingenInRange(slotId, vanaf, tot);
-    const isVast = VASTE_RAD_IDS.includes(slotId);
+    const isVast = isVasteStoel(slotId);
     if (entries.length === 0) {
       // Stoel had geen bezetting in periode — toon lege kolom voor stabiliteit (alleen vast).
       if (isVast) kolommen.push({ id: slotId, slotId, label: slotId, isSlot: false, vanSub: vanaf, totSub: tot });
