@@ -467,10 +467,32 @@
     // een first-install (clients.claim() na install) en willen we juist
     // niet reloaden — de pagina is net geopend.
     const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('./sw.js');
+    let herladen = false;
+
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (hadController) window.location.reload();
+      if (hadController && !herladen) { herladen = true; window.location.reload(); }
     });
+
+    // updateViaCache:'none' zorgt dat sw.js zelf nooit uit de HTTP-cache wordt
+    // gelezen bij een update-check — anders kan de browser (met name Safari op
+    // iPhone) een oude sw.js teruggeven en de nieuwe versie nooit oppikken.
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+      .then(reg => {
+        // Actief om een update vragen bij het laden.
+        reg.update().catch(() => {});
+
+        // iOS/Safari controleert vanzelf zelden op updates (en hervat een PWA
+        // vaak vanuit een snapshot i.p.v. echt herladen). Daarom controleren
+        // we zelf telkens als de app weer op de voorgrond komt: na app-wissel,
+        // ontgrendelen, of terugkeren naar de PWA vanaf het beginscherm.
+        const checkUpdate = () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        };
+        document.addEventListener('visibilitychange', checkUpdate);
+        window.addEventListener('focus', checkUpdate);
+        window.addEventListener('pageshow', checkUpdate);
+      })
+      .catch(() => {});
   }
 </script>
 </body>

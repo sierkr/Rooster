@@ -1,3 +1,31 @@
+## v3.27.114 — Oude versie bleef actief op iPhone (PWA-update)
+
+### Waarom
+Op de iPhone bleef de oude versie van de app soms actief, ook na een nieuwe
+release. Twee oorzaken: (1) de app vroeg zelf nooit actief om een update, en
+Safari op iOS controleert daar uit zichzelf zelden op — een PWA vanaf het
+beginscherm wordt vaak hervat vanuit een snapshot i.p.v. echt herladen; (2) bij
+het precachen van een nieuwe versie kon de browser bestanden uit zijn eigen
+HTTP-cache teruggeven, waardoor een "nieuwe" service worker toch oude bestanden
+opsloeg.
+
+### Fixes
+- **sw.js**: precache haalt elk bestand nu op met `cache: 'reload'`, dus altijd
+  rechtstreeks van de server, nooit uit de HTTP-cache.
+- **index.html**: service worker geregistreerd met `updateViaCache: 'none'`, en
+  de app vraagt nu zelf actief om een update — bij het laden én telkens wanneer
+  de app weer op de voorgrond komt (app-wissel, ontgrendelen, terugkeren naar de
+  PWA). Zodra een nieuwe versie actief wordt, herlaadt de app eenmalig voor
+  verse bestanden.
+
+### Upgrade
+1. Vervang `sw.js`, `index.html` en `config.js`.
+2. Hard refresh (versie is nu 3.27.114). Let op: doordat dit juist de
+   update-afhandeling zélf betreft, kan het op een iPhone die nog op een oude
+   versie staat éénmalig nodig zijn de PWA te sluiten en opnieuw te openen (of
+   in Safari te herladen) om de nieuwe service worker op te pikken.
+   Vanaf deze versie werkt het daarna automatisch.
+
 ## v3.27.113 — Backup: "Maximum call stack size exceeded" bij grote database opgelost
 
 ### Waarom
