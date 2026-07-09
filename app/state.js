@@ -5,6 +5,7 @@ export const state = {
   user: null,             // Firebase User
   profiel: null,          // Document uit gebruikers/
   radiologen: [],
+  bezettingMutaties: [],  // logboek van stoel-ingrepen (voor terugdraaien/tijdlijn)
   functies: [],
   besprekingen: [],
   indelingMap: {},        // datum (ISO) -> indeling-doc

@@ -187,6 +187,14 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
+    // bezetting_mutaties/ - logboek van stoel-ingrepen (voor terugdraaien)
+    // -----------------------------------------------------------------------
+    match /bezetting_mutaties/{id} {
+      allow read: if isBeheerder();
+      allow write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
     // instellingen/ - globale app-instellingen
     // -----------------------------------------------------------------------
     match /instellingen/{id} {

@@ -336,8 +336,12 @@ export function loopbaanVoorPersoon(pid, fallbackKey) {
 // oorspronkelijke 8 stoelen terug op zijn vaste historische positie; een
 // extra stoel zonder datum sorteert achteraan.
 export function senioriteitSortKey(stoelId, inDienst) {
-  const idx = VASTE_RAD_IDS.indexOf(stoelId);
-  return inDienst || (idx < 0 ? '9999-01-01' : `${2000 + idx}-01-01`);
+  // Onbekende in-dienstdatum sorteert achteraan (junior), i.p.v. de
+  // oorspronkelijke stoelrang te erven. Zo blijft een overnemer zonder
+  // ingevulde senioriteit niet op de senior-plek van de vorige bezetter staan.
+  // De onderlinge volgorde van datum-loze stoelen blijft stabiel via de
+  // idx-tiebreak in vasteIdxVoorStoel/vergelijkOpSenioriteit.
+  return inDienst || '9999-01-01';
 }
 // vasteIdxVoorStoel: tie-break bij een gelijke sorteersleutel — de
 // oorspronkelijke 8 (VASTE_RAD_IDS) houden hun onderlinge volgorde, extra

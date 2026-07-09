@@ -14,6 +14,10 @@ import { openSheet, closeSheet } from '../sheets.js';
 import { IMPORT_SHEET, actImportFile, actImportSchrijven, actImportAnnuleren, actZetImportJaar } from '../import.js';
 import { actExportJaar } from '../export.js';
 import { maakClientBackup, herstelClientBackup } from '../backup-client.js';
+import {
+  laadBezettingMutaties, snapshotStoelen, registreerMutatie, renderRecenteMutaties,
+  impactVanaf, impactTekst,
+} from '../bezetting-mutaties.js';
 
 export async function laadGebruikers() {
   if (!magGebruikersBeheren()) return;
@@ -28,6 +32,7 @@ export async function renderGebView() {
   if (!canGeb && !canReg) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
 
   if (canGeb) await laadGebruikers();
+  if (canGeb) await laadBezettingMutaties();
   const rads = radiologenMap();
 
   let htmlBezetting = '';
@@ -108,12 +113,17 @@ export async function renderGebView() {
           // Gepland vertrek: de bezetter van vandaag heeft een einddatum (tot) in
           // de toekomst. De stoel is dan nog zichtbaar tot die datum.
           const geplandVertrek = r.tot ? plusDagen(r.tot, 1) : null;
+          // Opvolging: staat er per de dag ná de einddatum al een opvolger klaar?
+          // Dan is het geen "vertrek" maar een overname — niet als vertrek tonen.
+          const opvolger = geplandVertrek ? hist.find(e => e.van === geplandVertrek) : null;
           return `
             <div style="display: grid; grid-template-columns: 50px 1fr 120px 56px 56px 120px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <div style="font-weight: 500;">${r.code}</div>
               <div style="min-width: 0;">
                 <div class="muted" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.achternaam || ''}</div>
-                ${geplandVertrek ? `<div style="font-size: 10px; color: #b3261e;">vertrekt per ${formatDatum(geplandVertrek, 'kort')}</div>` : ''}
+                ${geplandVertrek ? (opvolger
+                  ? `<div style="font-size: 10px; color: #9c5700;">opgevolgd door ${(opvolger.code || '').replace(/"/g, '&quot;')} per ${formatDatum(geplandVertrek, 'kort')}</div>`
+                  : `<div style="font-size: 10px; color: #b3261e;">vertrekt per ${formatDatum(geplandVertrek, 'kort')}</div>`) : ''}
               </div>
               <div>
                 <input type="date" class="input" id="id_${r.id}" value="${indienstWaarde}" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 12px; width: 100%;">
@@ -125,10 +135,13 @@ export async function renderGebView() {
               <div>
                 <input type="number" class="input" id="vr_${r.id}" value="${vrecht}" min="0" max="100" step="1" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 13px; text-align: right; width: 100%;">
               </div>
-              <div style="display: flex; gap: 4px;">
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                 <button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.openWisselSheet('${r.id}')">Wissel</button>
+                <button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.toonStoelTijdlijn('${r.id}')" title="Tijdlijn van deze stoel">Tijdlijn</button>
                 ${geplandVertrek
-                  ? `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.vertrekIntrekken('${r.id}')" title="Gepland vertrek intrekken">Intrekken</button>`
+                  ? (opvolger
+                      ? ''
+                      : `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.vertrekIntrekken('${r.id}')" title="Gepland vertrek intrekken">Intrekken</button>`)
                   : `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.openVertrekSheet('${r.id}')" title="Stoel laten vertrekken per datum">Vertrek</button>`}
               </div>
             </div>
@@ -207,6 +220,8 @@ export async function renderGebView() {
       </div>
     </div>
   `;
+
+  htmlBezetting += renderRecenteMutaties();
 
   // Excel-import sectie
   const p = state.importPreview;
@@ -1064,6 +1079,17 @@ window.opslaanWissel = async function(slotId) {
     tot: null,
   });
 
+  // Planner helpen: laat zien wat er vanaf de ingangsdatum al op deze stoel
+  // gepland staat (blijft staan, maar hoort daarna bij de nieuwe persoon).
+  const impW = impactVanaf(datum, [slotId]);
+  if (impW.toew || impW.vak || impW.dienst || impW.wensen) {
+    let msg = `Let op: vanaf ${formatDatum(datum, 'kort')} staat op stoel ${slotId} al gepland: ${impactTekst(impW)}.\n`
+      + `Dat blijft op de stoel staan, maar hoort daarna bij ${code}.`;
+    if (impW.nabij) msg += `\n\n⚠ ${impW.nabijeDagen.length} dag(en) hiervan liggen binnenkort.`;
+    msg += `\n\nDoorvoeren?`;
+    if (!confirm(msg)) return;
+  }
+  const voorSnap = snapshotStoelen([slotId]);
   try {
     assertBezettingGeldig(nieuweHist, slotId);
     await setDoc(doc(db, 'radiologen', slotId), {
@@ -1077,8 +1103,13 @@ window.opslaanWissel = async function(slotId) {
       isSlot: SLOTS.includes(slotId),
       bezetting_historie: nieuweHist,
     }, { merge: true });
+    await registreerMutatie({
+      type: 'wissel', stoelen: [slotId], voor: { [slotId]: voorSnap[slotId] }, ingangsdatum: datum,
+      beschrijving: `Wissel op ${slotId}: ${code} · ${achternaam} per ${formatDatum(datum, 'kort')}`,
+    });
     closeSheet();
     alert(`Bezetting van ${slotId} aangepast: ${code} · ${achternaam} per ${formatDatum(datum, 'kort')}.`);
+    if (window.__herlaadBeheer) await window.__herlaadBeheer();
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
@@ -1161,6 +1192,10 @@ Er komt een kolom bij in het overzicht.`)) return;
         van: datum, tot: null,
       }],
     }, { merge: true });
+    await registreerMutatie({
+      type: 'nieuweStoel', stoelen: [nieuweId], voor: { [nieuweId]: null }, ingangsdatum: datum,
+      beschrijving: `Nieuwe stoel ${code} · ${achternaam} per ${formatDatum(datum, 'kort')}`,
+    });
     closeSheet();
     alert(`Nieuwe stoel aangemaakt: ${code} · ${achternaam} per ${formatDatum(datum, 'kort')}.`);
     renderGebView();
@@ -1272,16 +1307,28 @@ window.maakVastDoorvoeren = async function(wSlotId) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
 
   try {
+    // Snapshot vóór de migratie voor terugdraaien: wSlot bestaat al; de doelstoel
+    // bestaat alleen als het GÉÉN nieuwe stoel is (bij nieuw = null → terugdraaien
+    // verwijdert die stoel weer).
+    const voor = { [wSlotId]: snapshotStoelen([wSlotId])[wSlotId] };
     if (nieuweStoel) {
       // Vers, uniek stoel-id (nooit hergebruikt). Eerst het lege stoel-document
       // met de vaste-stoel-markering aanmaken, daarna de persoon erop migreren.
       naarSlot = 'VS' + Date.now().toString(36);
+      voor[naarSlot] = null;
       await setDoc(doc(db, 'radiologen', naarSlot), {
         id: naarSlot, vaste_stoel: true, isSlot: false, type: 'radioloog',
         actief: true, code: '', voornaam: '', achternaam: '', bezetting_historie: [],
       }, { merge: true });
+    } else {
+      voor[naarSlot] = snapshotStoelen([naarSlot])[naarSlot];
     }
-    await migreerBezetting(wSlotId, naarSlot, datum, inDienst);
+    const inv = await migreerBezetting(wSlotId, naarSlot, datum, inDienst);
+    await registreerMutatie({
+      type: 'maakVast', stoelen: [wSlotId, naarSlot], voor, ingangsdatum: datum,
+      roosterInvers: inv.roosterInvers, wensenInvers: inv.wensenInvers, gebruikersInvers: inv.gebruikersInvers,
+      beschrijving: `→ Vast: ${wSlotId} → ${naarSlot} per ${formatDatum(datum, 'kort')}`,
+    });
     closeSheet();
     alert(nieuweStoel
       ? `${wSlotId} → nieuwe stoel doorgevoerd per ${formatDatum(datum, 'kort')}.`
@@ -1322,6 +1369,16 @@ window.vertrekDoorvoeren = async function(slotId) {
   if (!stoel) { alert('Stoel niet gevonden.'); return; }
   if (!confirm(`Laat stoel ${slotId} vertrekken per ${formatDatum(datum, 'kort')}?\n\nDe kolom verdwijnt vanaf die datum. De historie ervóór blijft behouden.`)) return;
 
+  // Planner helpen: wat staat er vanaf de vertrekdatum nog op deze stoel?
+  const impV = impactVanaf(datum, [slotId]);
+  if (impV.toew || impV.vak || impV.dienst || impV.wensen) {
+    let msg = `Let op: vanaf ${formatDatum(datum, 'kort')} staat op stoel ${slotId} nog gepland: ${impactTekst(impV)}.\n`
+      + `Na vertrek verdwijnt de kolom; die geplande gegevens blijven in de historie maar horen bij niemand meer.`;
+    if (impV.nabij) msg += `\n\n⚠ ${impV.nabijeDagen.length} dag(en) hiervan liggen binnenkort.`;
+    msg += `\n\nDoorvoeren?`;
+    if (!confirm(msg)) return;
+  }
+  const voorSnap = snapshotStoelen([slotId]);
   // De bezetter is actief t/m de dag vóór de vertrekdatum.
   const dagVoor = plusDagen(datum, -1);
   const hist = Array.isArray(stoel.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
@@ -1347,6 +1404,10 @@ window.vertrekDoorvoeren = async function(slotId) {
     assertBezettingGeldig(hist, slotId);
     await setDoc(doc(db, 'radiologen', slotId), { bezetting_historie: hist }, { merge: true });
     closeSheet();
+    await registreerMutatie({
+      type: 'vertrek', stoelen: [slotId], voor: { [slotId]: voorSnap[slotId] }, ingangsdatum: datum,
+      beschrijving: `Vertrek ${slotId} per ${formatDatum(datum, 'kort')}`,
+    });
     alert(`Stoel ${slotId} vertrekt per ${formatDatum(datum, 'kort')}.`);
     renderGebView();
   } catch (e) {
@@ -1468,9 +1529,13 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
   //   die rest wordt gewist. Zo blijven er geen mengvormen staan.
   // Bij een nieuwe (lege) stoel is dit automatisch een no-op.
   const updates = [];
+  // roosterInvers: per gewijzigde dag de ORIGINELE waarden van precies de
+  // aangeraakte velden, zodat "Terugdraaien" de indeling exact herstelt.
+  const roosterInvers = [];
   Object.values(state.indelingMap).forEach(dag => {
     if (!dag?.datum || dag.datum < datum) return;
     const upd = { datum: dag.datum };
+    const herstel = {};
     let raak = false;
 
     const vanToew  = dag.toewijzingen && dag.toewijzingen[vanSlot];
@@ -1478,9 +1543,12 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
     if (vanToew) {
       upd[`toewijzingen.${naarSlot}`] = dag.toewijzingen[vanSlot];
       upd[`toewijzingen.${vanSlot}`] = deleteField();
+      herstel[`toewijzingen.${vanSlot}`] = dag.toewijzingen[vanSlot];
+      herstel[`toewijzingen.${naarSlot}`] = (naarSlot in dag.toewijzingen) ? dag.toewijzingen[naarSlot] : '__DEL__';
       raak = true;
     } else if (naarToew) {
       upd[`toewijzingen.${naarSlot}`] = deleteField();
+      herstel[`toewijzingen.${naarSlot}`] = dag.toewijzingen[naarSlot];
       raak = true;
     }
 
@@ -1489,9 +1557,12 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
     if (vanVk) {
       upd[`vakantie_v.${naarSlot}`] = dag.vakantie_v[vanSlot];
       upd[`vakantie_v.${vanSlot}`] = deleteField();
+      herstel[`vakantie_v.${vanSlot}`] = dag.vakantie_v[vanSlot];
+      herstel[`vakantie_v.${naarSlot}`] = (naarSlot in dag.vakantie_v) ? dag.vakantie_v[naarSlot] : '__DEL__';
       raak = true;
     } else if (naarVk) {
       upd[`vakantie_v.${naarSlot}`] = deleteField();
+      herstel[`vakantie_v.${naarSlot}`] = dag.vakantie_v[naarSlot];
       raak = true;
     }
 
@@ -1499,11 +1570,12 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
       ['dag','avond','nacht'].forEach(s => {
         if (dag.dienst[s] === vanSlot) {
           upd[`dienst.${s}`] = naarSlot;
+          herstel[`dienst.${s}`] = vanSlot;
           raak = true;
         }
       });
     }
-    if (raak) updates.push(upd);
+    if (raak) { updates.push(upd); roosterInvers.push({ datum: dag.datum, herstel }); }
   });
 
   // Schrijf in chunks van 400 documenten per batch (Firestore-limiet 500).
@@ -1521,6 +1593,7 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
 
   // 5. Wensen migreren
   const wensUpdates = (state.wensen || []).filter(w => w.radioloog_id === vanSlot && w.datum >= datum);
+  const wensenInvers = wensUpdates.map(w => ({ id: w.id, radioloog_id: vanSlot }));
   for (let i = 0; i < wensUpdates.length; i += 400) {
     const chunk = wensUpdates.slice(i, i + 400);
     const batch = writeBatch(db);
@@ -1532,10 +1605,17 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
 
   // 6. Gebruikers koppeling van vanSlot naar naarSlot
   const gebruikersUpdates = state.gebruikers.filter(g => g.radioloog_id === vanSlot);
+  const gebruikersInvers = gebruikersUpdates.map(g => ({ id: g.id, radioloog_id: vanSlot }));
   for (const g of gebruikersUpdates) {
     await updateDoc(doc(db, 'gebruikers', g.id), { radioloog_id: naarSlot });
   }
+
+  return { roosterInvers, wensenInvers, gebruikersInvers };
 }
+// Herlaad-hook voor de mutatie-module: na een terugdraaiing wordt het
+// mutatie-logboek opnieuw geladen en de Beheer-view opnieuw getekend.
+window.__herlaadBeheer = renderGebView;
+
 // ==== App-instellingen handlers =============================================
 
 window.toggleJaaroverzicht = async function() {

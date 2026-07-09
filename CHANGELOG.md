@@ -1,3 +1,46 @@
+## v3.27.119 — Stoel-wijzigingen: inzichtelijk, terugdraaibaar, met impact-preview
+
+### Waarom
+Vervolg op 3.27.118. Wens: elke ingreep op een stoel — vervanging (Wissel),
+vertrek/pensioen en vast-in-dienst (→ Vast) — moet zichtbaar én terug te draaien
+zijn, en de planner moet vooraf de gevolgen zien wanneer er al gepland is.
+
+### Nieuw
+- **Terugdraaien van elke stoel-ingreep.** Nieuw module `bezetting-mutaties.js`
+  + collectie `bezetting_mutaties`. Elke Wissel, Vertrek, → Vast en Nieuwe stoel
+  legt vóór opslaan een record vast met een volledige snapshot van de betrokken
+  stoel-documenten, en bij → Vast bovendien de exacte inverse van de verplaatste
+  roosterdata (alleen de gewijzigde cellen: toewijzingen, vakantie-V, diensten,
+  wensen, gebruikerskoppeling). In de Beheer-tab staat "Recente stoel-wijzigingen"
+  met per ingreep een **Terugdraaien**-knop. Terugdraaien herstelt de snapshots
+  én de roosterdata, gevalideerd met de invariant-controle vóór opslaan. Alleen
+  de nieuwste ingreep per stoel is direct terug te draaien (undo-stack-volgorde).
+- **Tijdlijn-weergave.** Per stoel én per persoon (bv. GJG over meerdere stoelen
+  heen) een chronologisch overzicht van alle periodes: code, achternaam, van–tot,
+  en status (lopend / gepland / afgesloten). Knop "Tijdlijn" bij elke vaste stoel.
+- **Impact-preview voor de planner.** Bij Wissel, Vertrek en Terugdraaien toont de
+  app vóór bevestigen wat er vanaf de ingangsdatum al gepland staat op de stoel
+  (toewijzingen, vakantie-V, diensten, wensen), met een extra waarschuwing als er
+  dagen binnen 30 dagen bij zitten. → Vast had deze preview al.
+
+### Fixes
+- **Opvolging vs. vertrek.** Na een → Vast toonde de beheer-lijst de oude bezetter
+  (bv. BL) als "gepland vertrek" met een *Intrekken*-knop die faalde ("geen
+  vertrek om in te trekken"), terwijl er in werkelijkheid een opvolger klaarstond.
+  Nu toont de rij "opgevolgd door <code> per <datum>" zonder de misleidende knop.
+- **Senioriteit onbekend = rechts.** Een stoel waarvan de bezetter geen
+  in-dienstdatum heeft, sorteert nu achteraan (junior) i.p.v. de oude stoelrang
+  te erven. Een overnemer zonder ingevulde senioriteit (bv. een net vast-in-dienst
+  genomen waarnemer) blijft dus niet op de senior-plek van de vorige staan.
+
+### Let op (deployment)
+De nieuwe collectie vereist een regel in `firestore.rules` (meegeleverd:
+`bezetting_mutaties`, alleen beheerder). Deploy de bijgewerkte rules naar Firebase,
+anders kan het terugdraai-logboek niet worden weggeschreven (de ingreep zelf gaat
+wel door; alleen "Terugdraaien" is dan niet beschikbaar voor die ingreep).
+
+---
+
 ## v3.27.118 — Bezetting: betrouwbaarheid van de stoel-tijdlijn
 
 ### Waarom

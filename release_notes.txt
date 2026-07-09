@@ -1,46 +1,40 @@
-Rooster v3.27.118 — Release notes
+Rooster v3.27.119 — Release notes
 ==================================
 
-BEZETTING: BETROUWBAARHEID VAN DE STOEL-TIJDLIJN
+STOEL-WIJZIGINGEN: INZICHTELIJK, TERUGDRAAIBAAR, MET IMPACT-PREVIEW
 ----------------------------------------------------------------------------
-Aanleiding: na een "→ Vast"-migratie (waarnemer GJG per 1-1-2027 op de vaste
-stoel in plaats van BL) liepen weergaven uiteen en verdween een nieuw
-geplaatste waarnemer op het vrijgekomen W-slot na opslaan. De oorzaak was dat
-één stoel-tijdlijn niet overal consistent werd gelezen en geschreven. Deze
-versie maakt die tijdlijn de enige bron van waarheid en bewaakt de integriteit.
+Elke ingreep op een stoel — vervanging (Wissel), vertrek/pensioen en vast in
+dienst (→ Vast) — is nu zichtbaar in een tijdlijn én terug te draaien, en de
+planner ziet vooraf de gevolgen als er al gepland is.
 
-KRITIEKE FIX (INVOER VERDWEEN)
+NIEUW
 ----------------------------------------------------------------------------
-- Een nieuwe waarnemer op een W-slot dat al een historie had maar geen lopende
-  periode (bv. nadat de vorige waarnemer via "→ Vast" was doorgeschoven) werd
-  na opslaan niet meer getoond: alleen de top-level naam werd bewaard, terwijl
-  de weergave uit de historie leest. Het opslaan maakt nu een nieuwe lopende
-  periode aan vanaf vandaag, en sluit bij deactiveren een lopende periode af.
+- Terugdraaien: in de Beheer-tab staat "Recente stoel-wijzigingen" met per
+  ingreep een Terugdraaien-knop. Elke Wissel, Vertrek, → Vast en Nieuwe stoel
+  wordt vastgelegd met een volledige momentopname van vóór de ingreep; bij
+  → Vast ook de exacte roosterwijzigingen. Terugdraaien zet zowel de bezetting
+  als de verplaatste roosterdata precies terug, en wordt vóór opslaan
+  gevalideerd. Alleen de nieuwste ingreep per stoel is direct terug te draaien.
+- Tijdlijn: per stoel én per persoon (bv. GJG over meerdere stoelen heen) een
+  chronologisch overzicht van alle periodes met status lopend/gepland/afgesloten.
+  Knop "Tijdlijn" bij elke vaste stoel.
+- Impact-preview: bij Wissel, Vertrek en Terugdraaien laat de app vóór bevestigen
+  zien wat er vanaf die datum al gepland staat (toewijzingen, vakantie-V,
+  diensten, wensen), met extra waarschuwing voor dagen binnen 30 dagen.
 
-WEERGAVE-CONSISTENTIE
+FIXES
 ----------------------------------------------------------------------------
-- Het dagdetail, de cel-picker en de conflictlijst toonden soms een andere
-  bezetter dan het raster (raster BL, detail GJG) na een toekomstige wissel of
-  "→ Vast". Alle weergaven lezen nu datum-bewust wie er op die dag op de stoel
-  zit, in plaats van de rauwe (al vooruitlopende) top-level gegevens.
+- Opvolging vs. vertrek: na een → Vast toonde de beheer-lijst de oude bezetter
+  als "gepland vertrek" met een falende Intrekken-knop. Nu toont de rij
+  "opgevolgd door <code> per <datum>" zonder die misleidende knop.
+- Senioriteit onbekend = rechts: een stoel zonder ingevulde in-dienstdatum
+  sorteert nu achteraan (junior) in plaats van de rang van de vorige bezetter
+  te erven. Een net vast-in-dienst genomen waarnemer blijft dus niet links staan.
 
-BETROUWBAARHEID: INVARIANT-BEWAKING
+LET OP — DEPLOYMENT
 ----------------------------------------------------------------------------
-- Elke stoel is nu formeel één tijdlijn van niet-overlappende periodes met
-  hooguit één lopende periode. Elke wijziging (Wissel, → Vast, waarnemer
-  opslaan, Vertrek) controleert de nieuwe tijdlijn vóór opslaan en BLOKKEERT
-  bij overlap of een dubbele lopende periode — met een duidelijke melding.
-- Nieuwe knop "Controleer bezetting" in de Stoel-bezetting-tab: scant in één
-  klik alle stoelen en meldt problemen, of geeft groen licht.
-
-EXCEL
-----------------------------------------------------------------------------
-- Wisselingen midden in het jaar staan nu op een apart, volledig leesbaar blad
-  "Mutaties" (kolom, stoel, vorige bezetter, nieuwe bezetter, ingangsdatum),
-  in plaats van in een cel-opmerking op de kolomkop die door Excel werd
-  afgekapt. De import gebruikt dit blad niet en blijft het hoofdblad herkennen.
-
-ADVIES
-----------------------------------------------------------------------------
-Draai na het bijwerken eenmaal "Controleer bezetting" om te bevestigen dat de
-bestaande tijdlijnen schoon zijn. Corrigeer gemelde stoelen via Wissel/Vertrek.
+De terugdraai-functie gebruikt een nieuwe Firestore-collectie
+(bezetting_mutaties). Deploy de meegeleverde, bijgewerkte firestore.rules naar
+Firebase. Zonder die regel gaat een ingreep wél door, maar kan hij niet in het
+terugdraai-logboek worden vastgelegd (en dus niet via Terugdraaien ongedaan
+worden gemaakt). De app waarschuwt in dat geval.
