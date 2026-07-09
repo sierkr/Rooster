@@ -137,6 +137,8 @@ window.terugdraaiMutatie = async function(id) {
   if (imp.nabij) waarschuw += `\n\n⚠ LET OP: hiervan liggen ${imp.nabijeDagen.length} dag(en) binnen ${NEARTERM_DAGEN} dagen `
     + `(${imp.nabijeDagen.slice(0, 5).map(d => d.slice(5)).join(', ')}${imp.nabijeDagen.length > 5 ? ' …' : ''}). `
     + `Betrokkenen zien een al rondgestuurd rooster veranderen.`;
+  if (m.alleenTijdlijn) waarschuw += `\n\nLet op: deze ingreep staat alleen op tijdlijn-niveau in het logboek (backfill). `
+    + `Terugdraaien herstelt de bezetting van de stoel, maar zet eventueel eerder verplaatste roosterdata NIET automatisch terug.`;
   waarschuw += `\n\nDoorgaan?`;
   if (!confirm(waarschuw)) return;
 
@@ -174,6 +176,80 @@ window.terugdraaiMutatie = async function(id) {
   }
 };
 
+// ---- Backfill: bestaande overgangen alsnog registreren ----------------------
+// Reconstrueert voor elke overgang in de stoel-tijdlijnen die nog geen
+// logboek-record heeft, alsnog een mutatie-record met de gereconstrueerde
+// "voor"-situatie. Zo worden ook wijzigingen van vóór het logboek terugdraaibaar.
+// Idempotent (sleutel = stoel + ingangsdatum). alleenTijdlijn: reconstrueert de
+// stoel-tijdlijn, NIET eerder verplaatste roosterdata van een oude → Vast.
+let _backfillTeller = 0;
+
+function _bouwBackfill(seat, voorHist, datum, prev, cur, type) {
+  const laatste = voorHist[voorHist.length - 1] || {};
+  const voorDoc = JSON.parse(JSON.stringify(seat));
+  voorDoc.bezetting_historie = voorHist;
+  voorDoc.code = laatste.code || '';
+  voorDoc.achternaam = laatste.achternaam || '';
+  voorDoc.voornaam = laatste.voornaam || '';
+  voorDoc.in_dienst = laatste.in_dienst || null;
+  voorDoc.persoon_id = laatste.persoon_id || null;
+  voorDoc.actief = true;
+  const beschr = (type === 'vertrek')
+    ? `Bestaand vertrek op ${seat.id}: ${prev.code || ''} per ${formatDatum(datum, 'kort')} (backfill, alleen tijdlijn)`
+    : `Bestaande wijziging op ${seat.id}: ${prev.code || ''} → ${cur.code || ''} per ${formatDatum(datum, 'kort')} (backfill, alleen tijdlijn)`;
+  return {
+    type, stoelen: [seat.id], voor: { [seat.id]: voorDoc },
+    ingangsdatum: datum, backfill: true, alleenTijdlijn: true,
+    tijdstip: new Date(Date.now() + (_backfillTeller++)).toISOString(),
+    beschrijving: beschr,
+  };
+}
+
+window.registreerBestaandeWijzigingen = async function() {
+  const gedekt = new Set();
+  (state.bezettingMutaties || []).forEach(m => (m.stoelen || []).forEach(s => gedekt.add(s + '|' + (m.ingangsdatum || ''))));
+
+  const teMaken = [];
+  (state.radiologen || []).forEach(seat => {
+    const hist = Array.isArray(seat.bezetting_historie) ? seat.bezetting_historie : [];
+    if (hist.length === 0) return;
+    const P = hist.slice().sort((a, b) => (a.van || '0000-00-00') < (b.van || '0000-00-00') ? -1 : 1);
+    // Successies: elke nieuwe periode na de eerste is één overgang.
+    for (let i = 1; i < P.length; i++) {
+      const cur = P[i], prev = P[i - 1];
+      const datum = cur.van || '';
+      if (!datum || gedekt.has(seat.id + '|' + datum)) continue;
+      const voorHist = P.slice(0, i).map(p => ({ ...p }));
+      voorHist[voorHist.length - 1] = { ...voorHist[voorHist.length - 1], tot: null };
+      teMaken.push(_bouwBackfill(seat, voorHist, datum, prev, cur, 'wissel'));
+      gedekt.add(seat.id + '|' + datum);
+    }
+    // Trailing vertrek: laatste periode afgesloten, geen opvolger.
+    const laatste = P[P.length - 1];
+    if (laatste && laatste.tot) {
+      const datum = plusDagen(laatste.tot, 1);
+      if (!gedekt.has(seat.id + '|' + datum)) {
+        const voorHist = P.map(p => ({ ...p }));
+        voorHist[voorHist.length - 1] = { ...voorHist[voorHist.length - 1], tot: null };
+        teMaken.push(_bouwBackfill(seat, voorHist, datum, laatste, null, 'vertrek'));
+        gedekt.add(seat.id + '|' + datum);
+      }
+    }
+  });
+
+  if (teMaken.length === 0) { alert('Geen bestaande wijzigingen gevonden die nog niet in het logboek staan.'); return; }
+  if (!confirm(`${teMaken.length} bestaande stoel-wijziging(en) worden alsnog in het logboek geregistreerd, zodat je ze kunt terugdraaien.\n\n`
+    + `Let op: dit reconstrueert alleen de stoel-tijdlijn. Eerder verplaatste roosterdata van een oude → Vast wordt hiermee NIET teruggezet.\n\nDoorgaan?`)) return;
+  try {
+    let n = 0;
+    for (const rec of teMaken) { await registreerMutatie(rec); n++; }
+    alert(`${n} wijziging(en) geregistreerd. Je kunt ze nu terugdraaien via "Recente stoel-wijzigingen".`);
+    if (window.__herlaadBeheer) await window.__herlaadBeheer();
+  } catch (e) {
+    alert('Registreren mislukt: ' + (e.message || e));
+  }
+};
+
 // ---- Weergave: "Recente stoel-wijzigingen"-kaart ----------------------------
 export function renderRecenteMutaties() {
   const lijst = (state.bezettingMutaties || []).slice(0, 15);
@@ -199,6 +275,7 @@ export function renderRecenteMutaties() {
       <div class="summary-label" style="margin-bottom: 6px;">Recente stoel-wijzigingen</div>
       <div class="card">
         <p class="muted" style="margin:0 0 10px;">Elke vervanging, vertrek of vast-in-dienst is hier terug te draaien. Alleen de nieuwste wijziging per stoel is direct terug te draaien; draai zo nodig eerst een nieuwere wijziging terug. Corrigeren = terugdraaien en opnieuw uitvoeren met de juiste datum.</p>
+        <button class="btn" style="width:100%; margin-bottom:10px; font-size:11px; opacity:0.9;" onclick="window.registreerBestaandeWijzigingen()" title="Reconstrueer bestaande overgangen die vóór het logboek ontstonden">➕ Bestaande wijzigingen registreren</button>
         ${rijen}
       </div>
     </div>

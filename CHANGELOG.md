@@ -1,3 +1,24 @@
+## v3.27.122 — Backfill bestaande wijzigingen + Mutaties-blad read-only
+
+### Nieuw
+- **Backfill "Bestaande wijzigingen registreren".** Knop in de kaart "Recente
+  stoel-wijzigingen". Reconstrueert voor elke overgang in de stoel-tijdlijnen die
+  nog geen logboek-record heeft, alsnog een mutatie-record met de gereconstrueerde
+  situatie van ervóór — zodat óók wijzigingen die vóór het logboek ontstonden
+  (zoals een bestaande BL→GJG-opvolging) terug te draaien zijn. Idempotent
+  (sleutel = stoel + ingangsdatum). Zulke records zijn gemarkeerd als
+  "alleen tijdlijn": terugdraaien herstelt de stoel-tijdlijn, maar zet eventueel
+  eerder verplaatste roosterdata van een oude → Vast NIET automatisch terug —
+  dat staat ook in de terugdraai-bevestiging.
+
+### Fix
+- **export.js — Mutaties-blad read-only + info-banner.** Het blad "Mutaties" is nu
+  beschermd (read-only) en heeft bovenaan een duidelijke banner: "Alleen ter info —
+  wijzigingen doen in de app, niet in dit blad." Selecteren/kopiëren blijft mogelijk;
+  het blad wordt bij elke export opnieuw opgebouwd en bij import genegeerd.
+
+---
+
 ## v3.27.121 — Stoel-koppeling alleen voor radioloog/beheerder
 
 ### Waarom

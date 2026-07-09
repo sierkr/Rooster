@@ -810,33 +810,52 @@ export async function actExportJaar(jaar, naamParam) {
 
     const mutWs = wb.addWorksheet('Mutaties');
     mutWs.columns = [
-      { header: 'Kolom',          key: 'kolom', width: 10 },
-      { header: 'Stoel-ID',       key: 'stoel', width: 12 },
-      { header: 'Van (vorige bezetter)', key: 'van',  width: 26 },
-      { header: 'Naar (nieuwe bezetter)', key: 'naar', width: 26 },
-      { header: 'Per datum',      key: 'per',   width: 13 },
+      { key: 'kolom', width: 10 },
+      { key: 'stoel', width: 12 },
+      { key: 'van',   width: 26 },
+      { key: 'naar',  width: 26 },
+      { key: 'per',   width: 13 },
     ];
-    const mutHead = mutWs.getRow(1);
+    // Rij 1: duidelijke "alleen ter info"-banner over de volle breedte.
+    mutWs.mergeCells('A1:E1');
+    const mutBanner = mutWs.getCell('A1');
+    mutBanner.value = '⚠ Alleen ter info — wijzigingen doen in de app, niet in dit blad. '
+      + 'Dit overzicht wordt bij elke export opnieuw opgebouwd en bij import genegeerd.';
+    mutBanner.font = { bold: true, color: { argb: 'FF6B3A00' }, size: 10 };
+    mutBanner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF4E0' } };
+    mutBanner.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    mutWs.getRow(1).height = 28;
+    // Rij 2: kolomkoppen.
+    const mutKoppen = ['Kolom', 'Stoel-ID', 'Van (vorige bezetter)', 'Naar (nieuwe bezetter)', 'Per datum'];
+    const mutHead = mutWs.getRow(2);
     mutHead.height = 18;
-    for (let ci = 1; ci <= 5; ci++) {
-      const cel = mutHead.getCell(ci);
+    mutKoppen.forEach((h, i) => {
+      const cel = mutHead.getCell(i + 1);
+      cel.value = h;
       cel.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
       cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
       cel.alignment = { horizontal: 'left', vertical: 'middle' };
       cel.border = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
-    }
+    });
+    // Data vanaf rij 3.
+    let mutRij = 3;
     if (mutaties.length === 0) {
-      mutWs.addRow({ kolom: '', stoel: '', van: `Geen wisselingen in ${jaar}.`, naar: '', per: '' });
+      mutWs.getCell(`C${mutRij}`).value = `Geen wisselingen in ${jaar}.`;
     } else {
       mutaties.forEach(m => {
-        const rij = mutWs.addRow({
-          kolom: m.kolom, stoel: m.stoel, van: m.van, naar: m.naar,
-          per: m.per ? new Date(m.per + 'T12:00:00') : '',
-        });
-        if (m.per) rij.getCell(5).numFmt = 'DD-MM-YYYY';
+        const rij = mutWs.getRow(mutRij);
+        rij.getCell(1).value = m.kolom;
+        rij.getCell(2).value = m.stoel;
+        rij.getCell(3).value = m.van;
+        rij.getCell(4).value = m.naar;
+        if (m.per) { rij.getCell(5).value = new Date(m.per + 'T12:00:00'); rij.getCell(5).numFmt = 'DD-MM-YYYY'; }
+        mutRij++;
       });
     }
-    mutWs.views = [{ state: 'frozen', ySplit: 1 }];
+    mutWs.views = [{ state: 'frozen', ySplit: 2 }];
+    // Read-only: alle cellen zijn standaard 'locked'; met bescherming aan kan er
+    // niet in getypt worden. Selecteren en kopiëren blijft mogelijk.
+    await mutWs.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
     // ---- Watermerk _RoosterApp ----------------------------------------------
     // Verborgen blad waaraan de import een app-export herkent, onafhankelijk

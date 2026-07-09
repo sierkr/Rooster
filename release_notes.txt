@@ -1,11 +1,18 @@
-Rooster v3.27.121 — Release notes
+Rooster v3.27.122 — Release notes
 ==================================
 
-STOEL-KOPPELING ALLEEN VOOR RADIOLOOG/BEHEERDER
+BACKFILL BESTAANDE WIJZIGINGEN + MUTATIES-BLAD READ-ONLY
 ----------------------------------------------------------------------------
-Technici en secretariaat kunnen nooit een stoel bezetten. Het veld
-"Gekoppeld aan" wordt daarom nu alleen getoond wanneer de rol radioloog of
-beheerder is, in zowel het scherm "Nieuwe gebruiker" als "Rol wijzigen". Het
-veld schakelt live mee als je de rol in datzelfde scherm verandert. Bij opslaan
-wordt de koppeling hard op "geen" gezet zodra de rol geen stoel-rol is, zodat
-een bestaande technicus/secretariaat nooit een verweesde koppeling houdt.
+- Nieuwe knop "Bestaande wijzigingen registreren" in de kaart "Recente
+  stoel-wijzigingen". Die reconstrueert voor bestaande overgangen in de
+  stoel-tijdlijnen alsnog een logboek-record, zodat ook wijzigingen die vóór
+  het terugdraai-logboek ontstonden (zoals een bestaande BL->GJG-opvolging)
+  terug te draaien zijn. Idempotent: al geregistreerde wijzigingen worden
+  overgeslagen. Deze records zijn gemarkeerd als "alleen tijdlijn": terugdraaien
+  herstelt de stoel-tijdlijn, maar zet eerder verplaatste roosterdata van een
+  oude -> Vast niet automatisch terug (dat staat ook in de bevestiging).
+
+- Het Excel-blad "Mutaties" is nu read-only en heeft bovenaan een duidelijke
+  melding: "Alleen ter info - wijzigingen doen in de app, niet in dit blad."
+  Selecteren en kopieren blijft mogelijk. Het blad wordt bij elke export opnieuw
+  opgebouwd en bij import genegeerd; wijzigingen erin hebben geen effect.
