@@ -1,3 +1,253 @@
+## v3.27.117 — Excel-round-trip: twee dataverlies-bugs opgelost + consistentie-fixes
+
+### Waarom
+Een volledige code-review van de Excel-keten (export.js ⇄ import.js) legde twee
+ernstige dataverlies-bugs in de import bloot, plus een reeks inconsistenties
+tussen app en Excel. Alles in deze release is daarop gericht: de round-trip
+export → (bewerken in Excel) → import is nu verliesvrij voor alle velden die
+niet in het Excel-bestand zitten.
+
+### Kritieke fixes (dataverlies)
+- **import.js — import wiste vakantie_v en avond/nachtdiensten.** De import
+  schreef elk indeling-doc volledig opnieuw (`batch.set` zonder veldbehoud),
+  terwijl de export `vakantie_v` (Vakantie-tab) en `dienst.avond`/`dienst.nacht`
+  niet bevat. Eén export→import-cyclus wiste dus stilzwijgend een heel jaar aan
+  vakantieregistraties. De import behoudt nu alle app-only velden van het
+  bestaande doc; Excel blijft leidend voor toewijzingen, dienst.dag,
+  bespreking, interventie, dag-opmerking en cel-opmerkingen.
+- **import.js — kolomkop-botsing 'S' corrumpeerde dag-opmerkingen.** De headers
+  van de datakolommen (P/Q/R/S) kunnen samenvallen met de headers van de
+  functie-indicatorkolommen rechts van 'Aantal' (bv. indicator 'S' van
+  Saendelft). De header-scan liep over de volle breedte en liet de láátste
+  match winnen, waardoor kolOpm naar de indicatorkolom versprong en alle
+  dag-opmerkingen bij import werden vervangen door formule-restwaarden ("S").
+  De scan stopt nu bij 'Aantal' en de eerste match wint.
+
+### Fixes (correctheid / consistentie)
+- **helpers.js — `bezettingOpDatum` pakt nu de entry met de laatste van-datum**
+  i.p.v. de eerste array-match. Dit was de oorzaak van de shadowing-bug waarbij
+  een stoel-ID-literal (bv. "W1") als kolomkop verscheen i.p.v. de juiste
+  initialen. Nieuwe canonieke helpers: `laatsteEntry()` en
+  `clipHistorieVoorWissel()`.
+- **gebruikers.js — Wissel en →Vast clippen nu de volledige historie** per de
+  dag vóór de ingangsdatum (open entries gesloten, overlappende gesloten
+  entries geclipt, entries die op/ná de datum beginnen vervallen). Oude
+  periodes kunnen een nieuwe bezetter niet meer overschaduwen. De drie
+  gedupliceerde "zoek laatste entry"-loops zijn vervangen door `laatsteEntry()`.
+- **helpers.js — `bezettingenInRange` respecteert nu `actief === false`** voor
+  W-slots zonder historie (zelfde leeg-check als `bezettingOpDatum`). Een leeg,
+  inactief W-slot krijgt geen exportkolom met de slot-ID als kop meer.
+- **export.js + import.js — watermerk werkend gemaakt.** De export schrijft nu
+  een verborgen `_RoosterApp`-blad; de import herkende dat al maar het werd
+  nooit geschreven. De named-range-check in de import las bovendien het niet-
+  bestaande `wb.Defined` — gecorrigeerd naar `wb.Workbook.Names` (SheetJS).
+- **export.js — hardcoded fallback-kolommapping verwijderd.** Zonder geladen
+  state blokkeert de export nu expliciet i.p.v. terug te vallen op een
+  verouderde code→stoel-tabel die na wissels een verkeerd bestand opleverde.
+- **validatie.js — bezetting-normen tellen nu ook W-slots mee**, dezelfde
+  telbasis als de Excel-export (alle radioloogkolommen). App en Excel kleuren
+  nu dezelfde dagen rood. (Keuze bevestigd: een waarnemer vult de bezetting in.)
+- **import.js — rechten-check op rol i.p.v. permissie.** De Firestore-rules
+  staan indeling-writes alleen toe aan rol 'beheerder'; de oude
+  `magGebruikersBeheren()`-check kon halverwege de batch stranden met een half
+  geïmporteerde staat.
+- **backup-client.js — `vakantie_rankings` toegevoegd aan de backup.** Die
+  collectie ontbrak; een restore verloor de vakantie-rangorde. ('wijzigingen'
+  blijft bewust buiten de backup: de rules maken de audit-log append-only.)
+- **save.js + import.js — wens-matching gecentraliseerd** in helpers.js
+  (`wensMatcht`), voorheen drie losse kopieën met drift-risico.
+- **import.js — wijzigingen-docs via échte writeBatch** (auto-id docs) i.p.v.
+  400 losse addDoc-calls.
+
+### Bekende, gedocumenteerde beperking
+- Bij multi-code cellen ("V,K") telt Excel alleen de eerste code mee in de
+  formules; de app telt alle codes. Volledige formule-pariteit is bewust niet
+  gebouwd (onleesbare formules); verschil is alleen zichtbaar bij dubbele codes.
+
+### Bestanden
+`app/helpers.js`, `app/import.js`, `app/export.js`, `app/save.js`,
+`app/validatie.js`, `app/backup-client.js`, `app/views/gebruikers.js`,
+`config.js`, `sw.js`.
+
+---
+
+## v3.27.116 — Beheer: nieuwe-stoel als losse actie, waarnemer-databug en dubbele senioriteitslogica opgelost
+
+### Waarom
+Na het testen van v3.27.115 kwamen vier verwante problemen naar boven in de
+Beheer-tab (Stoel bezetting):
+1. Een nieuwe vaste stoel aanmaken kon alleen via een verstopte optie in de
+   →Vast-dropdown van een waarnemer — niet vindbaar als je nog geen waarnemer
+   had aangemaakt.
+2. Er waren twee losse, niet nader toegelichte manieren om iemand op een
+   vaste stoel te zetten (Wissel en →Vast), met verschillend gedrag.
+3. Een leeg code-veld bij een waarnemer werd bij "Waarnemers opslaan"
+   stilzwijgend vervangen door de letterlijke slot-ID (bv. "W4"), die daarna
+   als échte data bleef staan.
+4. Een waarnemer die via →Vast met een ingangsdatum in de toekomst werd
+   vastgemaakt, verdween meteen uit de Waarnemers-lijst — maanden vóór de
+   wissel daadwerkelijk inging.
+
+Daarnaast bleek de senioriteits-sorteerformule (bepaalt kolomvolgorde in
+Overzicht/Afdeling én Excel-export) dubbel geïmplementeerd: identiek in
+gedrag, maar in twee losse stukken code die zonder waarschuwing uit elkaar
+hadden kunnen groeien.
+
+### Fixes
+- **Gebruikers.js**: nieuwe knop "➕ Nieuwe stoel aanmaken" bij Vaste
+  radiologen — een eigen, vindbare sheet om een radioloog op een gloednieuwe
+  vaste stoel te zetten, los van de waarnemer-flow. De "➕ Nieuwe stoel"-optie
+  in de →Vast-dropdown van een waarnemer blijft bestaan voor het andere
+  gebruik: een bestaande waarnemer vast in dienst nemen mét behoud van diens
+  indeling.
+- **Gebruikers.js**: toelichtende tekst bij Vaste radiologen en Waarnemers
+  aangescherpt om het verschil tussen Wissel (nieuwe persoon, geen migratie)
+  en →Vast (bestaande waarnemer, migreert mét indeling/wensen/diensten)
+  expliciet te maken.
+- **Gebruikers.js**: `opslaanInvallers` schrijft een leeg code-veld nu ook
+  echt leeg weg (nooit meer de slot-ID als code). Een waarnemer die op
+  "actief" staat zonder code kan niet meer opgeslagen worden — duidelijke
+  foutmelding i.p.v. stille datavervuiling.
+- **Gebruikers.js**: de Waarnemers-lijst toont de huidige bezetter nu altijd
+  via `bezettingOpDatum(slotId, vandaag)` in plaats van de rauwe top-level
+  velden. Die velden worden bij een →Vast-migratie al direct leeggemaakt,
+  ook bij een toekomstige ingangsdatum — de historie houdt daarentegen wél
+  rekening met de datum, dus de waarnemer blijft nu zichtbaar tot de wissel
+  écht ingaat.
+- **Helpers.js**: nieuwe canonieke functies `senioriteitSortKey`,
+  `vasteIdxVoorStoel` en `vergelijkOpSenioriteit` — de enige plek waar de
+  senioriteits-sorteerformule nog staat. `vasteRadsOpDatum` gebruikt ze nu
+  intern.
+- **Export.js**: de eigen, dubbel geïmplementeerde sorteerformule is vervangen
+  door aanroepen van dezelfde canonieke functies uit `helpers.js`. Gedrag is
+  ongewijzigd (zelfde formule, zelfde uitkomst), maar kolomvolgorde in
+  Overzicht/Afdeling en Excel-export kan nu niet meer stilzwijgend uit elkaar
+  lopen na een toekomstige wijziging.
+
+### Let op — bestaande datavervuiling
+Als een waarnemer-slot al vóór deze versie leeg opgeslagen is met code = de
+slot-ID (bv. "W4" als code, waarnemer op "inactief"), verdwijnt dat in de
+weergave vanzelf zodra de W-stoel op "inactief" staat (zie fix hierboven).
+Staat zo'n vervuilde rij per ongeluk wél op "actief" met een echte
+achternaam: eenmalig het code-veld corrigeren en op "Waarnemers opslaan"
+klikken — de bug komt na deze versie niet meer terug.
+
+### Upgrade
+1. Vervang `app/views/gebruikers.js`, `app/helpers.js`, `app/export.js`,
+   `config.js` en `sw.js`.
+2. Hard refresh (versie is nu 3.27.116).
+
+## v3.27.115 — "Gebruikers"-tab herzien naar "Beheer" met drie sub-tabs
+
+### Waarom
+De Gebruikers-tab bundelde drie verschillende zaken (stoelbezetting,
+inlogaccounts en losse instellingen) in één lange lijst, wat verwarrend werkte.
+Vooral het onderscheid tussen roosterpersonen (radiologen/waarnemers) en
+inlogaccounts (ook technici en secretariaat) was onduidelijk.
+
+### Wat is er veranderd (alleen presentatie/indeling; datamodel ongewijzigd)
+- De tab "Gebruikers" heet nu **Beheer**.
+- Beheer heeft drie sub-tabs:
+  1. **Stoel bezetting** — vaste radiologen en waarnemers, ongewijzigd.
+  2. **App gebruikers** — de bestaande accounts, met onder-tabs Radiologen,
+     Technici en Secretariaat. Alleen radiologen kunnen aan een stoel gekoppeld
+     worden; een radioloog die ook beheerder is, staat als "Radioloog,
+     beheerder". "+ Nieuw" per onder-tab vult de juiste rol alvast in.
+  3. **Control** — met onder-tabs Regels (de voormalige aparte Regels-tab, nu
+     hierheen verplaatst) en Overige instellingen (Excel-import, Excel-export,
+     database-backup, app-instellingen en gegevensbeheer).
+- De aparte "Regels"-tab in de hoofdnavigatie is vervallen en zit nu in Beheer.
+  De Beheer-tab is zichtbaar zodra de gebruiker gebruikers- óf regels-rechten
+  heeft; onder-tabs verschijnen alleen waar de gebruiker rechten voor heeft.
+
+### Upgrade
+1. Vervang `app/views/gebruikers.js`, `app/views/regels.js`, `app/main.js`,
+   `index.html`, `config.js` en `sw.js`.
+2. Hard refresh (versie is nu 3.27.115).
+
+## v3.27.114 — Oude versie bleef actief op iPhone (PWA-update)
+
+### Waarom
+Op de iPhone bleef de oude versie van de app soms actief, ook na een nieuwe
+release. Twee oorzaken: (1) de app vroeg zelf nooit actief om een update, en
+Safari op iOS controleert daar uit zichzelf zelden op — een PWA vanaf het
+beginscherm wordt vaak hervat vanuit een snapshot i.p.v. echt herladen; (2) bij
+het precachen van een nieuwe versie kon de browser bestanden uit zijn eigen
+HTTP-cache teruggeven, waardoor een "nieuwe" service worker toch oude bestanden
+opsloeg.
+
+### Fixes
+- **sw.js**: precache haalt elk bestand nu op met `cache: 'reload'`, dus altijd
+  rechtstreeks van de server, nooit uit de HTTP-cache.
+- **index.html**: service worker geregistreerd met `updateViaCache: 'none'`, en
+  de app vraagt nu zelf actief om een update — bij het laden én telkens wanneer
+  de app weer op de voorgrond komt (app-wissel, ontgrendelen, terugkeren naar de
+  PWA). Zodra een nieuwe versie actief wordt, herlaadt de app eenmalig voor
+  verse bestanden.
+
+### Upgrade
+1. Vervang `sw.js`, `index.html` en `config.js`.
+2. Hard refresh (versie is nu 3.27.114). Let op: doordat dit juist de
+   update-afhandeling zélf betreft, kan het op een iPhone die nog op een oude
+   versie staat éénmalig nodig zijn de PWA te sluiten en opnieuw te openen (of
+   in Safari te herladen) om de nieuwe service worker op te pikken.
+   Vanaf deze versie werkt het daarna automatisch.
+
+## v3.27.113 — Backup: "Maximum call stack size exceeded" bij grote database opgelost
+
+### Waarom
+"Nu backup maken" gaf de foutmelding "Backup mislukt: Maximum call stack size
+exceeded" en downloadde niets. Oorzaak: `base64Encode()` in
+`app/backup-client.js` zette de versleutelde backup in één keer om via
+`String.fromCharCode(...bytes)`. Bij een kleine database werkt dat, maar
+JavaScript-engines hebben een harde limiet op het aantal argumenten in één
+functieaanroep. Na lange tijd gebruik (meer radiologen, indelingen en
+historie) is de backup groot genoeg om die limiet te overschrijden, waardoor
+elke backup faalde — en dus ook de automatische backup vóór een Excel-import.
+
+### Fix
+- **Backup-client.js**: `base64Encode()` verwerkt de data nu in blokken van
+  32.768 bytes in plaats van in één keer, ongeacht hoe groot de database is.
+  Functioneel identiek resultaat, geen limiet meer op de databasegrootte.
+
+### Upgrade
+1. Vervang `app/backup-client.js`, `config.js` en `sw.js`.
+2. Hard refresh (versie is nu 3.27.113).
+
+## v3.27.112 — Excel-export: volledig jaar, senioriteitsvolgorde en herleidbare kolomkoppen
+
+### Waarom
+De Excel-export toonde bij een nieuw kalenderjaar alleen de al ingevulde dagen
+i.p.v. het hele jaar. Daarnaast gebruikte de export een vaste, hardgecodeerde
+kolomvolgorde (stoel-ID) i.p.v. de senioriteitsvolgorde die de rest van de app
+al gebruikt, waardoor een nieuwe radioloog op een seniore stoel niet naar
+rechts verschoof zoals in de app. Tot slot bleef bij een stoelwissel of een
+waarnemer die "→ Vast" ging, de kolomkop het hele jaar op één naam staan, ook
+voor de dagen van de vorige bezetter.
+
+### Fixes
+- **Export.js**: alle kalenderdagen van het gekozen jaar worden nu geëxporteerd,
+  ook dagen zonder Firestore-document (leeg = nog geen indeling).
+- **Export.js**: kolomvolgorde is nu gebaseerd op dezelfde senioriteits-logica
+  (`in_dienst`-datum van de huidige bezetter) als Overzicht/Afdeling, i.p.v. een
+  vaste stoel-ID-volgorde. Waarnemer-slots (W5..W1) blijven na de vaste stoelen
+  staan, in vaste volgorde.
+- **Export.js**: kolomkop is nu datum-bewust — bij een stoel/slot met meerdere
+  bezetters in het geëxporteerde jaar (wissel, of waarnemer → vaste stoel)
+  wordt een Excel-notitie op de kolomkop gezet met de volledige tijdlijn
+  (wie zat wanneer op deze stoel), zodat altijd herleidbaar blijft wie je op
+  welke dag hebt ingedeeld.
+- **Gebruikers.js**: het invullen van code/achternaam van een waarnemer via de
+  simpele Waarnemers-tabel wordt nu ook doorgeschreven naar de open
+  bezetting_historie-entry van die stoel. Voorheen kon dit stilzwijgend genegeerd
+  worden door de weergave zodra een stoel ooit gewisseld of gemigreerd was,
+  omdat de weergave altijd voorrang geeft aan de historie-entry boven het
+  top-level veld.
+
+### Upgrade
+1. Vervang `app/export.js`, `app/views/gebruikers.js` en `config.js`.
+2. Hard refresh (versie is nu 3.27.112).
+
 ## v3.27.111 — Backups geblokkeerd in de testomgeving
 
 ### Waarom

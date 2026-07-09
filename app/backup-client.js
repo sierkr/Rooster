@@ -13,9 +13,13 @@ import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/fireba
 import { db, IS_TEST_DB } from './firebase-init.js';
 import { state } from './state.js';
 
+// 'wijzigingen' zit er bewust NIET in: de Firestore-rules maken de audit-log
+// append-only (create eist uid == eigen uid, geen updates/deletes), dus een
+// restore van die collectie zou tegen de rules stranden.
 const BACKUP_COLLECTIES = [
   'radiologen', 'functies', 'indeling', 'wensen',
   'gebruikers', 'instellingen', 'validatie_regels', 'besprekingen',
+  'vakantie_rankings',
 ];
 
 function tijdstempel() {
@@ -36,7 +40,17 @@ function downloadBlob(inhoud, bestandsnaam) {
 // ---- Crypto helpers ---------------------------------------------------------
 
 function base64Encode(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+  // Bytes in vaste blokken verwerken i.p.v. in één keer spreaden: bij een grote
+  // backup (veel radiologen/indelingen/historie) overschrijdt
+  // String.fromCharCode(...bytes) anders de argumentenlimiet van de engine,
+  // wat zich uitte als "Maximum call stack size exceeded".
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000; // 32768 bytes per stuk, ruim onder elke argumentenlimiet
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 function base64Decode(str) {
   return Uint8Array.from(atob(str), c => c.charCodeAt(0));

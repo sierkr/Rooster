@@ -2,7 +2,7 @@
 import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
-import { functiesMap, defaultFunctieFlags, magGebruikersBeheren, isHoofd, functieFlags } from '../helpers.js';
+import { functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags } from '../helpers.js';
 
 
 // Eenmalige migratie: corrigeer werkvloer-waarden die door oude code fout zijn opgeslagen.
@@ -26,7 +26,8 @@ async function migrateerWerkvloer() {
 
 export function renderRegView() {
   const container = document.getElementById('view-reg');
-  if (!magGebruikersBeheren()) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
+  if (!container) return;
+  if (!magGebruikersBeheren() && !magRegelsBeheren()) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
   migrateerWerkvloer().catch(console.error);
 
   const regels = state.validatieRegels;

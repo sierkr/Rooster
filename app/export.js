@@ -21,9 +21,13 @@
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
-import { state, HOOFD_FUNCTIES } from './state.js';
-import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
-import { isHoofd, functieFlags, kolomNaarRadId, hoofdLetterCode } from './helpers.js';
+import { state, HOOFD_FUNCTIES, SLOTS } from './state.js';
+import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM } from './import.js';
+import {
+  isHoofd, functieFlags, hoofdLetterCode, plusDagen, vandaagIso, huidigKalenderJaar,
+  bezettingOpDatum, bezettingenInRange, alleVasteStoelIds,
+  senioriteitSortKey, vasteIdxVoorStoel, vergelijkOpSenioriteit,
+} from './helpers.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -372,27 +376,84 @@ export async function actExportJaar(jaar, naamParam) {
       where('datum', '<=', `${jaar}-12-31`)
     );
     const snap = await getDocs(q);
-    const dagen = snap.docs
-      .map(d => d.data())
-      .sort((a, b) => a.datum.localeCompare(b.datum));
+    const dagenMap = new Map();
+    snap.docs.forEach(d => { const data = d.data(); dagenMap.set(data.datum, data); });
 
-    if (!dagen.length) {
-      alert(`Geen indeling-data gevonden voor ${jaar}.`);
-      return;
+    // Alle kalenderdagen van het jaar opbouwen — ook dagen zonder Firestore-
+    // document (nieuw jaar, nog niets ingevuld) krijgen een lege placeholder-rij
+    // zodat het hele jaar in de export staat, niet alleen de ingevulde dagen.
+    const dagen = [];
+    for (let d = `${jaar}-01-01`; d <= `${jaar}-12-31`; d = plusDagen(d, 1)) {
+      dagen.push(dagenMap.get(d) || { datum: d });
     }
 
     const kleurenMap = bouwKleurenMap();
-    const VASTE_VOLGORDE = ['L','P','V','F','K','H','S','J','W5','W4','W3','W2','W1'];
-    const dynKolomMap = Object.keys(kolomNaarRadId()).length > 0
-      ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
-    const radKolommen = Object.keys(dynKolomMap).sort((a, b) => {
-      const ia = VASTE_VOLGORDE.indexOf(dynKolomMap[a]);
-      const ib = VASTE_VOLGORDE.indexOf(dynKolomMap[b]);
-      if (ia >= 0 && ib >= 0) return ia - ib;
-      if (ia >= 0) return -1;
-      if (ib >= 0) return 1;
-      return a.localeCompare(b);
+
+    // ---- Kolommen (vaste stoelen + waarnemers), datum-bewust op senioriteit -
+    // Kolomvolgorde en kolomkop identiek aan hoe de app dit toont (Overzicht/
+    // Afdeling): gesorteerd op de in_dienst-datum van de HUIDIGE bezetter, met
+    // de waarnemer-slots (W5..W1) vast na de vaste stoelen. Een stoel/slot
+    // krijgt een kolom zodra hij in dit jaar minstens één bezetter heeft gehad
+    // — ook als die inmiddels via "→ Vast" is doorgeschoven.
+    const jaarStart = `${jaar}-01-01`;
+    const jaarEind  = `${jaar}-12-31`;
+    const REFDATUM  = (String(jaar) === String(huidigKalenderJaar())) ? vandaagIso() : jaarEind;
+    // Zonder geladen state is er geen betrouwbare, datum-bewuste kolominfo.
+    // Blokkeer dan expliciet — vroeger viel de export terug op een hardcoded
+    // code→stoel-mapping, wat na wissels/nieuwe stoelen stilzwijgend een
+    // verkeerd bestand opleverde.
+    if ((state.radiologen || []).length === 0) {
+      alert('Radiologen zijn nog niet geladen — open de app volledig en probeer de export opnieuw.');
+      return;
+    }
+
+    const kandidaten = [...alleVasteStoelIds(), ...SLOTS];
+    const kolomEntries = kandidaten
+        .map(id => {
+          const bezetters = bezettingenInRange(id, jaarStart, jaarEind);
+          if (bezetters.length === 0) return null; // niet bezet dit jaar → geen kolom
+          const huidig  = bezettingOpDatum(id, REFDATUM);
+          const laatste = bezetters[bezetters.length - 1];
+          const bez     = huidig || laatste;
+          const isSlot  = SLOTS.includes(id);
+          // Zelfde senioriteits-formule als Overzicht/Afdeling (helpers.js) —
+          // niet hier opnieuw uitgeschreven, om te voorkomen dat de
+          // kolomvolgorde in Excel ooit stilzwijgend afwijkt van de app.
+          const sortKey = senioriteitSortKey(id, bez?.in_dienst);
+          const idx     = vasteIdxVoorStoel(id);
+          let notitie = null;
+          if (bezetters.length > 1) {
+            notitie = 'Bezetters in ' + jaar + ':\n' + bezetters.map(b => {
+              const van = b.van ? b.van.split('-').reverse().join('-') : 'begin';
+              const tot = b.tot ? b.tot.split('-').reverse().join('-') : 'heden';
+              return `${b.code || id} · ${b.achternaam || ''} (${van} – ${tot})`;
+            }).join('\n');
+          }
+          return { id, isSlot, idx, sortKey, code: bez?.code || id, notitie };
+        })
+        .filter(Boolean);
+
+    // Vaste stoelen eerst (op senioriteit, via dezelfde canonieke functie als
+    // Overzicht/Afdeling), waarnemer-slots daarna (vaste W5..W1-volgorde).
+    kolomEntries.sort((a, b) => {
+      if (a.isSlot !== b.isSlot) return a.isSlot ? 1 : -1;
+      if (a.isSlot && b.isSlot) return SLOTS.indexOf(a.id) - SLOTS.indexOf(b.id);
+      return vergelijkOpSenioriteit(a, b);
     });
+
+    // Kolomkop-strings uniek maken (zeldzaam randgeval: twee kolommen met
+    // toevallig dezelfde code) zodat er nooit twee kolommen op dezelfde header
+    // samenvallen in dynKolomMap.
+    const gebruikteHeaders = new Set();
+    kolomEntries.forEach(e => {
+      let header = e.code || e.id;
+      if (gebruikteHeaders.has(header)) header = `${header} (${e.id})`;
+      gebruikteHeaders.add(header);
+      e.header = header;
+    });
+
+    const radKolommen = kolomEntries.map(e => e.header);
+    const dynKolomMap = Object.fromEntries(kolomEntries.map(e => [e.header, e.id]));
     // Kolom-indices (1-based in ExcelJS) — volledig dynamisch op basis van aantal radiologen:
     // 1=Dag, 2=Datum, 3..(2+n)=rads, (3+n)=Dienst, (4+n)=Bespr, (5+n)=Interv, (6+n)=Opm,
     // (7+n)=Aantal, (8+n)=Spacer, (9+n)..=functie-indicatoren
@@ -498,6 +559,16 @@ export async function actExportJaar(jaar, naamParam) {
     aantalHeaderCel.font  = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
     aantalHeaderCel.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
     aantalHeaderCel.border = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
+
+    // Kolomkop-notitie: als een stoel/slot in dit jaar meerdere bezetters had
+    // (wissel, of waarnemer → vaste stoel), staat de volledige tijdlijn in een
+    // Excel-notitie op de kolomkop, zodat altijd herleidbaar blijft wie je op
+    // welke dag daadwerkelijk hebt ingedeeld.
+    kolomEntries.forEach((entry, i) => {
+      if (!entry.notitie) return;
+      const cel = headerRij.getCell(3 + i);
+      cel.note = { texts: [{ text: entry.notitie }] };
+    });
 
     // ---- Bevroren rij 1 + kolommen A+B -------------------------------------
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1, topLeftCell: 'C2', activePane: 'bottomRight' }];
@@ -684,6 +755,16 @@ export async function actExportJaar(jaar, naamParam) {
     // ---- Activiteit-sheet ---------------------------------------------------
     // Activiteit-sheet tijdelijk uitgeschakeld (formule-bugs in sheet2)
     // voegActiviteitSheetToe(wb, sheetNaam, radKolommen, dynKolomMap, COL_DIENST, excelRij - 1);
+
+    // ---- Watermerk _RoosterApp ----------------------------------------------
+    // Verborgen blad waaraan de import een app-export herkent, onafhankelijk
+    // van de sheetnaam. (Een named range is met SheetJS lastig betrouwbaar te
+    // lezen; een verborgen sheet is triviaal detecteerbaar via wb.SheetNames.)
+    const wmWs = wb.addWorksheet('_RoosterApp');
+    wmWs.state = 'hidden';
+    wmWs.getCell('A1').value = 'RoosterApp';
+    wmWs.getCell('A2').value = `versie ${window.APP_VERSIE || ''}`;
+    wmWs.getCell('A3').value = `geëxporteerd ${new Date().toISOString()}`;
 
     // ---- Verborgen kolom-mapping (code → stoel-id) --------------------------
     // Vastgelegd zoals geldig op het moment van export. Hiermee koppelt de

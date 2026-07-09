@@ -2,7 +2,7 @@
 // Cache-naam bevat versienummer. Bij een nieuwe versie worden oude caches
 // automatisch verwijderd en alle bestanden opnieuw gecached.
 
-const VERSION = '3.27.111';
+const VERSION = '3.27.117';
 const CACHE = `rooster-${VERSION}`;
 
 const PRECACHE = [
@@ -38,11 +38,16 @@ const PRECACHE = [
   './help/beheerder.html',
 ];
 
-// Install: precache alle app-bestanden
+// Install: precache alle app-bestanden. cache:'reload' dwingt af dat elk
+// bestand rechtstreeks van de server komt en nooit uit de HTTP-cache van de
+// browser — anders kan een nieuwe SW-versie stiekem oude bestanden precachen
+// (komt vooral op iOS/Safari voor, waar die cache lang blijft hangen).
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE)
-      .then(cache => cache.addAll(PRECACHE))
+      .then(cache => cache.addAll(
+        PRECACHE.map(url => new Request(url, { cache: 'reload' }))
+      ))
       .then(() => self.skipWaiting())
   );
 });

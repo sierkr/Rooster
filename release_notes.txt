@@ -1,13 +1,46 @@
-Rooster v3.27.111 — Release notes
+Rooster v3.27.117 — Release notes
 ==================================
 
-GEEN BACKUPS IN DE TESTOMGEVING
------------------------------
-In de testomgeving kan geen backup meer gemaakt worden. Klik je daar op "Nu
-backup maken", dan verschijnt de melding dat dit in de testomgeving niet kan.
-Zo kan er nooit een testbackup ontstaan die je per ongeluk in de live-agenda
-terugzet.
+EXCEL-ROUND-TRIP: TWEE DATAVERLIES-BUGS OPGELOST
+----------------------------------------------------------------------------
+Een volledige code-review van de Excel-keten (export ⇄ import) legde twee
+ernstige bugs bloot die nu zijn opgelost:
 
-- De automatische backup vóór een Excel-import wordt in test overgeslagen.
-- Een backup terugzetten kan in test wél: maak een backup in de live-agenda en
-  herstel die in test om met actuele data te oefenen.
+- De import wiste bij elke export→import-cyclus stilzwijgend ALLE
+  vakantieregistraties (Vakantie-tab) en avond/nachtdiensten van het jaar,
+  omdat die velden niet in het Excel-bestand zitten maar het indeling-doc
+  volledig werd overschreven. De import behoudt nu alle velden die niet uit
+  Excel komen; Excel blijft leidend voor de indeling zelf.
+- Dag-opmerkingen konden bij import worden vervangen door formule-
+  restwaarden ("S"), doordat de opmerking-kolomkop 'S' kon samenvallen met
+  de functie-indicatorkolom 'S' (Saendelft) en de laatste match won. De
+  header-detectie stopt nu bij 'Aantal' en de eerste match wint.
+
+VERDERE FIXES
+----------------------------------------------------------------------------
+- De bekende shadowing-bug ("W1" als kolomkop in plaats van initialen) is
+  opgelost: bezetting wordt nu bepaald op de entry met de laatste
+  ingangsdatum, en Wissel/→Vast clippen voortaan de volledige historie zodat
+  oude periodes een nieuwe bezetter nooit meer overschaduwen.
+- Lege, inactieve W-slots krijgen geen exportkolom meer.
+- De export schrijft nu een verborgen _RoosterApp-watermerk zodat de import
+  een app-bestand betrouwbaar herkent, onafhankelijk van de sheetnaam.
+- Bezettingsnormen in de app tellen nu ook waarnemers (W-slots) mee — zelfde
+  telbasis als de Excel-formules, zodat app en Excel dezelfde dagen rood
+  kleuren.
+- Backup bevat nu ook vakantie_rankings.
+- Import wegschrijven vereist nu expliciet de rol beheerder (voorheen kon
+  een permissie-gebruiker halverwege stranden op de Firestore-rules).
+- Interne opschoning: wens-matching gecentraliseerd (was 3× gedupliceerd),
+  verouderde hardcoded kolom-mapping in de export verwijderd, audit-log-
+  schrijfacties in echte batches.
+
+BEKENDE BEPERKING
+----------------------------------------------------------------------------
+Bij cellen met twee codes ("V,K") telt Excel alleen de eerste code mee in de
+formules; de app telt beide. Alleen zichtbaar bij dubbele codes.
+
+ADVIES
+----------------------------------------------------------------------------
+Maak vóór de eerste import met deze versie een verse export vanuit v3.27.117,
+zodat het bestand het nieuwe watermerk en de actuele kolom-mapping bevat.

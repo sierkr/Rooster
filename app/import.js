@@ -6,10 +6,10 @@
 // gesynchroniseerd:
 //  - Open wens die nu matcht met de geïmporteerde code → status 'verwerkt'
 //  - Verwerkte wens die nu gebroken wordt door de import → status terug naar 'open'
-import { doc, writeBatch, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { doc, writeBatch, updateDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, IS_TEST_DB } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, magGebruikersBeheren, hoofdLetterCode, vandaagIso, plusDagen, kolomNaarRadId } from './helpers.js';
+import { isoWeekVan, vandaagIso, plusDagen, kolomNaarRadId, wensMatcht } from './helpers.js';
 import { maakClientBackup } from './backup-client.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
@@ -72,15 +72,8 @@ function _celComment(cel) {
   return cel.c.map(c => (c.t || '').trim()).filter(Boolean).join('\n') || null;
 }
 
-// ---- Wens-matching (zelfde logica als save.js) ------------------------------
-// Geeft terug of een code matcht met een wens-type.
-function wensMatcht(type, voorkeurCode, primaireCode) {
-  const hoofd = hoofdLetterCode(primaireCode);
-  if (type === 'vakantie')         return hoofd === 'V';
-  if (type === 'niet_beschikbaar') return !primaireCode || ['V','Z','K','Q'].includes(hoofd);
-  if (type === 'voorkeur')         return hoofd === voorkeurCode;
-  return false;
-}
+// Wens-matching komt uit helpers.js (wensMatcht) — één canonieke
+// implementatie, gedeeld met save.js.
 
 // Synchroniseer wens-statussen na import.
 // Vergelijkt de geïmporteerde toewijzingen met state.wensen en werkt statussen bij:
@@ -161,8 +154,11 @@ export async function actImportFile(input, renderGebView) {
     // 3. Geforceerd jaar via state.importJaar → gebruik die sheet
     // 4. Geen herkenning → foutmelding
 
+    // SheetJS bewaart defined names in wb.Workbook.Names (niet wb.Defined —
+    // dat veld bestaat niet en kon dus nooit true worden).
     const heeftWatermerk = wb.SheetNames.includes('_RoosterApp') ||
-                           (wb.Defined && wb.Defined.some(d => d.Name === 'RoosterApp'));
+                           (wb.Workbook && Array.isArray(wb.Workbook.Names) &&
+                            wb.Workbook.Names.some(d => d.Name === 'RoosterApp'));
 
     let sheetNaam = null;
 
@@ -227,13 +223,20 @@ export async function actImportFile(input, renderGebView) {
 
     // Zoek Dienst/Bespr/Interv/Opm eerst op naam — die markeren het einde van de
     // radioloog-zone (kolommen C t/m vóór Dienst).
+    // BELANGRIJK: eerste match wint en de scan stopt bij 'Aantal'. Rechts van
+    // 'Aantal' staan de functie-indicatorkolommen, met losse functieletters
+    // als header die kunnen samenvallen met de datakolom-headers P/Q/R/S
+    // (bv. indicator 'S' van Saendelft vs. de Opmerking-kolom 'S'). Zonder
+    // deze grens versprong kolOpm naar de indicatorkolom en werden alle
+    // dag-opmerkingen bij import vervangen door formule-restwaarden.
     let kolDienst = -1, kolBespr = -1, kolInterv = -1, kolOpm = -1;
     for (let c = 2; c <= range.e.c; c++) {
       const h = _celStr(ws[XLSX.utils.encode_cell({ c, r: headerRij })]);
-      if (h === IMPORT_KOL_DIENST) kolDienst = c;
-      else if (h === IMPORT_KOL_BESPR)  kolBespr  = c;
-      else if (h === IMPORT_KOL_INTERV) kolInterv = c;
-      else if (h === IMPORT_KOL_OPM)    kolOpm    = c;
+      if (h === 'Aantal') break;
+      if      (kolDienst < 0 && h === IMPORT_KOL_DIENST) kolDienst = c;
+      else if (kolBespr  < 0 && h === IMPORT_KOL_BESPR)  kolBespr  = c;
+      else if (kolInterv < 0 && h === IMPORT_KOL_INTERV) kolInterv = c;
+      else if (kolOpm    < 0 && h === IMPORT_KOL_OPM)    kolOpm    = c;
     }
     // Fallback naar vaste kolomposities als header niet gevonden
     if (kolDienst < 0) kolDienst = XLSX.utils.decode_col(IMPORT_KOL_DIENST);
@@ -374,8 +377,12 @@ export async function actImportFile(input, renderGebView) {
 export async function actImportSchrijven(renderGebView) {
   const p = state.importPreview;
   if (!p || !p.dagen.length) return;
-  if (!magGebruikersBeheren()) {
-    alert('Geen rechten voor schrijven.');
+  // Rol-check i.p.v. permissie-check: de Firestore-rules staan indeling-writes
+  // alleen toe aan de rol 'beheerder'. Een gebruiker met alleen de
+  // mag_gebruikers-permissie zou anders halverwege de batch stranden met een
+  // half geïmporteerde staat.
+  if (state.profiel?.rol !== 'beheerder') {
+    alert('Alleen een beheerder kan een import wegschrijven (Firestore-rechten).');
     return;
   }
   // Tel wijzigingen binnen de 30-dagengrens vóór bevestiging
@@ -436,13 +443,27 @@ export async function actImportSchrijven(renderGebView) {
       }
     }
 
-    // 1. Indeling wegschrijven
+    // 1. Indeling wegschrijven — met behoud van app-only velden.
+    //    Excel bevat alleen toewijzingen, dienst.dag, bespreking, interventie,
+    //    dag-opmerking en cel-opmerkingen. Alle overige velden op het
+    //    bestaande indeling-doc (vakantie_v uit de Vakantie-tab,
+    //    dienst.avond/nacht, en eventuele toekomstige velden) moeten een
+    //    import overleven — vóór deze fix wiste een export→import-cyclus
+    //    stilzwijgend een heel jaar aan vakantieregistraties.
     const BATCH = 400;
     let geschreven = 0;
     for (let i = 0; i < p.dagen.length; i += BATCH) {
       const batch = writeBatch(db);
       const slice = p.dagen.slice(i, i + BATCH);
-      slice.forEach(d => batch.set(doc(db, 'indeling', d.datum), d));
+      slice.forEach(d => {
+        const { id: _id, ...bestaandDoc } = state.indelingMap[d.datum] || {};
+        const definitief = {
+          ...bestaandDoc,  // app-only velden behouden (o.a. vakantie_v)
+          ...d,            // Excel is leidend voor de geëxporteerde velden
+          dienst: { ...(bestaandDoc.dienst || {}), dag: d.dienst?.dag || null },
+        };
+        batch.set(doc(db, 'indeling', d.datum), definitief);
+      });
       await batch.commit();
       geschreven += slice.length;
     }
@@ -469,10 +490,13 @@ export async function actImportSchrijven(renderGebView) {
         });
       }
     }
-    // Schrijf in batches van 400
+    // Schrijf in échte batches van 400 (writeBatch met auto-id docs) —
+    // atomair per chunk i.p.v. 400 losse addDoc-calls.
     for (let i = 0; i < wijzWrites.length; i += 400) {
       const slice = wijzWrites.slice(i, i + 400);
-      await Promise.all(slice.map(w => addDoc(collection(db, 'wijzigingen'), w)));
+      const wBatch = writeBatch(db);
+      slice.forEach(w => wBatch.set(doc(collection(db, 'wijzigingen')), w));
+      await wBatch.commit();
       wijzigingenGeschreven += slice.length;
     }
 

@@ -3,7 +3,7 @@
 import { collection, doc, setDoc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, hoofdLetterCode, magWijzigen, magAlleWensenZien, vandaagIso, plusDagen } from './helpers.js';
+import { isoWeekVan, magWijzigen, magAlleWensenZien, vandaagIso, plusDagen, wensMatcht } from './helpers.js';
 import { checkCelConflict } from './validatie.js';
 
 // Schrijf cel-toewijzing + (optioneel) cel-opmerking. Ook check op
@@ -43,11 +43,9 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
     w.datum === datum && w.radioloog_id === radId && (w.status || 'open') === 'verwerkt'
   );
   if (verwerkteWens) {
-    const nieuweHoofd = hoofdLetterCode(primaireCode);
-    let breekt = false;
-    if (verwerkteWens.type === 'vakantie') breekt = nieuweHoofd !== 'V';
-    else if (verwerkteWens.type === 'niet_beschikbaar') breekt = primaireCode && !['V','Z','K','Q'].includes(nieuweHoofd);
-    else if (verwerkteWens.type === 'voorkeur') breekt = nieuweHoofd !== verwerkteWens.voorkeur_code;
+    // Canonieke wens-matching uit helpers.js — zelfde logica als de
+    // import-synchronisatie (voorheen drie losse kopieën).
+    const breekt = !wensMatcht(verwerkteWens.type, verwerkteWens.voorkeur_code, primaireCode);
 
     if (breekt) {
       const regel = state.validatieRegels.find(r => r.id === 'wijziging-na-verwerkte-wens');
@@ -142,11 +140,7 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
         w.datum === datum && w.radioloog_id === radId && (w.status || 'open') === 'open'
       );
       if (openWens) {
-        const nieuweHoofd = hoofdLetterCode(primaireCode);
-        let matcht = false;
-        if (openWens.type === 'vakantie') matcht = nieuweHoofd === 'V';
-        else if (openWens.type === 'niet_beschikbaar') matcht = !primaireCode || ['V','Z','K','Q'].includes(nieuweHoofd);
-        else if (openWens.type === 'voorkeur') matcht = nieuweHoofd === openWens.voorkeur_code;
+        const matcht = wensMatcht(openWens.type, openWens.voorkeur_code, primaireCode);
 
         if (matcht) {
           try {

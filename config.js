@@ -21,7 +21,7 @@ window.FIREBASE_CONFIG = {
 };
 
 // Basis-versienummer (cache-busting). In test krijgt het label '-TEST' erbij.
-window.APP_VERSIE_BASIS = "3.27.111";
+window.APP_VERSIE_BASIS = "3.27.117";
 
 (function bepaalOmgeving() {
   var pad = (typeof location !== 'undefined' && location.pathname) ? location.pathname : '';

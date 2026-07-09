@@ -215,14 +215,15 @@ function renderTabs() {
   }
   // Vakantie-tab: zichtbaar als gebruiker mag_vakantie heeft
   if (magVakantieZien()) tabs.push({ id: 'vak', label: 'Vakantie' });
-  if (magRegelsBeheren()) tabs.push({ id: 'reg', label: 'Regels' });
-  if (magGebruikersBeheren()) tabs.push({ id: 'geb', label: 'Gebruikers' });
+  // Regels is samengevoegd in de Beheer-tab (onder Control). De Beheer-tab is
+  // zichtbaar zodra de gebruiker gebruikers óf regels mag beheren.
+  if (magGebruikersBeheren() || magRegelsBeheren()) tabs.push({ id: 'geb', label: 'Beheer' });
 
   document.getElementById('tabs').innerHTML = tabs.map(t => `
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  ['rad', 'jaa', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'reg', 'geb'].forEach(v => {
+  ['rad', 'jaa', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'geb'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
@@ -250,7 +251,7 @@ function render() {
   else if (state.huidigeView === 'wen') renderWenView();
   else if (state.huidigeView === 'vak') renderVakView();
   else if (state.huidigeView === 'beh') renderBehView();
-  else if (state.huidigeView === 'reg') renderRegView();
+  else if (state.huidigeView === 'reg') { state.huidigeView = 'geb'; renderGebView(); }
   else if (state.huidigeView === 'geb') renderGebView();
 }
 

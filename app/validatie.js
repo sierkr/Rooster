@@ -84,8 +84,12 @@ export function valideerWeek(week) {
     // Per-dag regels: bezetting & uniciteit
     actieveRegels.forEach(regel => {
       if (regel.type === 'bezetting' && regel.dag === dagNl && !isWeekend) {
+        // Telt over vaste stoelen ÉN W-slots: een waarnemer op de werkvloer
+        // vult de bezetting net zo goed in. Dit is dezelfde telbasis als de
+        // Excel-export (alle radioloogkolommen), zodat app en Excel dezelfde
+        // dagen rood kleuren.
         let aantalAanwezig = 0;
-        alleVasteStoelIds().forEach(radId => {
+        [...alleVasteStoelIds(), ...SLOTS].forEach(radId => {
           const codes = toewijzingVoor(datum, radId);
           if (codes.some(c => hoofdLetterCode(c) === regel.code || c === regel.code)) {
             aantalAanwezig += 1;
