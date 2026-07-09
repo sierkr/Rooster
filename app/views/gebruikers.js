@@ -6,6 +6,7 @@ import {
   vasteRads, vasteRadsOpDatum, actieveInvallers, radiologenMap, parttimeFactor, defaultPermissies,
   magGebruikersBeheren, magRegelsBeheren, genereerWachtwoord, bezettingOpDatum, vandaagIso, plusDagen, formatDatum,
   alleVasteStoelIds, isVasteStoel, nieuwPersoonId, laatsteEntry, clipHistorieVoorWissel,
+  assertBezettingGeldig, controleerAlleBezettingen,
 } from '../helpers.js';
 import { renderRegView } from './regels.js';
 import { STANDAARD_WACHTWOORD } from '../helpers.js';
@@ -136,6 +137,7 @@ export async function renderGebView() {
         <button id="btnOpslaanVast" class="btn" disabled style="width: 100%; margin-top: 10px; opacity: 0.5; cursor: not-allowed;" onclick="window.opslaanParttime()">Opslaan</button>
         <button class="btn" style="width: 100%; margin-top: 6px; font-size: 12px;" onclick="window.openNieuweStoelSheet()">➕ Nieuwe stoel aanmaken</button>
         <button class="btn" style="width: 100%; margin-top: 6px; font-size: 11px; opacity: 0.85;" onclick="window.initialiseerPersoonIds()" title="Eenmalig: ken persoon-id's toe aan de huidige bezetters">Persoon-id's toekennen</button>
+        <button class="btn" style="width: 100%; margin-top: 6px; font-size: 11px; opacity: 0.85;" onclick="window.controleerBezetting()" title="Controleer alle stoel-tijdlijnen op overlap of dubbele lopende periodes">🔎 Controleer bezetting</button>
       </div>
     </div>
   `;
@@ -564,6 +566,18 @@ window.initialiseerPersoonIds = async function() {
   }
 };
 
+// Handmatige integriteitscontrole van alle stoel-tijdlijnen. Toont eventuele
+// overlap/dubbel-open problemen; groen als alles klopt. Puur lezend.
+window.controleerBezetting = function() {
+  const problemen = controleerAlleBezettingen();
+  if (problemen.length === 0) {
+    alert('✓ Alle stoel-tijdlijnen zijn in orde: geen overlap, geen dubbele lopende periodes.');
+    return;
+  }
+  const tekst = problemen.map(p => `• ${p.code} (${p.id}):\n    - ${p.problemen.join('\n    - ')}`).join('\n\n');
+  alert(`⚠ ${problemen.length} stoel(en) met een probleem in de tijdlijn:\n\n${tekst}\n\nCorrigeer dit via Wissel/Vertrek of neem contact op met de beheerder.`);
+};
+
 window.opslaanParttime = async function() {
   try {
     for (const r of vasteRads()) {
@@ -648,17 +662,56 @@ window.opslaanInvallers = async function() {
       if (achternaam && !stoel?.persoon_id) update.persoon_id = nieuwPersoonId();
 
       // Zodra er een bezetting_historie is, geeft de weergave (bezettingOpDatum)
-      // altijd voorrang aan de code/achternaam van de open (lopende) entry —
-      // dus die moet hier ook worden bijgewerkt. Anders wordt deze invoer
-      // stilzwijgend genegeerd zodra de stoel ooit gewisseld/gemigreerd is.
+      // altijd voorrang aan de historie boven de top-level code/achternaam. De
+      // historie moet hier dus mee-gereconcilieerd worden, anders wordt deze
+      // invoer stilzwijgend genegeerd zodra de stoel ooit een historie heeft.
+      //
+      // BUGFIX: eerder werd alleen een BESTAANDE open entry bijgewerkt. Had een
+      // W-slot wél een historie maar géén lopende entry (bv. de waarnemer is via
+      // "→ Vast" vertrokken en de periode is afgesloten), dan werd de top-level
+      // wél geschreven maar vond bezettingOpDatum niets geldigs meer → de nieuw
+      // ingevoerde waarnemer "verdween" direct na opslaan. Nu maken we in dat
+      // geval een nieuwe open periode aan vanaf vandaag.
       const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+      const vandaag = vandaagIso();
       let open = hist.find(e => !e.tot);
-      if (open) {
-        open.code = code || '';
-        open.achternaam = achternaam || '';
-        if (update.persoon_id && !open.persoon_id) open.persoon_id = update.persoon_id;
-        update.bezetting_historie = hist;
+      if (actief && code) {
+        if (open) {
+          // Zelfde lopende bezetter: enkel code/naam bijwerken.
+          open.code = code;
+          open.achternaam = achternaam || '';
+          if (update.persoon_id && !open.persoon_id) open.persoon_id = update.persoon_id;
+          update.bezetting_historie = hist;
+        } else if (hist.length > 0) {
+          // Historie zonder lopende bezetter → nieuwe open periode vanaf vandaag,
+          // met clipping zodat een oude periode niet kan overlappen.
+          const geclipt = clipHistorieVoorWissel(hist, vandaag);
+          const nieuwPid = update.persoon_id || stoel?.persoon_id || nieuwPersoonId();
+          geclipt.push({
+            voornaam: '', achternaam: achternaam || '', code,
+            vakantierecht: typeof stoel?.vakantierecht === 'number' ? stoel.vakantierecht : 40,
+            parttime_factor: typeof stoel?.parttime_factor === 'number' ? stoel.parttime_factor : 1,
+            in_dienst: null,
+            persoon_id: nieuwPid,
+            van: vandaag, tot: null,
+          });
+          update.persoon_id = nieuwPid;
+          update.bezetting_historie = geclipt;
+        }
+        // hist.length === 0: geen historie → top-level volstaat (bezettingOpDatum
+        // valt terug op de top-level velden).
+      } else {
+        // Niet actief of leeg code: sluit een eventuele lopende periode af op de
+        // dag vóór vandaag, zodat bezettingOpDatum de stoel echt als leeg toont
+        // (anders bleef een open historie-entry de "lege" stoel tonen).
+        if (open) {
+          open.tot = plusDagen(vandaag, -1);
+          update.bezetting_historie = hist;
+        }
       }
+
+      // Invariant-bewaking: nooit een overlappende/dubbel-open historie wegschrijven.
+      if (update.bezetting_historie) assertBezettingGeldig(update.bezetting_historie, slotId);
 
       await setDoc(doc(db, 'radiologen', slotId), update, { merge: true });
     }
@@ -1012,6 +1065,7 @@ window.opslaanWissel = async function(slotId) {
   });
 
   try {
+    assertBezettingGeldig(nieuweHist, slotId);
     await setDoc(doc(db, 'radiologen', slotId), {
       id: slotId,
       code, voornaam, achternaam,
@@ -1290,6 +1344,7 @@ window.vertrekDoorvoeren = async function(slotId) {
   const btn = document.querySelector('#sheetBody .btn-primary');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
   try {
+    assertBezettingGeldig(hist, slotId);
     await setDoc(doc(db, 'radiologen', slotId), { bezetting_historie: hist }, { merge: true });
     closeSheet();
     alert(`Stoel ${slotId} vertrekt per ${formatDatum(datum, 'kort')}.`);
@@ -1374,6 +1429,12 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
     persoon_id: pid,
     van: datum, tot: null,
   });
+
+  // Invariant-bewaking vóór het wegschrijven: beide tijdlijnen moeten geldig
+  // zijn (geen overlap, hooguit één lopende periode). Zo kan een bug in de
+  // migratie de database nooit corrumperen.
+  assertBezettingGeldig(naarHistNieuw, naarSlot);
+  assertBezettingGeldig(vanHistNieuw, vanSlot);
 
   // 3. Update beide stoel-records
   const batch1 = writeBatch(db);

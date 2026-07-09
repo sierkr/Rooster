@@ -5,7 +5,7 @@ import { db } from '../firebase-init.js';
 import { state, DAGEN_NL } from '../state.js';
 import {
   vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
-  radiologenMap, functiesMap, vandaagIso,
+  radiologenMap, functiesMap, vandaagIso, bezetterLabelOpDatum,
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
   magAlleWensenZien, isFeestdag, isHoofd, esc,
@@ -243,7 +243,7 @@ window.toonConflictenSheet = function(weekId) {
     if (fouten.length > 0) {
       body += `<div style="font-size: 12px; font-weight: 500; margin-bottom: 6px; color: #501313;">Conflicten</div>`;
       fouten.forEach(c => {
-        const radNaam = c.radId ? (radiologenMap()[c.radId]?.code || c.radId) : '';
+        const radNaam = c.radId ? bezetterLabelOpDatum(c.radId, c.datum).code : '';
         body += `<div class="conflict-item conflict-error">
           <div>${c.bericht}</div>
           <div class="conflict-meta">${formatDatum(c.datum, 'kort')}${radNaam ? ' · ' + radNaam : ''} ${c.codes?.join(',') ? '· ' + c.codes.join(',') : ''}</div>
@@ -253,7 +253,7 @@ window.toonConflictenSheet = function(weekId) {
     if (warnings.length > 0) {
       body += `<div style="font-size: 12px; font-weight: 500; margin: 12px 0 6px; color: #412402;">Waarschuwingen</div>`;
       warnings.forEach(c => {
-        const radNaam = c.radId ? (radiologenMap()[c.radId]?.code || c.radId) : '';
+        const radNaam = c.radId ? bezetterLabelOpDatum(c.radId, c.datum).code : '';
         body += `<div class="conflict-item conflict-warn">
           <div>${c.bericht}</div>
           <div class="conflict-meta">${formatDatum(c.datum, 'kort')}${radNaam ? ' · ' + radNaam : ''} ${c.codes?.join(',') ? '· ' + c.codes.join(',') : ''}</div>
@@ -283,9 +283,10 @@ window.toonDagOpmerking = function(datum) {
 
 // Read-only weergave cel-detail (voor lezers/secretariaat/radiologen)
 window.toonCelDetail = function(datum, radId) {
-  const radsMap = radiologenMap();
-  const rad = radsMap[radId];
-  const label = rad ? `${rad.code} · ${rad.achternaam}` : radId;
+  // Datum-canoniek: toon wie op DIE dag op de stoel zit, niet de top-level
+  // (die na een toekomstige wissel/→Vast al de nieuwe bezetter bevat).
+  const l = bezetterLabelOpDatum(radId, datum);
+  const label = l.achternaam ? `${l.code} · ${l.achternaam}` : l.code;
   const codes = toewijzingVoor(datum, radId);
   const huidigCode = codes[0] || '';
   const dag = state.indelingMap[datum];
@@ -347,9 +348,8 @@ let _pickerCtx   = { datum: null, radId: null };
 
 window.openCell = function(datum, radId) {
   if (!magWijzigen()) return;
-  const radsMap = radiologenMap();
-  const rad = radsMap[radId];
-  const label = rad ? rad.code : radId;
+  // Datum-canoniek label (zie toonCelDetail).
+  const label = bezetterLabelOpDatum(radId, datum).code;
   const codes = toewijzingVoor(datum, radId);
   _pickerCodes = [...codes].slice(0, 2);
   _pickerCtx = { datum, radId };

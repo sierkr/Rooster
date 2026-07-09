@@ -429,7 +429,7 @@ export async function actExportJaar(jaar, naamParam) {
               return `${b.code || id} · ${b.achternaam || ''} (${van} – ${tot})`;
             }).join('\n');
           }
-          return { id, isSlot, idx, sortKey, code: bez?.code || id, notitie };
+          return { id, isSlot, idx, sortKey, code: bez?.code || id, notitie, bezetters };
         })
         .filter(Boolean);
 
@@ -755,6 +755,62 @@ export async function actExportJaar(jaar, naamParam) {
     // ---- Activiteit-sheet ---------------------------------------------------
     // Activiteit-sheet tijdelijk uitgeschakeld (formule-bugs in sheet2)
     // voegActiviteitSheetToe(wb, sheetNaam, radKolommen, dynKolomMap, COL_DIENST, excelRij - 1);
+
+    // ---- Zichtbaar blad "Mutaties" ------------------------------------------
+    // Wisselingen midden in het jaar (Wissel / waarnemer → vaste stoel) worden
+    // hier expliciet en VOLLEDIG leesbaar vastgelegd, i.p.v. via een cel-notitie
+    // op de kolomkop die door Excel wordt afgekapt. Elke regel is één overgang:
+    // welke kolom, van welke bezetter naar welke, en per welke datum. Zo is in
+    // één oogopslag te zien dat een kolom in dit jaar van persoon wisselt.
+    const mutaties = [];
+    kolomEntries.forEach(e => {
+      const bez = Array.isArray(e.bezetters) ? e.bezetters.slice() : [];
+      if (bez.length < 2) return;
+      bez.sort((a, b) => (a.van || '0000-00-00') < (b.van || '0000-00-00') ? -1 : 1);
+      for (let i = 1; i < bez.length; i++) {
+        const vorige = bez[i - 1];
+        const cur = bez[i];
+        mutaties.push({
+          kolom: e.header,
+          stoel: e.id,
+          van: `${vorige.code || ''}${vorige.achternaam ? ' · ' + vorige.achternaam : ''}`,
+          naar: `${cur.code || ''}${cur.achternaam ? ' · ' + cur.achternaam : ''}`,
+          per: cur.van || '',
+        });
+      }
+    });
+    // Sorteer op ingangsdatum, dan kolom.
+    mutaties.sort((a, b) => (a.per || '').localeCompare(b.per || '') || a.kolom.localeCompare(b.kolom));
+
+    const mutWs = wb.addWorksheet('Mutaties');
+    mutWs.columns = [
+      { header: 'Kolom',          key: 'kolom', width: 10 },
+      { header: 'Stoel-ID',       key: 'stoel', width: 12 },
+      { header: 'Van (vorige bezetter)', key: 'van',  width: 26 },
+      { header: 'Naar (nieuwe bezetter)', key: 'naar', width: 26 },
+      { header: 'Per datum',      key: 'per',   width: 13 },
+    ];
+    const mutHead = mutWs.getRow(1);
+    mutHead.height = 18;
+    for (let ci = 1; ci <= 5; ci++) {
+      const cel = mutHead.getCell(ci);
+      cel.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
+      cel.alignment = { horizontal: 'left', vertical: 'middle' };
+      cel.border = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
+    }
+    if (mutaties.length === 0) {
+      mutWs.addRow({ kolom: '', stoel: '', van: `Geen wisselingen in ${jaar}.`, naar: '', per: '' });
+    } else {
+      mutaties.forEach(m => {
+        const rij = mutWs.addRow({
+          kolom: m.kolom, stoel: m.stoel, van: m.van, naar: m.naar,
+          per: m.per ? new Date(m.per + 'T12:00:00') : '',
+        });
+        if (m.per) rij.getCell(5).numFmt = 'DD-MM-YYYY';
+      });
+    }
+    mutWs.views = [{ state: 'frozen', ySplit: 1 }];
 
     // ---- Watermerk _RoosterApp ----------------------------------------------
     // Verborgen blad waaraan de import een app-export herkent, onafhankelijk

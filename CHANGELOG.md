@@ -1,3 +1,54 @@
+## v3.27.118 — Bezetting: betrouwbaarheid van de stoel-tijdlijn
+
+### Waarom
+Aanleiding: na een "→ Vast"-migratie (waarnemer GJG per 1-1-2027 op de vaste
+stoel i.p.v. BL) liepen weergaven uiteen en verdween een nieuw geplaatste
+waarnemer op het vrijgekomen W-slot bij opslaan. De onderliggende oorzaak was
+dat één stoel-tijdlijn (`bezetting_historie`) op meerdere plekken niet
+consistent werd gelezen/geschreven. Deze release maakt de tijdlijn de enige
+bron van waarheid en bewaakt de integriteit ervan.
+
+### Kritieke fix (dataverlies bij invoer)
+- **gebruikers.js — nieuwe waarnemer op een W-slot mét historie verdween na
+  opslaan.** `opslaanInvallers` werkte alleen een BESTAANDE lopende
+  (`tot=null`) periode bij. Had een W-slot wél een historie maar géén lopende
+  periode (typisch nadat de vorige waarnemer via "→ Vast" was doorgeschoven en
+  diens periode was afgesloten), dan werd enkel de top-level code/naam
+  weggeschreven, terwijl de weergave (`bezettingOpDatum`) uit de historie leest
+  en daar niets geldigs meer vond — de waarnemer "verdween" dus direct. Nu maakt
+  het opslaan in dat geval een nieuwe lopende periode vanaf vandaag aan
+  (met clipping), en sluit het bij deactiveren een lopende periode netjes af.
+
+### Fix (weergave-consistentie)
+- **overzicht.js — dagdetail/cel toonde een andere bezetter dan het raster.**
+  De kolomkoppen lazen datum-bewust (`bezettingOpDatum`), maar het cel-detail,
+  de cel-picker en de conflictlijst lazen de rauwe top-level code/achternaam.
+  Na een toekomstige wissel/→Vast bevat top-level al de nieuwe bezetter,
+  waardoor het raster BL toonde en het dagdetail GJG. Alle weergaven lezen nu
+  datum-canoniek via de nieuwe helper `bezetterLabelOpDatum(stoel, datum)`.
+
+### Betrouwbaarheid (invariant-bewaking)
+- **helpers.js — integriteitscontrole op de stoel-tijdlijn.** Nieuwe helpers
+  `controleerBezettingHistorie()`, `controleerAlleBezettingen()` en
+  `assertBezettingGeldig()`. Model: één stoel = niet-overlappende periodes
+  `[van, tot]`, hooguit één lopende. Elke schrijf-actie (Wissel, → Vast,
+  waarnemer opslaan, Vertrek) valideert de nieuwe tijdlijn vóór opslaan en
+  blokkeert bij overlap of dubbele lopende periode — zo kan een bug de database
+  niet meer stilzwijgend corrumperen.
+- **gebruikers.js — knop "🔎 Controleer bezetting"** in de Stoel-bezetting-tab
+  scant alle stoelen en meldt eventuele overlap/dubbel-open problemen (of geeft
+  groen licht). Puur lezend.
+
+### Excel
+- **export.js — zichtbaar blad "Mutaties".** Wisselingen midden in het jaar
+  worden nu volledig leesbaar op een apart tabblad vastgelegd (kolom, stoel-ID,
+  vorige bezetter → nieuwe bezetter, ingangsdatum), i.p.v. via een cel-notitie
+  op de kolomkop die door Excel werd afgekapt. De kolomkop-notitie blijft als
+  extra hint bestaan. De import negeert het Mutaties-blad (zoekt het hoofdblad
+  op de Dag/Datum-kop).
+
+---
+
 ## v3.27.117 — Excel-round-trip: twee dataverlies-bugs opgelost + consistentie-fixes
 
 ### Waarom

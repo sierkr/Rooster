@@ -215,6 +215,73 @@ export function isVasteStoel(id) {
   return (state.radiologen || []).some(r => r.id === id && r.vaste_stoel === true && !SLOTS.includes(id));
 }
 
+// Datum-canoniek label voor een stoel/slot: wie zit er op `datum`. Elke
+// weergave die toont wie een stoel bezet MOET dit gebruiken (of
+// bezettingOpDatum) i.p.v. de rauwe top-level code/achternaam — die zijn een
+// cache die bij een toekomstige wissel/→Vast al de nieuwe bezetter bevat,
+// terwijl de datum-bewuste historie nog de juiste (oude) bezetter geeft. Dit
+// was de oorzaak van "overzicht toont BL, maar dagdetail toont GJG".
+export function bezetterLabelOpDatum(radId, datum) {
+  const b = bezettingOpDatum(radId, datum);
+  if (b) return { code: b.code || radId, achternaam: b.achternaam || '' };
+  const r = radiologenMap()[radId];
+  return { code: r?.code || radId, achternaam: r?.achternaam || '' };
+}
+
+// ==== Integriteit van bezetting_historie ====================================
+// Eén stoel = één tijdlijn van niet-overlappende periodes [van, tot] (tot
+// inclusief; tot=null = lopend). Deze controle bewaakt dat model: hooguit één
+// lopende periode, geen omgekeerde periodes, en geen overlap tussen periodes.
+// Gaten (een stoel die tijdelijk leeg staat) zijn toegestaan en gelden NIET als
+// fout. Returnt een lijst probleem-strings; leeg = in orde.
+export function controleerBezettingHistorie(stoel) {
+  const problemen = [];
+  const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie : [];
+  if (hist.length === 0) return problemen;
+  const open = hist.filter(e => !e.tot);
+  if (open.length > 1) {
+    problemen.push(`${open.length} lopende (open) periodes — er mag er hooguit één zijn`);
+  }
+  const sorted = hist.slice().sort((a, b) => (a.van || '0000-00-00') < (b.van || '0000-00-00') ? -1 : 1);
+  for (let i = 0; i < sorted.length; i++) {
+    const e = sorted[i];
+    if (e.van && e.tot && e.van > e.tot) {
+      problemen.push(`periode ${e.code || '?'} begint (${e.van}) ná het einde (${e.tot})`);
+    }
+    if (i > 0) {
+      const vorige = sorted[i - 1];
+      if (!vorige.tot) {
+        problemen.push(`open periode ${vorige.code || '?'} loopt door tot in ${e.code || '?'} — overlap`);
+      } else if (e.van && e.van <= vorige.tot) {
+        problemen.push(`overlap: ${vorige.code || '?'} (t/m ${vorige.tot}) en ${e.code || '?'} (vanaf ${e.van})`);
+      }
+    }
+  }
+  return problemen;
+}
+
+// Scant alle stoelen. Returnt [{ id, code, problemen[] }] voor stoelen met een
+// integriteitsprobleem (leeg = alles in orde).
+export function controleerAlleBezettingen() {
+  const resultaat = [];
+  (state.radiologen || []).forEach(stoel => {
+    const p = controleerBezettingHistorie(stoel);
+    if (p.length) resultaat.push({ id: stoel.id, code: stoel.code || stoel.id, problemen: p });
+  });
+  return resultaat;
+}
+
+// Guard voor de schrijf-paden (Wissel, →Vast, waarnemer opslaan, vertrek):
+// gooit een fout als een net-samengestelde historie het model schendt, zodat
+// een bug de database nooit met overlap/dubbele-open kan corrumperen. De
+// aanroeper vangt de fout en toont de melding i.p.v. op te slaan.
+export function assertBezettingGeldig(hist, contextLabel) {
+  const problemen = controleerBezettingHistorie({ bezetting_historie: hist });
+  if (problemen.length) {
+    throw new Error(`Bezetting ${contextLabel || ''} is ongeldig en is NIET opgeslagen:\n- ` + problemen.join('\n- '));
+  }
+}
+
 // ==== Persoon-id (Niveau 1) =================================================
 // Een stabiel persoon-id identificeert een persoon over stoelen heen. Het leeft
 // op de bezetting_historie-entries (en top-level op stoelen zonder historie,
