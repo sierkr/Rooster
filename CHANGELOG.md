@@ -1,3 +1,18 @@
+## v3.27.121 — Stoel-koppeling alleen voor radioloog/beheerder
+
+### Waarom
+Technici en secretariaat kunnen nooit een stoel bezetten, maar het veld
+"Gekoppeld aan" werd toch getoond bij die rollen.
+
+### Fix
+- **gebruikers.js** — het veld "Gekoppeld aan" verschijnt nu alleen als de rol
+  radioloog of beheerder is, en schakelt live mee als je de rol in het scherm
+  wijzigt (bij zowel "Nieuwe gebruiker" als "Rol wijzigen"). Als vangnet wordt de
+  koppeling bij opslaan hard op "geen" gezet zodra de rol geen stoel-rol is, zodat
+  een technicus/secretariaat nooit een verweesde stoel-koppeling houdt.
+
+---
+
 ## v3.27.120 — Round-trip-fix, verschil-diagnose en tab-persistentie
 
 ### Waarom

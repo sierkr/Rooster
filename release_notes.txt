@@ -1,16 +1,11 @@
-Rooster v3.27.120 — Release notes
+Rooster v3.27.121 — Release notes
 ==================================
 
-ROUND-TRIP-FIX, VERSCHIL-DIAGNOSE EN TAB-PERSISTENTIE
+STOEL-KOPPELING ALLEEN VOOR RADIOLOOG/BEHEERDER
 ----------------------------------------------------------------------------
-- Export -> (ongewijzigd) import gaf toch "wijzigingen". Oorzaak: stoelen die in
-  Firestore nog een toewijzing hadden maar geen bezetter, kregen geen
-  exportkolom, waardoor die dagen bij re-import als gewijzigd telden. De export
-  neemt zulke stoelen nu wel mee (kolomkop = laatst bekende code of stoel-id),
-  zodat geen ingevulde dag meer wegvalt en de round-trip sluitend is.
-- Nieuw "Toon verschillen" in de import-preview: een uitklap die exact laat zien
-  welke cellen afwijken (datum, stoel, oud -> nieuw). Zo is elk verschil
-  herleidbaar en kun je verweesde toewijzingen herkennen en opruimen.
-- Tab-persistentie: de Beheer-view onthoudt de actieve (sub-)tab. Na het kiezen
-  van een importbestand blijf je op Control > Overige instellingen staan in
-  plaats van terug te springen naar Stoel bezetting.
+Technici en secretariaat kunnen nooit een stoel bezetten. Het veld
+"Gekoppeld aan" wordt daarom nu alleen getoond wanneer de rol radioloog of
+beheerder is, in zowel het scherm "Nieuwe gebruiker" als "Rol wijzigen". Het
+veld schakelt live mee als je de rol in datzelfde scherm verandert. Bij opslaan
+wordt de koppeling hard op "geen" gezet zodra de rol geen stoel-rol is, zodat
+een bestaande technicus/secretariaat nooit een verweesde koppeling houdt.

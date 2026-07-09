@@ -770,14 +770,14 @@ window.nieuweGebruiker = function(preRol) {
     <div class="form-field"><label class="form-label">Naam</label><input type="text" class="input" id="nuNaam" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="voornaam.achternaam"></div>
     <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${STANDAARD_WACHTWOORD}"></div>
     <div class="form-field"><label class="form-label">Rol</label>
-      <select class="select" id="nuRol">
+      <select class="select" id="nuRol" onchange="window.nuRolWissel()">
         <option value="radioloog"${sel('radioloog')}>Radioloog</option>
         <option value="beheerder"${sel('beheerder')}>Beheerder</option>
         <option value="secretariaat"${sel('secretariaat')}>Secretariaat</option>
         <option value="technician"${sel('technician')}>Technician</option>
       </select>
     </div>
-    <div class="form-field"><label class="form-label">Gekoppeld aan (optioneel)</label>
+    <div class="form-field" id="nuKoppelVeld" style="display: ${['radioloog','beheerder'].includes(preRol) ? 'block' : 'none'};"><label class="form-label">Gekoppeld aan (optioneel)</label>
       <select class="select" id="nuRadId">
         <option value="">— geen —</option>
         <optgroup label="Vaste radiologen">
@@ -797,11 +797,21 @@ window.nieuweGebruiker = function(preRol) {
   openSheet();
 };
 
+// Toon de stoel-koppeling alleen voor rollen die een stoel kunnen bezetten
+// (radioloog of radioloog-tevens-beheerder); technici/secretariaat nooit.
+window.nuRolWissel = function() {
+  const rol = document.getElementById('nuRol')?.value;
+  const veld = document.getElementById('nuKoppelVeld');
+  if (veld) veld.style.display = ['radioloog','beheerder'].includes(rol) ? 'block' : 'none';
+};
+
 window.opslaanNieuweGebruiker = async function() {
   const naam = document.getElementById('nuNaam').value.trim();
   const pw = document.getElementById('nuPw').value;
   const rol = document.getElementById('nuRol').value;
-  const radId = document.getElementById('nuRadId').value;
+  let radId = document.getElementById('nuRadId').value;
+  // Vangnet: alleen radioloog/beheerder kan aan een stoel gekoppeld zijn.
+  if (!['radioloog','beheerder'].includes(rol)) radId = '';
 
   if (!naam || !pw) { alert('Vul naam en wachtwoord in'); return; }
   if (pw.length < 6) { alert('Wachtwoord min. 6 tekens'); return; }
@@ -869,7 +879,7 @@ window.gebruikerBewerken = function(uid) {
         <option value="technician" ${(g.rol==='technician' || g.rol==='lezer')?'selected':''}>Technician</option>
       </select>
     </div>
-    <div class="form-field"><label class="form-label">Gekoppeld aan${isVasteBeheerder?' 🔒':''}</label>
+    <div class="form-field" id="wzKoppelVeld" style="display: ${['radioloog','beheerder'].includes(g.rol) ? 'block' : 'none'};"><label class="form-label">Gekoppeld aan${isVasteBeheerder?' 🔒':''}</label>
       <select class="select" id="wzRadId" ${isVasteBeheerder?'disabled':''}>
         <option value="" ${!g.radioloog_id?'selected':''}>— geen —</option>
         <optgroup label="Vaste radiologen">
@@ -903,7 +913,11 @@ window.gebruikerBewerken = function(uid) {
   openSheet();
 };
 
-window.wzRolWissel = function() { /* niets automatisch */ };
+window.wzRolWissel = function() {
+  const rol = document.getElementById('wzRol')?.value;
+  const veld = document.getElementById('wzKoppelVeld');
+  if (veld) veld.style.display = ['radioloog','beheerder'].includes(rol) ? 'block' : 'none';
+};
 
 window.wzPermissiesReset = function() {
   const rol = document.getElementById('wzRol').value;
@@ -919,7 +933,9 @@ window.opslaanGebruikerUpdate = async function(uid) {
   const isVasteBeheerder = (g?.email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL;
 
   const rol = isVasteBeheerder ? 'beheerder' : document.getElementById('wzRol').value;
-  const radId = isVasteBeheerder ? (g.radioloog_id || '') : document.getElementById('wzRadId').value;
+  let radId = isVasteBeheerder ? (g.radioloog_id || '') : document.getElementById('wzRadId').value;
+  // Vangnet: alleen radioloog/beheerder kan aan een stoel gekoppeld zijn.
+  if (!['radioloog','beheerder'].includes(rol)) radId = '';
   const permissies = {};
   ['mag_beheer','mag_beheer_lezen','mag_regels','mag_gebruikers','mag_wensen_alle'].forEach(p => {
     const el = document.getElementById('perm_' + p);
