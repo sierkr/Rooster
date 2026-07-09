@@ -516,20 +516,6 @@ window.opslaanInvallers = async function() {
       // zodat de identiteit meeloopt als deze waarnemer later vast in dienst
       // komt. Een leeg slot (alleen een kale slotnaam) krijgt er géén.
       if (achternaam && !stoel?.persoon_id) update.persoon_id = nieuwPersoonId();
-
-      // Zodra er een bezetting_historie is, geeft de weergave (bezettingOpDatum)
-      // altijd voorrang aan de code/achternaam van de open (lopende) entry —
-      // dus die moet hier ook worden bijgewerkt. Anders wordt deze invoer
-      // stilzwijgend genegeerd zodra de stoel ooit gewisseld/gemigreerd is.
-      const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
-      let open = hist.find(e => !e.tot);
-      if (open) {
-        open.code = code || slotId;
-        open.achternaam = achternaam || '';
-        if (update.persoon_id && !open.persoon_id) open.persoon_id = update.persoon_id;
-        update.bezetting_historie = hist;
-      }
-
       await setDoc(doc(db, 'radiologen', slotId), update, { merge: true });
     }
     alert('Waarnemers opgeslagen.');

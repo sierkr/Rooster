@@ -36,17 +36,7 @@ function downloadBlob(inhoud, bestandsnaam) {
 // ---- Crypto helpers ---------------------------------------------------------
 
 function base64Encode(buf) {
-  // Bytes in vaste blokken verwerken i.p.v. in één keer spreaden: bij een grote
-  // backup (veel radiologen/indelingen/historie) overschrijdt
-  // String.fromCharCode(...bytes) anders de argumentenlimiet van de engine,
-  // wat zich uitte als "Maximum call stack size exceeded".
-  const bytes = new Uint8Array(buf);
-  const CHUNK = 0x8000; // 32768 bytes per stuk, ruim onder elke argumentenlimiet
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
 }
 function base64Decode(str) {
   return Uint8Array.from(atob(str), c => c.charCodeAt(0));

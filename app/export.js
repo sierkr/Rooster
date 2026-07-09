@@ -21,12 +21,9 @@
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
-import { state, HOOFD_FUNCTIES, VASTE_RAD_IDS, SLOTS } from './state.js';
+import { state, HOOFD_FUNCTIES } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM, IMPORT_KOLOM_NAAR_RADID } from './import.js';
-import {
-  isHoofd, functieFlags, hoofdLetterCode, plusDagen, vandaagIso, huidigKalenderJaar,
-  bezettingOpDatum, bezettingenInRange, alleVasteStoelIds,
-} from './helpers.js';
+import { isHoofd, functieFlags, kolomNaarRadId, hoofdLetterCode } from './helpers.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -375,85 +372,27 @@ export async function actExportJaar(jaar, naamParam) {
       where('datum', '<=', `${jaar}-12-31`)
     );
     const snap = await getDocs(q);
-    const dagenMap = new Map();
-    snap.docs.forEach(d => { const data = d.data(); dagenMap.set(data.datum, data); });
+    const dagen = snap.docs
+      .map(d => d.data())
+      .sort((a, b) => a.datum.localeCompare(b.datum));
 
-    // Alle kalenderdagen van het jaar opbouwen — ook dagen zonder Firestore-
-    // document (nieuw jaar, nog niets ingevuld) krijgen een lege placeholder-rij
-    // zodat het hele jaar in de export staat, niet alleen de ingevulde dagen.
-    const dagen = [];
-    for (let d = `${jaar}-01-01`; d <= `${jaar}-12-31`; d = plusDagen(d, 1)) {
-      dagen.push(dagenMap.get(d) || { datum: d });
+    if (!dagen.length) {
+      alert(`Geen indeling-data gevonden voor ${jaar}.`);
+      return;
     }
 
     const kleurenMap = bouwKleurenMap();
-
-    // ---- Kolommen (vaste stoelen + waarnemers), datum-bewust op senioriteit -
-    // Kolomvolgorde en kolomkop identiek aan hoe de app dit toont (Overzicht/
-    // Afdeling): gesorteerd op de in_dienst-datum van de HUIDIGE bezetter, met
-    // de waarnemer-slots (W5..W1) vast na de vaste stoelen. Een stoel/slot
-    // krijgt een kolom zodra hij in dit jaar minstens één bezetter heeft gehad
-    // — ook als die inmiddels via "→ Vast" is doorgeschoven.
-    const jaarStart = `${jaar}-01-01`;
-    const jaarEind  = `${jaar}-12-31`;
-    const REFDATUM  = (String(jaar) === String(huidigKalenderJaar())) ? vandaagIso() : jaarEind;
-    const stateGeladen = (state.radiologen || []).length > 0;
-
-    let kolomEntries;
-    if (stateGeladen) {
-      const kandidaten = [...alleVasteStoelIds(), ...SLOTS];
-      kolomEntries = kandidaten
-        .map(id => {
-          const bezetters = bezettingenInRange(id, jaarStart, jaarEind);
-          if (bezetters.length === 0) return null; // niet bezet dit jaar → geen kolom
-          const huidig  = bezettingOpDatum(id, REFDATUM);
-          const laatste = bezetters[bezetters.length - 1];
-          const bez     = huidig || laatste;
-          const isSlot  = SLOTS.includes(id);
-          const idx     = VASTE_RAD_IDS.indexOf(id);
-          const sortKey = bez?.in_dienst || (idx < 0 ? '9999-01-01' : `${2000 + idx}-01-01`);
-          let notitie = null;
-          if (bezetters.length > 1) {
-            notitie = 'Bezetters in ' + jaar + ':\n' + bezetters.map(b => {
-              const van = b.van ? b.van.split('-').reverse().join('-') : 'begin';
-              const tot = b.tot ? b.tot.split('-').reverse().join('-') : 'heden';
-              return `${b.code || id} · ${b.achternaam || ''} (${van} – ${tot})`;
-            }).join('\n');
-          }
-          return { id, isSlot, idx: idx < 0 ? 100 : idx, sortKey, code: bez?.code || id, notitie };
-        })
-        .filter(Boolean);
-    } else {
-      // Fallback: state nog niet geladen — geen datum-bewuste info mogelijk,
-      // val terug op de vaste code→stoel-mapping (identiek aan de import).
-      kolomEntries = Object.entries(IMPORT_KOLOM_NAAR_RADID).map(([code, id]) => {
-        const isSlot = SLOTS.includes(id);
-        const idx = VASTE_RAD_IDS.indexOf(id);
-        return { id, isSlot, idx: idx < 0 ? 100 : idx, sortKey: idx < 0 ? '9999-01-01' : `${2000 + idx}-01-01`, code, notitie: null };
-      });
-    }
-
-    // Vaste stoelen eerst (op senioriteit), waarnemer-slots daarna (vaste W5..W1-volgorde).
-    kolomEntries.sort((a, b) => {
-      if (a.isSlot !== b.isSlot) return a.isSlot ? 1 : -1;
-      if (a.isSlot && b.isSlot) return SLOTS.indexOf(a.id) - SLOTS.indexOf(b.id);
-      if (a.sortKey !== b.sortKey) return a.sortKey < b.sortKey ? -1 : 1;
-      return a.idx - b.idx;
+    const VASTE_VOLGORDE = ['L','P','V','F','K','H','S','J','W5','W4','W3','W2','W1'];
+    const dynKolomMap = Object.keys(kolomNaarRadId()).length > 0
+      ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
+    const radKolommen = Object.keys(dynKolomMap).sort((a, b) => {
+      const ia = VASTE_VOLGORDE.indexOf(dynKolomMap[a]);
+      const ib = VASTE_VOLGORDE.indexOf(dynKolomMap[b]);
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a.localeCompare(b);
     });
-
-    // Kolomkop-strings uniek maken (zeldzaam randgeval: twee kolommen met
-    // toevallig dezelfde code) zodat er nooit twee kolommen op dezelfde header
-    // samenvallen in dynKolomMap.
-    const gebruikteHeaders = new Set();
-    kolomEntries.forEach(e => {
-      let header = e.code || e.id;
-      if (gebruikteHeaders.has(header)) header = `${header} (${e.id})`;
-      gebruikteHeaders.add(header);
-      e.header = header;
-    });
-
-    const radKolommen = kolomEntries.map(e => e.header);
-    const dynKolomMap = Object.fromEntries(kolomEntries.map(e => [e.header, e.id]));
     // Kolom-indices (1-based in ExcelJS) — volledig dynamisch op basis van aantal radiologen:
     // 1=Dag, 2=Datum, 3..(2+n)=rads, (3+n)=Dienst, (4+n)=Bespr, (5+n)=Interv, (6+n)=Opm,
     // (7+n)=Aantal, (8+n)=Spacer, (9+n)..=functie-indicatoren
@@ -559,16 +498,6 @@ export async function actExportJaar(jaar, naamParam) {
     aantalHeaderCel.font  = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
     aantalHeaderCel.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3863' } };
     aantalHeaderCel.border = { bottom: { style: 'medium', color: { argb: 'FF9DC3E6' } } };
-
-    // Kolomkop-notitie: als een stoel/slot in dit jaar meerdere bezetters had
-    // (wissel, of waarnemer → vaste stoel), staat de volledige tijdlijn in een
-    // Excel-notitie op de kolomkop, zodat altijd herleidbaar blijft wie je op
-    // welke dag daadwerkelijk hebt ingedeeld.
-    kolomEntries.forEach((entry, i) => {
-      if (!entry.notitie) return;
-      const cel = headerRij.getCell(3 + i);
-      cel.note = { texts: [{ text: entry.notitie }] };
-    });
 
     // ---- Bevroren rij 1 + kolommen A+B -------------------------------------
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 1, topLeftCell: 'C2', activePane: 'bottomRight' }];

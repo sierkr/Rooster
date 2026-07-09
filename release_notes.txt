@@ -1,23 +1,13 @@
-Rooster v3.27.114 — Release notes
+Rooster v3.27.111 — Release notes
 ==================================
 
-OUDE VERSIE BLEEF ACTIEF OP IPHONE
------------------------------------
-- Op de iPhone bleef de oude versie soms actief na een nieuwe release. De app
-  vroeg zelf nooit actief om een update, en Safari op iOS controleert daar uit
-  zichzelf zelden op — een PWA vanaf het beginscherm wordt vaak hervat vanuit
-  een snapshot in plaats van echt herladen. Daarnaast kon een nieuwe versie bij
-  het opslaan per ongeluk oude bestanden uit de browsercache oppikken.
-- Opgelost: de app haalt bij een update nu altijd verse bestanden rechtstreeks
-  van de server, en controleert zelf actief op een nieuwe versie — bij het
-  openen én telkens wanneer je de app weer op de voorgrond haalt (na
-  app-wissel, ontgrendelen of terugkeren naar de app). Zodra er een nieuwe
-  versie klaarstaat, ververst de app zichzelf automatisch.
+GEEN BACKUPS IN DE TESTOMGEVING
+-----------------------------
+In de testomgeving kan geen backup meer gemaakt worden. Klik je daar op "Nu
+backup maken", dan verschijnt de melding dat dit in de testomgeving niet kan.
+Zo kan er nooit een testbackup ontstaan die je per ongeluk in de live-agenda
+terugzet.
 
-Let op bij deze ene overstap: omdat de fix juist de update-afhandeling zelf
-betreft, kan het op een iPhone die nog op een oudere versie staat eenmalig
-nodig zijn de app te sluiten en opnieuw te openen (of in Safari te herladen).
-Daarna gaat het vanzelf.
-
-Vorige release (v3.27.113): backupfout "Maximum call stack size exceeded" bij
-een grote database opgelost — zie CHANGELOG.md voor het volledige overzicht.
+- De automatische backup vóór een Excel-import wordt in test overgeslagen.
+- Een backup terugzetten kan in test wél: maak een backup in de live-agenda en
+  herstel die in test om met actuele data te oefenen.
