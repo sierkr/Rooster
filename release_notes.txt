@@ -1,40 +1,16 @@
-Rooster v3.27.119 — Release notes
+Rooster v3.27.120 — Release notes
 ==================================
 
-STOEL-WIJZIGINGEN: INZICHTELIJK, TERUGDRAAIBAAR, MET IMPACT-PREVIEW
+ROUND-TRIP-FIX, VERSCHIL-DIAGNOSE EN TAB-PERSISTENTIE
 ----------------------------------------------------------------------------
-Elke ingreep op een stoel — vervanging (Wissel), vertrek/pensioen en vast in
-dienst (→ Vast) — is nu zichtbaar in een tijdlijn én terug te draaien, en de
-planner ziet vooraf de gevolgen als er al gepland is.
-
-NIEUW
-----------------------------------------------------------------------------
-- Terugdraaien: in de Beheer-tab staat "Recente stoel-wijzigingen" met per
-  ingreep een Terugdraaien-knop. Elke Wissel, Vertrek, → Vast en Nieuwe stoel
-  wordt vastgelegd met een volledige momentopname van vóór de ingreep; bij
-  → Vast ook de exacte roosterwijzigingen. Terugdraaien zet zowel de bezetting
-  als de verplaatste roosterdata precies terug, en wordt vóór opslaan
-  gevalideerd. Alleen de nieuwste ingreep per stoel is direct terug te draaien.
-- Tijdlijn: per stoel én per persoon (bv. GJG over meerdere stoelen heen) een
-  chronologisch overzicht van alle periodes met status lopend/gepland/afgesloten.
-  Knop "Tijdlijn" bij elke vaste stoel.
-- Impact-preview: bij Wissel, Vertrek en Terugdraaien laat de app vóór bevestigen
-  zien wat er vanaf die datum al gepland staat (toewijzingen, vakantie-V,
-  diensten, wensen), met extra waarschuwing voor dagen binnen 30 dagen.
-
-FIXES
-----------------------------------------------------------------------------
-- Opvolging vs. vertrek: na een → Vast toonde de beheer-lijst de oude bezetter
-  als "gepland vertrek" met een falende Intrekken-knop. Nu toont de rij
-  "opgevolgd door <code> per <datum>" zonder die misleidende knop.
-- Senioriteit onbekend = rechts: een stoel zonder ingevulde in-dienstdatum
-  sorteert nu achteraan (junior) in plaats van de rang van de vorige bezetter
-  te erven. Een net vast-in-dienst genomen waarnemer blijft dus niet links staan.
-
-LET OP — DEPLOYMENT
-----------------------------------------------------------------------------
-De terugdraai-functie gebruikt een nieuwe Firestore-collectie
-(bezetting_mutaties). Deploy de meegeleverde, bijgewerkte firestore.rules naar
-Firebase. Zonder die regel gaat een ingreep wél door, maar kan hij niet in het
-terugdraai-logboek worden vastgelegd (en dus niet via Terugdraaien ongedaan
-worden gemaakt). De app waarschuwt in dat geval.
+- Export -> (ongewijzigd) import gaf toch "wijzigingen". Oorzaak: stoelen die in
+  Firestore nog een toewijzing hadden maar geen bezetter, kregen geen
+  exportkolom, waardoor die dagen bij re-import als gewijzigd telden. De export
+  neemt zulke stoelen nu wel mee (kolomkop = laatst bekende code of stoel-id),
+  zodat geen ingevulde dag meer wegvalt en de round-trip sluitend is.
+- Nieuw "Toon verschillen" in de import-preview: een uitklap die exact laat zien
+  welke cellen afwijken (datum, stoel, oud -> nieuw). Zo is elk verschil
+  herleidbaar en kun je verweesde toewijzingen herkennen en opruimen.
+- Tab-persistentie: de Beheer-view onthoudt de actieve (sub-)tab. Na het kiezen
+  van een importbestand blijf je op Control > Overige instellingen staan in
+  plaats van terug te springen naar Stoel bezetting.

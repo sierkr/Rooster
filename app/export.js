@@ -433,6 +433,32 @@ export async function actExportJaar(jaar, naamParam) {
         })
         .filter(Boolean);
 
+    // Round-trip-vangnet: neem ook stoelen op die dit jaar een NIET-lege
+    // toewijzing hebben maar (nog) geen bezetter/kolom kregen. Zonder dit zou de
+    // export die stille data laten vallen en een verse re-import "wijzigingen"
+    // tonen (Firestore heeft de cel, Excel niet). Kolomkop = laatst bekende code
+    // of het stoel-id.
+    const reedsKolom = new Set(kolomEntries.map(e => e.id));
+    const extraIds = new Set();
+    dagen.forEach(dag => {
+      const tw = dag && dag.toewijzingen;
+      if (!tw) return;
+      Object.keys(tw).forEach(id => {
+        if (reedsKolom.has(id) || extraIds.has(id)) return;
+        const v = tw[id];
+        const nietLeeg = Array.isArray(v) ? v.length > 0 : !!v;
+        if (nietLeeg) extraIds.add(id);
+      });
+    });
+    extraIds.forEach(id => {
+      const stoel = (state.radiologen || []).find(r => r.id === id);
+      kolomEntries.push({
+        id, isSlot: SLOTS.includes(id), idx: vasteIdxVoorStoel(id),
+        sortKey: senioriteitSortKey(id, null), code: (stoel && stoel.code) || id,
+        notitie: null, bezetters: [],
+      });
+    });
+
     // Vaste stoelen eerst (op senioriteit, via dezelfde canonieke functie als
     // Overzicht/Afdeling), waarnemer-slots daarna (vaste W5..W1-volgorde).
     kolomEntries.sort((a, b) => {

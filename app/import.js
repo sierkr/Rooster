@@ -335,6 +335,7 @@ export async function actImportFile(input, renderGebView) {
     let totaalGewijzigd = 0;
     let nabijeCellen    = 0;
     const nabijeDatumsSet = new Set();
+    const verschillen = []; // diagnose: welke cellen wijken af (max 200)
     for (const dag of dagen) {
       const bestaand      = state.indelingMap[dag.datum];
       const nieuweTwz     = dag.toewijzingen || {};
@@ -346,6 +347,9 @@ export async function actImportFile(input, renderGebView) {
         const oudeCodes   = oudeTwz[radId]   || [];
         if (JSON.stringify(oudeCodes) !== JSON.stringify(nieuweCodes)) {
           totaalGewijzigd++;
+          if (verschillen.length < 200) {
+            verschillen.push({ datum: dag.datum, stoel: radId, oud: oudeCodes, nieuw: nieuweCodes });
+          }
           if (dag.datum >= vandaagPrev && dag.datum <= grensPrev) {
             nabijeCellen++;
             nabijeDatumsSet.add(dag.datum);
@@ -364,6 +368,7 @@ export async function actImportFile(input, renderGebView) {
       nabijeCellen,
       nabijeDagen: nabijeDatumsSet.size,
       nabijeDagsList: [...nabijeDatumsSet].sort(),
+      verschillen,
     };
   } catch (e) {
     console.error('actImportFile', e);

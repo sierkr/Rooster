@@ -1,3 +1,26 @@
+## v3.27.120 — Round-trip-fix, verschil-diagnose en tab-persistentie
+
+### Waarom
+Een export → (ongewijzigd) import toonde toch "14 toewijzingen gewijzigd". Analyse
+van het geëxporteerde bestand liet zien dat de celwaarden schoon round-trippen; de
+verschillen kwamen van kolom-lidmaatschap: stoelen die in Firestore nog een
+toewijzing hebben maar geen bezetter (bv. een leeggeraakte waarnemer-plek) kregen
+géén exportkolom, waardoor die dagen bij re-import als "gewijzigd" telden.
+
+### Fixes
+- **export.js — round-trip sluitend.** De export neemt nu ook een kolom op voor
+  elke stoel die dat jaar een niet-lege toewijzing heeft maar geen bezetter/kolom
+  kreeg (kolomkop = laatst bekende code of stoel-id). Zo valt geen ingevulde dag
+  meer weg en toont een verse re-import geen spookwijzigingen meer.
+- **import.js + gebruikers.js — "Toon verschillen".** De import-preview heeft een
+  uitklap die exact opsomt welke cellen afwijken (datum · stoel · oud → nieuw),
+  zodat een resterend verschil altijd herleidbaar en controleerbaar is.
+- **gebruikers.js — tab-persistentie.** De Beheer-view onthoudt de actieve
+  (sub-)tab. Na het kiezen van een importbestand blijf je op Control → Overige
+  instellingen staan i.p.v. terug te springen naar Stoel bezetting.
+
+---
+
 ## v3.27.119 — Stoel-wijzigingen: inzichtelijk, terugdraaibaar, met impact-preview
 
 ### Waarom

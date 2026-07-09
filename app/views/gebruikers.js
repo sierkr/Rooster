@@ -25,6 +25,11 @@ export async function laadGebruikers() {
   state.gebruikers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+// Onthoudt de laatst gekozen (sub-)tab binnen Beheer, zodat een her-render
+// (bv. na het kiezen van een importbestand) niet terugspringt naar de eerste tab.
+let _behTab1 = null;
+const _behTab2 = { geb: 'rad', ctl: 'regels' };
+
 export async function renderGebView() {
   const container = document.getElementById('view-geb');
   const canGeb = magGebruikersBeheren();
@@ -256,6 +261,15 @@ export async function renderGebView() {
               ✓ Geen wijzigingen t.o.v. huidige Firestore-data
             </div>
           `}
+          ${(p.verschillen && p.verschillen.length) ? `
+            <details style="margin-bottom: 8px;">
+              <summary class="muted" style="cursor: pointer; font-size: 12px;">Toon verschillen (${p.totaalGewijzigd})</summary>
+              <div style="font-size: 11px; max-height: 220px; overflow: auto; margin-top: 6px; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px;">
+                ${p.verschillen.map(v => `<div style="padding: 3px 8px; border-bottom: 1px solid rgba(0,0,0,0.05);">${v.datum} · <b>${String(v.stoel).replace(/</g,'&lt;')}</b>: ${JSON.stringify(v.oud).replace(/</g,'&lt;')} → ${JSON.stringify(v.nieuw).replace(/</g,'&lt;')}</div>`).join('')}
+                ${p.totaalGewijzigd > p.verschillen.length ? `<div class="muted" style="padding: 3px 8px;">… en ${p.totaalGewijzigd - p.verschillen.length} meer</div>` : ''}
+              </div>
+            </details>
+          ` : ''}
           ${p.nabijeCellen > 0 ? `
             <div style="background: #fff4e0; color: #6b3a00; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; border-left: 3px solid #f0a020;">
               ⚠ <b>${p.nabijeCellen} toewijzing${p.nabijeCellen === 1 ? '' : 'en'}</b> gewijzigd binnen 30 dagen
@@ -425,7 +439,8 @@ export async function renderGebView() {
   // ---- Assemblage: Beheer met drie sub-tabs --------------------------------
   const v = window.APP_VERSIE || '?';
   const showBez = canGeb, showGeb = canGeb, showCtl = canReg;
-  const eersteTab = showBez ? 'bezetting' : (showGeb ? 'gebruikers' : 'control');
+  const beschikbareTabs = [showBez && 'bezetting', showGeb && 'gebruikers', showCtl && 'control'].filter(Boolean);
+  const eersteTab = (_behTab1 && beschikbareTabs.includes(_behTab1)) ? _behTab1 : beschikbareTabs[0];
   const disp = (id) => id === eersteTab ? 'block' : 'none';
   const tab1 = (id, label) => `<button class="beh-tab1 ${id===eersteTab?'active':''}" data-t="${id}" onclick="window.gebTab1('${id}')">${label}</button>`;
   const tab2 = (scope, id, label, active) => `<button class="beh-tab2 ${active?'active':''}" data-scope="${scope}" data-t="${id}" onclick="window.gebTab2('${scope}','${id}')">${label}</button>`;
@@ -495,12 +510,20 @@ export async function renderGebView() {
   // Regels-view in het Control-paneel renderen (vult #view-reg dat hierboven is
   // aangemaakt). Alleen als de gebruiker regels mag beheren.
   if (canReg) renderRegView();
+
+  // Herstel de eerder gekozen (sub-)tab na opnieuw tekenen, zodat je na bv. het
+  // kiezen van een importbestand op dezelfde plek blijft i.p.v. terug te
+  // springen naar Stoel bezetting.
+  if (_behTab1 && beschikbareTabs.includes(_behTab1)) window.gebTab1(_behTab1);
+  if (showGeb) window.gebTab2('geb', _behTab2.geb);
+  if (showCtl) window.gebTab2('ctl', _behTab2.ctl);
 }
 
 // Sub-tab-navigatie binnen Beheer (niveau 1: Stoel bezetting / App gebruikers /
 // Control). Panelen blijven in de DOM en worden alleen getoond/verborgen, zodat
 // ingevulde formuliervelden en knop-statussen behouden blijven.
 window.gebTab1 = function(id) {
+  _behTab1 = id;
   ['bezetting','gebruikers','control'].forEach(k => {
     const el = document.getElementById('behpanel-' + k);
     if (el) el.style.display = (k === id) ? 'block' : 'none';
@@ -511,6 +534,7 @@ window.gebTab1 = function(id) {
 // Sub-tab-navigatie niveau 2. scope 'geb' = App gebruikers (rad/tech/sec),
 // scope 'ctl' = Control (regels/overig).
 window.gebTab2 = function(scope, id) {
+  _behTab2[scope] = id;
   const prefix = scope === 'geb' ? 'gebsub-' : 'ctlsub-';
   const keys = scope === 'geb' ? ['rad','tech','sec'] : ['regels','overig'];
   keys.forEach(k => {
