@@ -1,3 +1,29 @@
+## v3.27.123 — Waarnemer-schuifje weerspiegelt de echte bezetting + datumkiezer
+
+### Fix
+- **Schuifje volgt nu de werkelijke bezetting.** Het waarnemer-schuifje in Beheer
+  las voorheen de rauwe `actief`-vlag. Die werd bij een **→ Vast** met een datum in
+  de toekomst meteen op `false` gezet, waardoor het schuifje "uit" stond terwijl de
+  waarnemer nog gewoon actief was (bv. GJG die pas per 1-1-2027 vast in dienst komt).
+  Het schuifje kijkt nu naar de lopende **óf geplande** bezetter (`bezetting_historie`)
+  en staat "aan" zolang er een waarnemer lopend of gepland is. Achter de schermen
+  bleef GJG altijd al correct waarnemer tot de ingangsdatum — nu klopt ook de weergave.
+
+### Nieuw
+- **Datumkiezer bij activeren én stoppen.** Tik het schuifje om een waarnemer te
+  **activeren** (code + achternaam + "actief vanaf"-datum) of te laten **stoppen**
+  ("geen waarnemer meer vanaf"-datum). Zo bepaal jij de datum — een waarnemer die
+  woensdag begint, of volgende maand stopt, kan zonder dat de app een datum oplegt.
+  De rij toont bij een toekomstige start "(vanaf …)" en bij een geplande einddatum
+  "(t/m …)".
+- **"Waarnemers opslaan" is nu rename-only.** De bulk-opslaanknop werkt uitsluitend
+  de code/achternaam bij van de reeds lopende/geplande waarnemer. Hij maakt,
+  verplaatst of sluit geen periodes meer af (dat gaat via het schuifje + datumkiezer).
+  Hiermee vervalt de kans dat bulk-opslaan een geplande → Vast overschreef of een
+  dubbele boeking (waarnemer op W-slot én vaste stoel) veroorzaakte.
+
+---
+
 ## v3.27.122 — Backfill bestaande wijzigingen + Mutaties-blad read-only
 
 ### Nieuw

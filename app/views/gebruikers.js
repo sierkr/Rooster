@@ -30,6 +30,36 @@ export async function laadGebruikers() {
 let _behTab1 = null;
 const _behTab2 = { geb: 'rad', ctl: 'regels' };
 
+// Bepaalt de bezetting die in het beheer-raster van een W-slot getoond moet
+// worden: de lopende bezetter van vandaag, of — als het slot vandaag leeg is —
+// de eerstvolgende geplande bezetter (bv. een waarnemer die woensdag begint).
+// Retourneert { code, achternaam, van, tot, persoon_id, toekomstig } of null als
+// er geen lopende én geen geplande bezetter is.
+function huidigeOfGeplandeBezetting(slotId) {
+  const vandaag = vandaagIso();
+  const nu = bezettingOpDatum(slotId, vandaag);
+  if (nu) return { ...nu, toekomstig: false };
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie : [];
+  const toekomst = hist
+    .filter(e => e.van && e.van > vandaag && (!e.tot || e.tot >= e.van))
+    .sort((a, b) => (a.van < b.van ? -1 : 1))[0];
+  if (!toekomst) return null;
+  return {
+    slotId,
+    voornaam: toekomst.voornaam || '',
+    achternaam: toekomst.achternaam || '',
+    code: toekomst.code || slotId,
+    vakantierecht: typeof toekomst.vakantierecht === 'number' ? toekomst.vakantierecht : 40,
+    parttime_factor: typeof toekomst.parttime_factor === 'number' ? toekomst.parttime_factor : 1,
+    in_dienst: toekomst.in_dienst || null,
+    van: toekomst.van || null,
+    tot: toekomst.tot || null,
+    persoon_id: toekomst.persoon_id || null,
+    toekomstig: true,
+  };
+}
+
 export async function renderGebView() {
   const container = document.getElementById('view-geb');
   const canGeb = magGebruikersBeheren();
@@ -195,27 +225,30 @@ export async function renderGebView() {
     <div style="margin-top: 1.5rem;">
       <div class="summary-label" style="margin-bottom: 6px;">Waarnemers (W-slots)</div>
       <div class="card">
-        <p class="muted" style="margin: 0 0 10px;">Alleen "actief" waarnemers verschijnen in het beheer-raster en in tellingen. <b>Wissel</b> zet een NIEUWE waarnemer op dit W-slot vanaf een datum, zonder migratie. <b>→ Vast</b> maakt de huidige waarnemer per datum de bezetter van een vaste stoel, mét behoud van diens indeling, wensen en diensten.</p>
+        <p class="muted" style="margin: 0 0 10px;">Het schuifje staat <b>aan</b> zolang er een lopende óf geplande waarnemer op dit W-slot zit. Tik het schuifje om een waarnemer te <b>activeren</b> (met startdatum) of te laten <b>stoppen</b> (met einddatum) — jij bepaalt de datum. <b>Wissel</b> zet een NIEUWE waarnemer op dit W-slot vanaf een datum. <b>→ Vast</b> maakt de huidige waarnemer per datum de bezetter van een vaste stoel, mét behoud van diens indeling, wensen en diensten.</p>
         ${SLOTS.map(slotId => {
-          const slot = state.radiologen.find(r => r.id === slotId) || { id: slotId, actief: false };
-          // Weergave altijd via bezettingOpDatum (vandaag), nooit via de rauwe
-          // top-level code/achternaam-velden: bij een →Vast-migratie worden die
-          // direct leeggemaakt zodra er op "Doorvoeren" wordt geklikt, óók als
-          // de ingangsdatum in de toekomst ligt. De bezetting_historie houdt wél
-          // rekening met de datum (de entry blijft geldig t/m de dag vóór de
-          // ingangsdatum), dus zo blijft de waarnemer zichtbaar tot de wissel
-          // écht ingaat — in plaats van meteen te "verdwijnen".
-          const huidig = bezettingOpDatum(slotId, vandaagIso());
-          const code = huidig?.code || '';
-          const naam = huidig?.achternaam || '';
-          const isActief = slot.actief !== false;
-          const isLeeg = !code || slot.actief === false;
+          // Weergave via de werkelijke bezetting: de lopende bezetter van vandaag,
+          // en anders de eerstvolgende geplande bezetter (bv. "begint woensdag").
+          // Zo staat het schuifje aan zodra er een waarnemer lopend óf gepland is —
+          // ook als de startdatum in de toekomst ligt of een →Vast een einddatum
+          // in de toekomst heeft. De ruwe top-level actief-vlag wordt hiervoor
+          // NIET meer gebruikt (die kon "uit" staan terwijl er nog een waarnemer was).
+          const bez = huidigeOfGeplandeBezetting(slotId);
+          const code = bez?.code || '';
+          const naam = bez?.achternaam || '';
+          const isActief = !!bez;
+          const isLeeg = !bez;
+          const datumInfo = bez
+            ? (bez.toekomstig
+                ? ` <span class="muted" style="font-size:11px;">(vanaf ${formatDatum(bez.van, 'kort')})</span>`
+                : (bez.tot ? ` <span class="muted" style="font-size:11px;">(t/m ${formatDatum(bez.tot, 'kort')})</span>` : ''))
+            : '';
           return `
             <div style="display: grid; grid-template-columns: 32px 1fr 1fr 38px 60px 60px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
-              <div style="font-weight: 500; color: #5f5e5a;">${slotId}</div>
+              <div style="font-weight: 500; color: #5f5e5a;">${slotId}${datumInfo}</div>
               <input type="text" class="input" id="inv_code_${slotId}" placeholder="Code" maxlength="4" value="${code.replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
               <input type="text" class="input" id="inv_naam_${slotId}" placeholder="Achternaam" value="${naam.replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
-              <span class="toggle-switch ${isActief ? 'aan' : ''}" id="inv_act_${slotId}" onclick="this.classList.toggle('aan'); window.gebMarkDirty('wnr')"></span>
+              <span class="toggle-switch ${isActief ? 'aan' : ''}" id="inv_act_${slotId}" onclick="window.wnrToggle('${slotId}')" title="${isActief ? 'Waarnemer laten stoppen per datum' : 'Waarnemer activeren per datum'}"></span>
               <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openWisselSheet('${slotId}')">Wissel</button>
               <button class="btn" style="font-size: 11px; padding: 6px 4px; ${isLeeg ? 'opacity:0.4; cursor:not-allowed;' : ''}" ${isLeeg ? 'disabled' : ''} onclick="window.openMaakVastSheet('${slotId}')" title="Maak vast in een vaste-stoel">→ Vast</button>
             </div>
@@ -672,91 +705,174 @@ window.opslaanParttime = async function() {
   }
 };
 
+// "Waarnemers opslaan" is nu uitsluitend een RENAME: het werkt alleen de
+// code/achternaam bij van de reeds lopende óf geplande waarnemer per W-slot.
+// Het maakt, verplaatst of sluit NOOIT periodes af — dat gebeurt uitsluitend via
+// het schuifje + datumkiezer (activeren/stoppen). Zo kan bulk-opslaan een lopende
+// of geplande →Vast nooit stilzwijgend overschrijven of dubbelboeken.
 window.opslaanInvallers = async function() {
   try {
-    // Eerst valideren: een "actieve" waarnemer moet een code hebben, anders
-    // is de rij straks nergens herkenbaar in het rooster. Vroeger viel een
-    // leeg code-veld terug op de letterlijke slot-ID (bv. "W4") — dat werd
-    // dan als échte data opgeslagen en bleef als rommel in de lijst staan.
-    // Nu wordt een leeg code-veld altijd ook echt leeg opgeslagen.
+    const vandaag = vandaagIso();
     for (const slotId of SLOTS) {
-      const code = document.getElementById('inv_code_' + slotId).value.trim();
-      const actief = document.getElementById('inv_act_' + slotId).classList.contains('aan');
-      if (actief && !code) {
-        alert(`Waarnemer ${slotId} staat op "actief" maar heeft geen code. Vul een code in of zet de schakelaar uit.`);
+      const codeEl = document.getElementById('inv_code_' + slotId);
+      const naamEl = document.getElementById('inv_naam_' + slotId);
+      if (!codeEl || !naamEl) continue;
+      const code = codeEl.value.trim();
+      const achternaam = naamEl.value.trim();
+      const stoel = state.radiologen.find(r => r.id === slotId);
+      const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+
+      // Relevante entry: de lopende bezetter van vandaag, anders de eerstvolgende
+      // geplande. Precies dezelfde entry die het raster toont.
+      let entry = hist.find(e => (!e.van || e.van <= vandaag) && (!e.tot || e.tot >= vandaag));
+      if (!entry) {
+        entry = hist
+          .filter(e => e.van && e.van > vandaag && (!e.tot || e.tot >= e.van))
+          .sort((a, b) => (a.van < b.van ? -1 : 1))[0] || null;
+      }
+
+      if (entry) {
+        if (!code) {
+          alert(`Waarnemer ${slotId} is actief; een lege code kan niet. Gebruik het schuifje om de waarnemer per datum te laten stoppen.`);
+          return;
+        }
+        entry.code = code;
+        entry.achternaam = achternaam || '';
+        if (!entry.persoon_id) entry.persoon_id = stoel?.persoon_id || nieuwPersoonId();
+        assertBezettingGeldig(hist, slotId);
+        await setDoc(doc(db, 'radiologen', slotId), {
+          id: slotId, isSlot: true, code, achternaam: achternaam || '',
+          persoon_id: entry.persoon_id, bezetting_historie: hist,
+        }, { merge: true });
+      } else if (!hist.length && !code) {
+        // Leeg slot, niks ingevuld → overslaan.
+        continue;
+      } else if (code) {
+        // Leeg slot met ingetypte code maar geen periode: activeren hoort via het
+        // schuifje (met startdatum), zodat de waarnemer een geldige periode krijgt.
+        alert(`Zet het schuifje bij ${slotId} aan om ${code} te activeren met een startdatum.`);
         return;
       }
     }
-    for (const slotId of SLOTS) {
-      const code = document.getElementById('inv_code_' + slotId).value.trim();
-      const achternaam = document.getElementById('inv_naam_' + slotId).value.trim();
-      const actief = document.getElementById('inv_act_' + slotId).classList.contains('aan');
-      const stoel = state.radiologen.find(r => r.id === slotId);
-      const update = {
-        id: slotId, code: code || '', achternaam: achternaam || '', actief, isSlot: true,
-      };
-      // Bezette W-stoel (échte naam ingevuld) zonder persoon_id krijgt er één,
-      // zodat de identiteit meeloopt als deze waarnemer later vast in dienst
-      // komt. Een leeg slot (alleen een kale slotnaam) krijgt er géén.
-      if (achternaam && !stoel?.persoon_id) update.persoon_id = nieuwPersoonId();
-
-      // Zodra er een bezetting_historie is, geeft de weergave (bezettingOpDatum)
-      // altijd voorrang aan de historie boven de top-level code/achternaam. De
-      // historie moet hier dus mee-gereconcilieerd worden, anders wordt deze
-      // invoer stilzwijgend genegeerd zodra de stoel ooit een historie heeft.
-      //
-      // BUGFIX: eerder werd alleen een BESTAANDE open entry bijgewerkt. Had een
-      // W-slot wél een historie maar géén lopende entry (bv. de waarnemer is via
-      // "→ Vast" vertrokken en de periode is afgesloten), dan werd de top-level
-      // wél geschreven maar vond bezettingOpDatum niets geldigs meer → de nieuw
-      // ingevoerde waarnemer "verdween" direct na opslaan. Nu maken we in dat
-      // geval een nieuwe open periode aan vanaf vandaag.
-      const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
-      const vandaag = vandaagIso();
-      let open = hist.find(e => !e.tot);
-      if (actief && code) {
-        if (open) {
-          // Zelfde lopende bezetter: enkel code/naam bijwerken.
-          open.code = code;
-          open.achternaam = achternaam || '';
-          if (update.persoon_id && !open.persoon_id) open.persoon_id = update.persoon_id;
-          update.bezetting_historie = hist;
-        } else if (hist.length > 0) {
-          // Historie zonder lopende bezetter → nieuwe open periode vanaf vandaag,
-          // met clipping zodat een oude periode niet kan overlappen.
-          const geclipt = clipHistorieVoorWissel(hist, vandaag);
-          const nieuwPid = update.persoon_id || stoel?.persoon_id || nieuwPersoonId();
-          geclipt.push({
-            voornaam: '', achternaam: achternaam || '', code,
-            vakantierecht: typeof stoel?.vakantierecht === 'number' ? stoel.vakantierecht : 40,
-            parttime_factor: typeof stoel?.parttime_factor === 'number' ? stoel.parttime_factor : 1,
-            in_dienst: null,
-            persoon_id: nieuwPid,
-            van: vandaag, tot: null,
-          });
-          update.persoon_id = nieuwPid;
-          update.bezetting_historie = geclipt;
-        }
-        // hist.length === 0: geen historie → top-level volstaat (bezettingOpDatum
-        // valt terug op de top-level velden).
-      } else {
-        // Niet actief of leeg code: sluit een eventuele lopende periode af op de
-        // dag vóór vandaag, zodat bezettingOpDatum de stoel echt als leeg toont
-        // (anders bleef een open historie-entry de "lege" stoel tonen).
-        if (open) {
-          open.tot = plusDagen(vandaag, -1);
-          update.bezetting_historie = hist;
-        }
-      }
-
-      // Invariant-bewaking: nooit een overlappende/dubbel-open historie wegschrijven.
-      if (update.bezetting_historie) assertBezettingGeldig(update.bezetting_historie, slotId);
-
-      await setDoc(doc(db, 'radiologen', slotId), update, { merge: true });
-    }
     alert('Waarnemers opgeslagen.');
+    renderGebView();
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
+  }
+};
+
+// ==== Waarnemer activeren / stoppen via schuifje + datumkiezer ===============
+// Het schuifje bij een W-slot opent een sheet. Staat het slot leeg → activeren
+// (code + naam + startdatum). Zit er een lopende/geplande waarnemer → stoppen
+// (einddatum). Beide schrijven direct, met canonieke clipping, zodat er nooit
+// overlappende periodes ontstaan.
+window.wnrToggle = function(slotId) {
+  const bez = huidigeOfGeplandeBezetting(slotId);
+  if (bez) window.openWnrStopSheet(slotId);
+  else window.openWnrActiveerSheet(slotId);
+};
+
+window.openWnrActiveerSheet = function(slotId) {
+  const codeEl = document.getElementById('inv_code_' + slotId);
+  const naamEl = document.getElementById('inv_naam_' + slotId);
+  const codeNu = codeEl ? codeEl.value.trim() : '';
+  const naamNu = naamEl ? naamEl.value.trim() : '';
+  const defDatum = vandaagIso();
+  document.getElementById('sheetTitle').textContent = `Waarnemer activeren op ${slotId}`;
+  document.getElementById('sheetSub').textContent = 'Vanaf welke datum is deze waarnemer actief?';
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-field"><label class="form-label">Code</label>
+      <input type="text" class="input" id="waCode" maxlength="4" value="${codeNu.replace(/"/g,'&quot;')}" placeholder="bv. JD"></div>
+    <div class="form-field"><label class="form-label">Achternaam</label>
+      <input type="text" class="input" id="waNaam" value="${naamNu.replace(/"/g,'&quot;')}" placeholder="Achternaam"></div>
+    <div class="form-field"><label class="form-label">Actief vanaf</label>
+      <input type="date" class="input" id="waDatum" value="${defDatum}"></div>
+    <div style="display:flex; gap:8px; margin-top:1rem;">
+      <button class="btn" style="flex:1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="window.wnrActiveerDoorvoeren('${slotId}')">Doorvoeren</button>
+    </div>`;
+  openSheet();
+};
+
+window.wnrActiveerDoorvoeren = async function(slotId) {
+  const code = document.getElementById('waCode').value.trim();
+  const achternaam = document.getElementById('waNaam').value.trim();
+  const datum = document.getElementById('waDatum').value;
+  if (!code) { alert('Vul een code in.'); return; }
+  if (!datum) { alert('Kies een ingangsdatum.'); return; }
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+  // Clip bestaande periodes per de ingangsdatum en voeg de nieuwe open periode toe.
+  const geclipt = clipHistorieVoorWissel(hist, datum);
+  const pid = stoel?.persoon_id || nieuwPersoonId();
+  geclipt.push({
+    voornaam: '', achternaam: achternaam || '', code,
+    vakantierecht: typeof stoel?.vakantierecht === 'number' ? stoel.vakantierecht : 40,
+    parttime_factor: typeof stoel?.parttime_factor === 'number' ? stoel.parttime_factor : 1,
+    in_dienst: null, persoon_id: pid, van: datum, tot: null,
+  });
+  const btn = document.querySelector('#sheetBody .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
+  try {
+    assertBezettingGeldig(geclipt, slotId);
+    await setDoc(doc(db, 'radiologen', slotId), {
+      id: slotId, isSlot: true, actief: true, code, achternaam: achternaam || '',
+      voornaam: '', persoon_id: pid, bezetting_historie: geclipt,
+    }, { merge: true });
+    closeSheet();
+    alert(`${code} is waarnemer op ${slotId} vanaf ${formatDatum(datum, 'kort')}.`);
+    renderGebView();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Doorvoeren'; }
+    alert('Activeren mislukt: ' + (e.message || e));
+  }
+};
+
+window.openWnrStopSheet = function(slotId) {
+  const bez = huidigeOfGeplandeBezetting(slotId);
+  const defDatum = vandaagIso();
+  document.getElementById('sheetTitle').textContent = `Waarnemer ${bez?.code || slotId} stopt`;
+  document.getElementById('sheetSub').textContent = 'Vanaf welke datum is deze waarnemer geen waarnemer meer?';
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="form-info" style="margin-bottom:12px; font-size:12px;">
+      <b>${bez?.code || ''}</b> · ${bez?.achternaam || ''} is waarnemer op ${slotId}. Vanaf de opgegeven datum verdwijnt de waarnemer uit het rooster en de tellingen. De historie ervóór blijft behouden.
+    </div>
+    <div class="form-field"><label class="form-label">Geen waarnemer meer vanaf</label>
+      <input type="date" class="input" id="wdDatum" value="${defDatum}"></div>
+    <div style="display:flex; gap:8px; margin-top:1rem;">
+      <button class="btn" style="flex:1;" onclick="window.closeSheet()">Annuleren</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="window.wnrStopDoorvoeren('${slotId}')">Doorvoeren</button>
+    </div>`;
+  openSheet();
+};
+
+window.wnrStopDoorvoeren = async function(slotId) {
+  const datum = document.getElementById('wdDatum').value;
+  if (!datum) { alert('Kies een datum.'); return; }
+  const stoel = state.radiologen.find(r => r.id === slotId);
+  const hist = Array.isArray(stoel?.bezetting_historie) ? stoel.bezetting_historie.map(e => ({ ...e })) : [];
+  // Sluit lopende/overlappende periodes af per de dag vóór de stopdatum en laat
+  // periodes die volledig ná de stopdatum beginnen vervallen (dezelfde canonieke
+  // clipping als bij een wissel).
+  const nieuw = clipHistorieVoorWissel(hist, datum);
+  const vandaag = vandaagIso();
+  const nogActief = nieuw.some(e => !e.tot || e.tot >= vandaag);
+  const btn = document.querySelector('#sheetBody .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
+  try {
+    assertBezettingGeldig(nieuw, slotId);
+    const upd = { id: slotId, isSlot: true, bezetting_historie: nieuw };
+    // Geen lopende bezetter meer over → ook de top-level als leeg markeren.
+    if (!nogActief) {
+      upd.actief = false; upd.code = ''; upd.achternaam = ''; upd.voornaam = ''; upd.persoon_id = null;
+    }
+    await setDoc(doc(db, 'radiologen', slotId), upd, { merge: true });
+    closeSheet();
+    alert(`Waarnemer op ${slotId} stopt per ${formatDatum(datum, 'kort')}.`);
+    renderGebView();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Doorvoeren'; }
+    alert('Wijzigen mislukt: ' + (e.message || e));
   }
 };
 

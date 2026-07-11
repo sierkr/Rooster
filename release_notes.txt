@@ -1,3 +1,28 @@
+Rooster v3.27.123 — Release notes
+==================================
+
+WAARNEMER-SCHUIFJE VOLGT DE ECHTE BEZETTING + DATUMKIEZER
+----------------------------------------------------------------------------
+- Het waarnemer-schuifje in Beheer stond soms "uit" terwijl de waarnemer nog
+  actief was. Dat kwam doordat een "-> Vast" met een toekomstige ingangsdatum de
+  ruwe actief-vlag meteen op false zette (bv. GJG die pas per 1-1-2027 vast in
+  dienst komt). Het schuifje kijkt nu naar de lopende OF geplande bezetter en
+  staat "aan" zolang er een waarnemer lopend of gepland is. De onderliggende data
+  klopte al; nu klopt ook de weergave.
+
+- Tik het schuifje om een waarnemer te ACTIVEREN (code + achternaam + "actief
+  vanaf"-datum) of te laten STOPPEN ("geen waarnemer meer vanaf"-datum). Jij kiest
+  de datum: een waarnemer die woensdag begint of volgende maand stopt kan zonder
+  dat de app een datum oplegt. De rij toont "(vanaf ...)" of "(t/m ...)".
+
+- "Waarnemers opslaan" is nu rename-only: het werkt alleen code/achternaam bij van
+  de lopende/geplande waarnemer en maakt/verplaatst/sluit geen periodes meer af.
+  Dat voorkomt dat bulk-opslaan een geplande "-> Vast" overschreef of een dubbele
+  boeking veroorzaakte.
+
+----------------------------------------------------------------------------
+
+
 Rooster v3.27.122 — Release notes
 ==================================
 
