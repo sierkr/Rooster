@@ -1,10 +1,39 @@
 // Schrijf-acties naar Firestore: cel-toewijzingen, opmerkingen, dienst.
 // Bevat de business-logica rondom wens-checks en audit-logging.
-import { collection, doc, setDoc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+//
+// v3.28.0 (K1): alle schrijfacties zijn "cel-gescoped" en atomair.
+//  - Er wordt NOOIT meer een volledige toewijzingen/cel_opmerkingen-map uit de
+//    lokale cache teruggeschreven. In plaats daarvan schrijft setDoc(merge)
+//    alléén de eigen sleutel (toewijzingen.<radId>, cel_opmerkingen.<radId>,
+//    dienst.dag). Twee beheerders die tegelijk verschillende cellen bewerken
+//    kunnen elkaar daardoor niet meer overschrijven (lost update).
+//  - De data-write en het bijbehorende wijziging-record gaan in ÉÉN writeBatch:
+//    of allebei slagen, of geen van beide. Een roosterwijziging zonder
+//    logregel kan dus niet meer ontstaan.
+//  - Onafhankelijk hiervan schrijft de server-side Cloud Function
+//    (auditIndeling) een onvervalsbaar audit_log-record bij elke wijziging.
+import { collection, doc, setDoc, updateDoc, writeBatch, deleteField, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, magWijzigen, magAlleWensenZien, vandaagIso, plusDagen, wensMatcht } from './helpers.js';
 import { checkCelConflict } from './validatie.js';
+
+// Basis-metadata voor een indeling-doc (idempotent, mag bij elke merge mee)
+function _dagMeta(datum) {
+  const dagNr = new Date(datum + 'T00:00:00').getDay();
+  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
+  return { datum, weeknr: isoWeekVan(datum), dag: DAGEN_NL[dagNlIdx] };
+}
+
+// Nieuw wijziging-record met vaste basisvelden (zie firestore.rules:
+// de create-rule eist exact deze veldenset + serverTimestamp).
+function _wijzigingBasis() {
+  return {
+    uid: state.user.uid,
+    email: state.profiel.email,
+    wanneer: serverTimestamp(),
+  };
+}
 
 // Schrijf cel-toewijzing + (optioneel) cel-opmerking. Ook check op
 // blokkerende regels en verwerkte wensen.
@@ -20,11 +49,6 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
   const primaireCode = codesArr[0] || '';
 
   const bestaand = state.indelingMap[datum];
-  const toewijzingen = { ...(bestaand?.toewijzingen || {}) };
-  toewijzingen[radId] = codesArr;
-
-  const dagNr = new Date(datum + 'T00:00:00').getDay();
-  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
 
   // Pre-check: zou deze wijziging een blokkerende regel triggeren?
   const conflicten = checkCelConflict(datum, radId, codesArr);
@@ -65,74 +89,60 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
     }
   }
 
+  // ---- Cel-gescoped payload: alleen de eigen sleutel wordt geraakt ---------
   const docData = {
-    datum,
-    weeknr: isoWeekVan(datum),
-    dag: DAGEN_NL[dagNlIdx],
-    toewijzingen,
-    dienst: bestaand?.dienst || {},
-    bespreking: bestaand?.bespreking || null,
-    interventie: bestaand?.interventie || null,
-    opmerking: bestaand?.opmerking || null,
+    ..._dagMeta(datum),
+    toewijzingen: { [radId]: codesArr },
   };
 
   // Cel-opmerking meeschrijven (alleen als parameter is meegegeven)
   const oudeCelOpm = bestaand?.cel_opmerkingen?.[radId] || '';
   let celOpmGewijzigd = false;
   if (typeof opmerking === 'string') {
-    const nieuw = { ...(bestaand?.cel_opmerkingen || {}) };
-    if (opmerking) nieuw[radId] = opmerking;
-    else delete nieuw[radId];
-    docData.cel_opmerkingen = nieuw;
+    // deleteField() binnen een merge verwijdert alléén deze sleutel;
+    // opmerkingen van andere radiologen blijven onaangeroerd.
+    docData.cel_opmerkingen = { [radId]: opmerking ? opmerking : deleteField() };
     celOpmGewijzigd = (oudeCelOpm !== opmerking);
   }
 
+  // Bepaal of er een echte toewijzingswijziging is t.o.v. vorige waarde
+  const oudeCodesArr = bestaand?.toewijzingen?.[radId] || [];
+  const isGewijzigd = JSON.stringify(oudeCodesArr) !== JSON.stringify(codesArr);
+
   try {
-    await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
+    // ---- Atomaire batch: data + wijziging-records in één commit ------------
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'indeling', datum), docData, { merge: true });
 
-    // Bepaal of er een echte toewijzingswijziging is t.o.v. vorige waarde
-    const oudeCodesArr = bestaand?.toewijzingen?.[radId] || [];
-    const isGewijzigd = JSON.stringify(oudeCodesArr) !== JSON.stringify(codesArr);
-
-    // Wijziging-doc schrijven voor audit-log
     if (isGewijzigd) {
       // De schrijver is altijd een beheerder/secretariaat (radiologen hebben
       // geen mag_beheer). Een beheerder die toevallig op hetzelfde slot zit
       // (bijv. W3) wijzigt toch de cel van de betrokken radioloog → altijd
-      // gezien:false als de datum nabij is. Alleen niet als de gebruiker
-      // geen wijzigingsrechten heeft en zijn eigen slot aanpast (onmogelijk
-      // in de huidige UI, maar als veiligheidsnet).
-      const schrijverIsBeheerder = magWijzigen();
-      const nabijeDatum = _isDatumNabij(datum);
-      // Markeer als ongelezen als: datum is nabij EN de schrijver is beheerder
-      // (niet de radioloog zelf die per ongeluk zijn eigen slot zou wijzigen)
-      const markeerOngelezen = nabijeDatum && schrijverIsBeheerder;
-
-      await addDoc(collection(db, 'wijzigingen'), {
-        uid: state.user.uid,
-        email: state.profiel.email,
+      // gezien:false als de datum nabij is.
+      const markeerOngelezen = _isDatumNabij(datum) && magWijzigen();
+      batch.set(doc(collection(db, 'wijzigingen')), {
+        ..._wijzigingBasis(),
         datum,
         radioloog_id: radId,
         van: oudeCodesArr,
         naar: codesArr,
-        wanneer: serverTimestamp(),
         gezien: markeerOngelezen ? false : true,
       });
     }
 
     if (celOpmGewijzigd) {
-      await addDoc(collection(db, 'wijzigingen'), {
-        uid: state.user.uid,
-        email: state.profiel.email,
+      batch.set(doc(collection(db, 'wijzigingen')), {
+        ..._wijzigingBasis(),
         datum,
         radioloog_id: radId,
         veld: 'cel_opmerking',
         van: oudeCelOpm || null,
         naar: opmerking || null,
-        wanneer: serverTimestamp(),
         gezien: true, // opmerking-wijzigingen hoeven geen bevestiging
       });
     }
+
+    await batch.commit();
 
     // Auto-verwerk: open wens die nu matcht → automatisch op verwerkt
     if (magAlleWensenZien()) {
@@ -167,98 +177,74 @@ function _isDatumNabij(datum) {
   return datum >= vandaag && datum <= grens;
 }
 
-// Alleen cel-opmerking opslaan (zonder code-wijziging)
+// Alleen cel-opmerking opslaan (zonder code-wijziging).
+// Cel-gescoped + atomair (zie header).
 export async function slaCelOpmerkingOp(datum, radId, opmerking) {
   if (!magWijzigen()) return;
   const bestaand = state.indelingMap[datum];
   const oude = bestaand?.cel_opmerkingen?.[radId] || '';
-  const nieuw = { ...(bestaand?.cel_opmerkingen || {}) };
-  if (opmerking) nieuw[radId] = opmerking;
-  else delete nieuw[radId];
-
-  const dagNr = new Date(datum + 'T00:00:00').getDay();
-  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
 
   const docData = {
-    datum,
-    weeknr: isoWeekVan(datum),
-    dag: DAGEN_NL[dagNlIdx],
-    toewijzingen: bestaand?.toewijzingen || {},
-    dienst: bestaand?.dienst || {},
-    bespreking: bestaand?.bespreking || null,
-    interventie: bestaand?.interventie || null,
-    opmerking: bestaand?.opmerking || null,
-    cel_opmerkingen: nieuw,
+    ..._dagMeta(datum),
+    cel_opmerkingen: { [radId]: opmerking ? opmerking : deleteField() },
   };
 
   try {
-    await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'indeling', datum), docData, { merge: true });
     if (oude !== opmerking) {
-      await addDoc(collection(db, 'wijzigingen'), {
-        uid: state.user.uid,
-        email: state.profiel.email,
+      batch.set(doc(collection(db, 'wijzigingen')), {
+        ..._wijzigingBasis(),
         datum,
         radioloog_id: radId,
         veld: 'cel_opmerking',
         van: oude || null,
         naar: opmerking || null,
-        wanneer: serverTimestamp(),
         gezien: true,
       });
     }
+    await batch.commit();
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
   }
 }
 
+// Dag-opmerking opslaan. setDoc(merge) raakt alleen het opmerking-veld en
+// maakt het doc aan als het nog niet bestaat (geen aparte not-found-fallback
+// meer nodig — dat pad schreef voorheen een compleet doc uit de cache).
 export async function slaOpmerkingOp(datum, opmerking) {
   try {
-    await updateDoc(doc(db, 'indeling', datum), {
+    await setDoc(doc(db, 'indeling', datum), {
+      ..._dagMeta(datum),
       opmerking: opmerking || null,
-    });
+    }, { merge: true });
   } catch (e) {
-    if (e.code === 'not-found') {
-      const dagNr = new Date(datum + 'T00:00:00').getDay();
-      const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
-      await setDoc(doc(db, 'indeling', datum), {
-        datum, weeknr: isoWeekVan(datum), dag: DAGEN_NL[dagNlIdx],
-        toewijzingen: {}, dienst: {}, bespreking: null, interventie: null,
-        opmerking: opmerking || null,
-      });
-    } else {
-      alert('Opslaan mislukt: ' + e.message);
-    }
+    alert('Opslaan mislukt: ' + e.message);
   }
 }
 
+// Dienst (dag) opslaan. Genest merge-object raakt alléén dienst.dag;
+// dienst.avond/nacht en alle andere velden blijven server-side onaangeroerd.
 export async function slaDienstOp(datum, radId) {
   const bestaand = state.indelingMap[datum];
-  const dagNr = new Date(datum + 'T00:00:00').getDay();
-  const dagNlIdx = dagNr === 0 ? 6 : dagNr - 1;
 
   const docData = {
-    datum,
-    weeknr: isoWeekVan(datum),
-    dag: DAGEN_NL[dagNlIdx],
-    toewijzingen: bestaand?.toewijzingen || {},
-    dienst: { ...(bestaand?.dienst || {}), dag: radId || null },
-    bespreking: bestaand?.bespreking || null,
-    interventie: bestaand?.interventie || null,
-    opmerking: bestaand?.opmerking || null,
+    ..._dagMeta(datum),
+    dienst: { dag: radId || null },
   };
 
   try {
-    await setDoc(doc(db, 'indeling', datum), docData, { merge: true });
-    await addDoc(collection(db, 'wijzigingen'), {
-      uid: state.user.uid,
-      email: state.profiel.email,
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'indeling', datum), docData, { merge: true });
+    batch.set(doc(collection(db, 'wijzigingen')), {
+      ..._wijzigingBasis(),
       datum,
       veld: 'dienst.dag',
       van: bestaand?.dienst?.dag || null,
       naar: radId || null,
-      wanneer: serverTimestamp(),
       gezien: true,
     });
+    await batch.commit();
   } catch (e) {
     alert('Opslaan dienst mislukt: ' + e.message);
   }

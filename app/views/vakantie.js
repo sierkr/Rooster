@@ -738,14 +738,20 @@ async function accordeerRange(startISO, eindISO, accorderen) {
       const update = { datum, vakantie_geaccordeerd: accorderen };
 
       if (accorderen) {
+        // K1 (v3.28.0): schrijf alléén de V-cellen als geneste merge-sleutels,
+        // NIET de volledige toewijzingen-map uit de lokale cache. Een collega
+        // die tegelijk een andere cel op deze dag bewerkt wordt zo niet
+        // overschreven met verouderde cache-data.
         const vData = dag.vakantie_v || {};
-        const huidigeToewijzingen = { ...(dag.toewijzingen || {}) };
+        const vToewijzingen = {};
         Object.entries(vData).forEach(([radId, w]) => {
           if (vCode(w) === 'V') {
-            huidigeToewijzingen[radId] = ['V'];
+            vToewijzingen[radId] = ['V'];
           }
         });
-        update.toewijzingen = huidigeToewijzingen;
+        if (Object.keys(vToewijzingen).length > 0) {
+          update.toewijzingen = vToewijzingen;
+        }
       }
 
       batch.set(doc(db, 'indeling', datum), update, { merge: true });

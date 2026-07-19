@@ -1,3 +1,68 @@
+## v3.28.0 — Fase 1 beveiligingsrelease: integriteit (K1, K2, K3, M4)
+
+Eerste van drie geplande releases n.a.v. de betrouwbaarheidsaudit (juli 2026).
+Deze release vereist naast de app-upload óók een rules-publicatie op BEIDE
+databases en een Cloud Functions-deploy — zie DEPLOY-FASE1.md.
+
+### K1 — Geen verloren wijzigingen meer bij gelijktijdig gebruik
+- **save.js volledig cel-gescoped.** Cel-toewijzingen, cel-opmerkingen en
+  dienst schrijven niet langer de volledige map uit de lokale cache terug,
+  maar alléén de eigen sleutel via een geneste merge
+  (`toewijzingen.<radId>`, `cel_opmerkingen.<radId>`, `dienst.dag`).
+  Twee beheerders die tegelijk verschillende cellen op dezelfde dag bewerken
+  kunnen elkaar daardoor niet meer stilzwijgend overschrijven.
+- **Data + logregel atomair.** De indeling-write en het bijbehorende
+  wijziging-record gaan in één `writeBatch`: of beide slagen, of geen van
+  beide. Een roosterwijziging zonder logregel kan niet meer ontstaan.
+- **vakantie.js/accordeerRange** schrijft bij accorderen alleen nog de
+  V-cellen als merge-sleutels i.p.v. de complete toewijzingen-map uit cache.
+- **slaDienstOp** raakt alleen nog `dienst.dag`; `dienst.avond/nacht` en
+  andere velden blijven server-side onaangeroerd.
+- **slaOpmerkingOp** vereenvoudigd tot één merge-write (het oude
+  not-found-fallbackpad schreef een compleet doc uit de cache).
+
+### K2 — Validatie afgedwongen buiten de goede bedoelingen van de client om
+- **firestore.rules: schema-bewaking op indeling-docs.** Bij create alleen
+  bekende veldnamen; bij create én update typechecks op kritieke velden
+  (toewijzingen/cel_opmerkingen/vakantie_v/dienst zijn maps, weeknr int) en
+  het datum-veld moet altijd het document-id blijven.
+- **Excel-import valideert vóór het schrijven.** De import-preview past nu
+  de actieve validatieregels (limiet, conflict, uniciteit, bezetting) toe op
+  de geparste Excel-data. Blokkerende conflicten verschijnen als rode lijst
+  in de preview en worden expliciet benoemd in de bevestigingsdialoog.
+- **Rules-autorisatie gespiegeld aan de client.** Nieuwe helper
+  `heeftMagBeheer()`: rol beheerder óf expliciete permissies.mag_beheer —
+  dezelfde semantiek als `magWijzigen()` in de app.
+
+### K3 — Onvervalsbaar audit-spoor
+- **Nieuwe Cloud Function `auditIndeling`.** Firestore-trigger (met
+  auth-context) die bij élke wijziging aan een indeling-doc server-side een
+  diff-record schrijft naar de nieuwe collectie `audit_log`: wie (auth-uid),
+  wat (per veld/sleutel van → naar), wanneer, en of het doc is
+  aangemaakt/verwijderd. Clients kunnen deze collectie niet beschrijven —
+  het spoor kan dus niet worden vervalst of overgeslagen, ook niet door een
+  beheerder.
+- **wijzigingen/ (notificatie-log) aangescherpt.** Create alleen nog door
+  wijzig-gerechtigden, met vaste veldenset, uid/email die aantoonbaar van de
+  schrijver zelf zijn en een verplichte server-timestamp. Voorheen kon
+  iedere ingelogde gebruiker records met willekeurige inhoud aanmaken.
+
+### M4 — Whitelist op eigen-profiel-updates
+- Niet-beheerders mogen op hun eigen gebruikersdoc nog uitsluitend `naam`,
+  `wachtwoord_gewijzigd` (alleen → true) en `agenda_token` (string/null)
+  wijzigen. Rol, radioloog_id, permissies, e-mail en alle toekomstige velden
+  zijn daarmee automatisch beschermd (whitelist i.p.v. blacklist).
+
+### Let op bij deployen
+- Rules publiceren op `(default)` én `test` (rules zijn per database).
+- `firebase deploy --only functions` voor de nieuwe auditIndeling-trigger.
+- De audit-trigger bewaakt alleen de productie-database; de testomgeving
+  (named database `test`) valt buiten het audit-spoor.
+- Een restore van een zeer oude backup naar een lege database kan door de
+  nieuwe schema-check op onbekende velden stranden; zie DEPLOY-FASE1.md.
+
+---
+
 ## v3.27.123 — Waarnemer-schuifje weerspiegelt de echte bezetting + datumkiezer
 
 ### Fix

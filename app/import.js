@@ -9,7 +9,7 @@
 import { doc, writeBatch, updateDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, IS_TEST_DB } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, vandaagIso, plusDagen, kolomNaarRadId, wensMatcht } from './helpers.js';
+import { isoWeekVan, vandaagIso, plusDagen, kolomNaarRadId, wensMatcht, hoofdLetterCode } from './helpers.js';
 import { maakClientBackup } from './backup-client.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
@@ -329,6 +329,14 @@ export async function actImportFile(input, renderGebView) {
       dagen.push(docData);
     }
 
+    // K2 (v3.28.0): valideer de geparste dagen tegen de actieve validatie-
+    // regels VOORDAT er geschreven wordt. Voorheen gold de regelvalidatie
+    // alleen voor losse cel-bewerkingen in de app; een import kon blokkerende
+    // conflicten stilzwijgend binnenbrengen.
+    const regelConflicten = _valideerDagenTegenRegels(dagen);
+    const regelBlokkades = regelConflicten.filter(c => c.ernst === 'blokkeren');
+    const regelWaarschuwingen = regelConflicten.filter(c => c.ernst !== 'blokkeren');
+
     // Bereken wijzigingen t.o.v. huidige Firestore-data (voor preview)
     const vandaagPrev = vandaagIso();
     const grensPrev   = plusDagen(vandaagPrev, NABIJ_DAGEN);
@@ -369,6 +377,10 @@ export async function actImportFile(input, renderGebView) {
       nabijeDagen: nabijeDatumsSet.size,
       nabijeDagsList: [...nabijeDatumsSet].sort(),
       verschillen,
+      regelBlokkades: regelBlokkades.slice(0, 50),
+      regelBlokkadesTotaal: regelBlokkades.length,
+      regelWaarschuwingen: regelWaarschuwingen.slice(0, 50),
+      regelWaarschuwingenTotaal: regelWaarschuwingen.length,
     };
   } catch (e) {
     console.error('actImportFile', e);
@@ -377,6 +389,74 @@ export async function actImportFile(input, renderGebView) {
     state.importBezig = false;
     renderGebView();
   }
+}
+
+// K2 (v3.28.0): pas de actieve validatieregels toe op geparste import-dagen.
+// Dekt de regeltypes limiet, conflict, uniciteit en bezetting — dezelfde
+// semantiek als validatie.js/valideerWeek, maar dan op de Excel-data zelf
+// (vóór het schrijven) i.p.v. op de al opgeslagen indeling.
+// Returnt: [{ datum, radId, ernst, bericht }]
+function _valideerDagenTegenRegels(dagen) {
+  const conflicten = [];
+  const actieveRegels = (state.validatieRegels || []).filter(r => r.actief !== false);
+  if (actieveRegels.length === 0) return conflicten;
+
+  for (const dag of dagen) {
+    const dagNl = dag.dag;
+    const isWeekend = dagNl === 'za' || dagNl === 'zo';
+    const toewijzingen = dag.toewijzingen || {};
+
+    // Per cel: limiet + conflict
+    for (const [radId, codes] of Object.entries(toewijzingen)) {
+      if (!codes || !codes.length) continue;
+      const hoofd = codes.map(hoofdLetterCode);
+      for (const regel of actieveRegels) {
+        if (regel.type === 'limiet' && codes.length > (regel.max_codes || 2)) {
+          conflicten.push({ datum: dag.datum, radId, ernst: regel.ernst, bericht: regel.bericht });
+        }
+        if (regel.type === 'conflict' && regel.code_blokkerend
+            && hoofd.includes(regel.code_blokkerend) && codes.length > 1) {
+          conflicten.push({ datum: dag.datum, radId, ernst: regel.ernst, bericht: regel.bericht });
+        }
+      }
+    }
+
+    // Per dag: uniciteit + bezetting
+    for (const regel of actieveRegels) {
+      if (regel.type === 'uniciteit') {
+        const counts = {};
+        for (const codes of Object.values(toewijzingen)) {
+          (codes || []).forEach(c => {
+            const h = hoofdLetterCode(c);
+            if (regel.codes_uniek?.includes(h)) counts[h] = (counts[h] || 0) + 1;
+          });
+        }
+        for (const [code, n] of Object.entries(counts)) {
+          if (n > 1) {
+            conflicten.push({
+              datum: dag.datum, radId: null, ernst: regel.ernst,
+              bericht: `${regel.bericht} (${n}× ${code})`,
+            });
+          }
+        }
+      }
+      if (regel.type === 'bezetting' && regel.dag === dagNl && !isWeekend) {
+        let aantalAanwezig = 0;
+        for (const codes of Object.values(toewijzingen)) {
+          if ((codes || []).some(c => hoofdLetterCode(c) === regel.code || c === regel.code)) {
+            aantalAanwezig += 1;
+          }
+        }
+        if (aantalAanwezig < regel.aantal) {
+          conflicten.push({
+            datum: dag.datum, radId: null, ernst: regel.ernst,
+            bericht: `${regel.bericht} (nu ${aantalAanwezig})`,
+          });
+        }
+      }
+    }
+  }
+  return conflicten;
 }
 
 export async function actImportSchrijven(renderGebView) {
@@ -412,11 +492,17 @@ export async function actImportSchrijven(renderGebView) {
     ? `\n\n⚠ LET OP: ${nabijeCellen} toewijzing${nabijeCellen === 1 ? '' : 'en'} worden gewijzigd binnen ${NABIJ_DAGEN} dagen (${nabijeDatums.size} dag${nabijeDatums.size === 1 ? '' : 'en'}). Betrokken radiologen krijgen een notificatie.`
     : '';
 
+  // K2: blokkerende regelconflicten expliciet in de bevestiging benoemen
+  const blokkadeWaarschuwing = (p.regelBlokkadesTotaal || 0) > 0
+    ? `\n\n⛔ ${p.regelBlokkadesTotaal} BLOKKEREND regelconflict${p.regelBlokkadesTotaal === 1 ? '' : 'en'} in dit bestand (zie de rode lijst in de preview). Importeren negeert deze regels.`
+    : '';
+
   const ok = confirm(
     `OVERSCHRIJVEN — ${jaarDeel} worden in Firestore vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
     `${p.dagen.length} dagen, ${p.celOpmsAantal} cel-opmerkingen, ${p.dagOpmsAantal} dag-opmerkingen.\n\n` +
     `Wens-statussen worden automatisch bijgewerkt.` +
     nabijWaarschuwing +
+    blokkadeWaarschuwing +
     `\n\nBestaande data in Firestore wordt vervangen. Doorgaan?`
   );
   if (!ok) return;

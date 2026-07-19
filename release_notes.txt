@@ -1,3 +1,34 @@
+Rooster v3.28.0 — Release notes
+==================================
+
+FASE 1 BEVEILIGINGSRELEASE: INTEGRITEIT (K1, K2, K3, M4)
+----------------------------------------------------------------------------
+Eerste van drie geplande releases n.a.v. de betrouwbaarheidsaudit.
+LET OP: deze release vereist naast de app-upload ook een rules-publicatie
+op BEIDE databases ((default) en test) en een Cloud Functions-deploy.
+Volg DEPLOY-FASE1.md stap voor stap.
+
+- K1: Geen verloren wijzigingen meer bij gelijktijdig gebruik. Alle
+  schrijfacties zijn cel-gescoped (alleen de eigen sleutel wordt geraakt,
+  nooit meer de hele map uit de lokale cache) en de data-write plus het
+  wijziging-record gaan atomair in een batch.
+
+- K2: Validatie wordt nu ook buiten de client afgedwongen. De rules bewaken
+  het schema van indeling-docs (bekende velden, juiste types, datum = doc-id).
+  De Excel-import valideert de geparste data tegen de actieve regels en
+  toont blokkerende conflicten in de preview en in de bevestiging.
+
+- K3: Onvervalsbaar audit-spoor. Nieuwe Cloud Function auditIndeling schrijft
+  server-side bij elke roosterwijziging een diff-record (wie/wat/wanneer)
+  naar de nieuwe collectie audit_log. Clients kunnen die collectie niet
+  beschrijven. De bestaande wijzigingen-collectie (notificaties) is
+  aangescherpt: vaste veldenset, eigen uid/email, server-timestamp.
+
+- M4: Eigen-profiel-updates werken nu met een whitelist: alleen naam,
+  wachtwoord_gewijzigd (alleen naar true) en agenda_token.
+
+----------------------------------------------------------------------------
+
 Rooster v3.27.123 — Release notes
 ==================================
 

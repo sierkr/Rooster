@@ -59,6 +59,43 @@ service cloud.firestore {
       return gebruiker().radioloog_id;
     }
 
+    // v3.28.0: effectieve wijzig-permissie, gespiegeld aan de client-logica
+    // (helpers.js/permissie): rol 'beheerder' heeft mag_beheer standaard;
+    // andere rollen alleen als de permissies-map het expliciet toekent.
+    function heeftMagBeheer() {
+      return isIngelogd() && (
+        gebruiker().rol == 'beheerder'
+        || gebruiker().get('permissies', {}).get('mag_beheer', false) == true
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // v3.28.0 (K2): schema-bewaking voor indeling-documenten.
+    // - indelingVeldenOk: alleen bekende veldnamen (bewaakt bij CREATE; bij
+    //   update niet, zodat een restore van een oudere backup met een inmiddels
+    //   vervallen veld niet halverwege strandt — zie DEPLOY-FASE1.md).
+    // - indelingTypesOk: kritieke velden hebben het juiste type en het
+    //   datum-veld komt altijd overeen met het document-id.
+    // -----------------------------------------------------------------------
+    function indelingVeldenOk() {
+      return request.resource.data.keys().hasOnly([
+        'datum', 'weeknr', 'dag', 'toewijzingen', 'dienst', 'bespreking',
+        'interventie', 'opmerking', 'cel_opmerkingen', 'vakantie_v',
+        'vakantie_min', 'vakantie_rank', 'vakantie_geaccordeerd', 'vakantie_x'
+      ]);
+    }
+
+    function indelingTypesOk(datum) {
+      let d = request.resource.data;
+      return (!('datum' in d) || d.datum == datum)
+          && (!('toewijzingen' in d) || d.toewijzingen is map)
+          && (!('cel_opmerkingen' in d) || d.cel_opmerkingen is map)
+          && (!('vakantie_v' in d) || d.vakantie_v is map)
+          && (!('dienst' in d) || d.dienst is map)
+          && (!('weeknr' in d) || d.weeknr is int)
+          && (!('dag' in d) || d.dag is string);
+    }
+
     // Check: radioloog mag alleen vakantie_v op zijn eigen radId-kolom wijzigen.
     // Alle andere velden moeten ongemoeid blijven.
     function radioloogMagVakantieToggelen() {
@@ -82,13 +119,28 @@ service cloud.firestore {
       // Alleen beheerders mogen gebruikers aanmaken, rollen wijzigen, verwijderen
       allow create, delete: if isBeheerder();
 
-      // Update: beheerders mogen alles, andere gebruikers alleen hun eigen
-      // email/naam (NIET hun rol, radioloog_id of permissies)
+      // Update: beheerders mogen alles. Andere gebruikers mogen op hun eigen
+      // profiel UITSLUITEND (v3.28.0/M4, whitelist i.p.v. blacklist):
+      //   - naam                  (eigen weergavenaam)
+      //   - wachtwoord_gewijzigd  (alleen op true te zetten, bij eerste login)
+      //   - agenda_token          (string of null; eigen iCal-koppeling)
+      // Rol, radioloog_id, permissies, email en alle toekomstige velden zijn
+      // daarmee automatisch beschermd.
       allow update: if isBeheerder()
                     || (request.auth.uid == uid
-                        && request.resource.data.rol == resource.data.rol
-                        && request.resource.data.radioloog_id == resource.data.radioloog_id
-                        && request.resource.data.get('permissies', null) == resource.data.get('permissies', null));
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['naam', 'wachtwoord_gewijzigd', 'agenda_token'])
+                        && (!request.resource.data.diff(resource.data).affectedKeys()
+                               .hasAny(['wachtwoord_gewijzigd'])
+                            || request.resource.data.wachtwoord_gewijzigd == true)
+                        && (!request.resource.data.diff(resource.data).affectedKeys()
+                               .hasAny(['agenda_token'])
+                            || request.resource.data.agenda_token is string
+                            || request.resource.data.agenda_token == null)
+                        && (!request.resource.data.diff(resource.data).affectedKeys()
+                               .hasAny(['naam'])
+                            || request.resource.data.naam is string
+                            || request.resource.data.naam == null));
     }
 
     // -----------------------------------------------------------------------
@@ -129,10 +181,12 @@ service cloud.firestore {
     match /indeling/{datum} {
       allow read: if magLezen();
 
-      // Create: beheerders mogen alles. Radiologen mogen een nieuw indeling-doc
-      // aanmaken om vakantie_v op een dag zonder bestaande indeling te zetten,
-      // maar alleen voor hun eigen radId-kolom.
-      allow create: if isBeheerder()
+      // Create: wijzig-gerechtigden (rol beheerder of expliciete mag_beheer-
+      // permissie) mogen alles — mits het doc het bekende schema volgt (K2).
+      // Radiologen mogen een nieuw indeling-doc aanmaken om vakantie_v op een
+      // dag zonder bestaande indeling te zetten, maar alleen voor hun eigen
+      // radId-kolom.
+      allow create: if (heeftMagBeheer() && indelingVeldenOk() && indelingTypesOk(datum))
                     || (isRadioloog()
                         && eigenRadioloogId() != null
                         && request.resource.data.keys().hasOnly(['datum', 'vakantie_v'])
@@ -141,10 +195,11 @@ service cloud.firestore {
       allow delete: if isBeheerder();
 
       // Update regels per rol:
-      // - Beheerders: alles
+      // - Wijzig-gerechtigden: alles, mits kritieke velden het juiste type
+      //   houden en het datum-veld het document-id blijft (K2)
       // - Radiologen: alleen vakantie_v op eigen radId-kolom
-      // - Secretariaat / lezers: niets (alleen lezen)
-      allow update: if isBeheerder()
+      // - Secretariaat / lezers zonder mag_beheer: niets (alleen lezen)
+      allow update: if (heeftMagBeheer() && indelingTypesOk(datum))
                     || (isRadioloog() && radioloogMagVakantieToggelen());
     }
 
@@ -172,18 +227,44 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
-    // wijzigingen/ - audit log (append-only)
+    // wijzigingen/ - notificatie-log (append-only)
+    // v3.28.0 (K3): create is aangescherpt. Voorheen mocht iedere ingelogde
+    // gebruiker records met willekeurige inhoud aanmaken; nu alleen
+    // wijzig-gerechtigden, met een vaste veldenset, een uid/email die
+    // aantoonbaar van de schrijver zelf is, en een server-timestamp.
+    // Het onvervalsbare audit-spoor staat daarnaast in audit_log/ en wordt
+    // uitsluitend server-side geschreven (Cloud Function auditIndeling).
     // -----------------------------------------------------------------------
     match /wijzigingen/{id} {
       allow read: if isBeheerder()
                   || (isRadioloog() && resource.data.radioloog_id == eigenRadioloogId());
-      allow create: if magLezen()
-                    && request.resource.data.uid == request.auth.uid;
-      // Geen updates of deletes - audit log is onveranderlijk
+      allow create: if heeftMagBeheer()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.email == gebruiker().email
+                    && request.resource.data.wanneer == request.time
+                    && request.resource.data.keys().hasOnly([
+                         'uid', 'email', 'datum', 'radioloog_id', 'van',
+                         'naar', 'veld', 'wanneer', 'gezien'
+                       ])
+                    && request.resource.data.datum is string
+                    && request.resource.data.gezien is bool;
+      // Geen updates of deletes - log is onveranderlijk; alleen de eigen
+      // gezien-vlag mag door de betrokken radioloog gezet worden
       allow update: if isRadioloog()
                     && resource.data.radioloog_id == eigenRadioloogId()
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gezien']);
       allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // audit_log/ - onvervalsbaar audit-spoor (v3.28.0, K3)
+    // Wordt uitsluitend geschreven door de Cloud Function auditIndeling
+    // (Admin SDK, omzeilt deze rules). Clients kunnen nooit schrijven;
+    // alleen beheerders kunnen lezen.
+    // -----------------------------------------------------------------------
+    match /audit_log/{id} {
+      allow read: if isBeheerder();
+      allow write: if false;
     }
 
     // -----------------------------------------------------------------------

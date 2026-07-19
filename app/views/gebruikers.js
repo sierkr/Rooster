@@ -318,6 +318,22 @@ export async function renderGebView() {
               ${p.waarschuwingenTotaal > p.waarschuwingen.length ? `<br>… en ${p.waarschuwingenTotaal - p.waarschuwingen.length} meer` : ''}
             </div>
           ` : ''}
+          ${(p.regelBlokkadesTotaal || 0) > 0 ? `
+            <div style="background: #fbe9e9; color: #6b1414; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 10px; border-left: 3px solid #c0392b;">
+              <b>⛔ Blokkerende regelconflicten (${p.regelBlokkadesTotaal}):</b><br>
+              ${p.regelBlokkades.map(c => `• ${c.datum}${c.radId ? ' · ' + String(c.radId).replace(/</g,'&lt;') : ''}: ${String(c.bericht || '').replace(/</g,'&lt;')}`).join('<br>')}
+              ${p.regelBlokkadesTotaal > p.regelBlokkades.length ? `<br>… en ${p.regelBlokkadesTotaal - p.regelBlokkades.length} meer` : ''}
+            </div>
+          ` : ''}
+          ${(p.regelWaarschuwingenTotaal || 0) > 0 ? `
+            <details style="margin-bottom: 10px;">
+              <summary class="muted" style="cursor: pointer; font-size: 12px;">Regel-waarschuwingen (${p.regelWaarschuwingenTotaal})</summary>
+              <div style="font-size: 11px; max-height: 180px; overflow: auto; margin-top: 6px; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px;">
+                ${p.regelWaarschuwingen.map(c => `<div style="padding: 3px 8px; border-bottom: 1px solid rgba(0,0,0,0.05);">${c.datum}${c.radId ? ' · <b>' + String(c.radId).replace(/</g,'&lt;') + '</b>' : ''}: ${String(c.bericht || '').replace(/</g,'&lt;')}</div>`).join('')}
+                ${p.regelWaarschuwingenTotaal > p.regelWaarschuwingen.length ? `<div class="muted" style="padding: 3px 8px;">… en ${p.regelWaarschuwingenTotaal - p.regelWaarschuwingen.length} meer</div>` : ''}
+              </div>
+            </details>
+          ` : ''}
           <details style="margin-bottom: 10px;">
             <summary class="muted" style="cursor: pointer; font-size: 12px;">Voorbeeld eerste 3 dagen</summary>
             <pre style="font-size: 10px; overflow-x: auto; background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px; margin-top: 6px;">${(p.dagen.slice(0, 3).map(d => JSON.stringify(d, null, 2)).join('\n\n')).replace(/</g,'&lt;')}</pre>
