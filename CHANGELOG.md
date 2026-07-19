@@ -1,3 +1,66 @@
+## v3.31.1 — CI-correcties na eerste run + rules-job blokkerend
+
+De drie correcties die tijdens de eerste CI-runs in de test-repo zijn
+aangebracht, nu ook in de release verwerkt zodat repo en zip gelijklopen:
+
+- **tests/rules/package.json:** firebase-SDK voor de tests naar ^11
+  (peer-vereiste van @firebase/rules-unit-testing 4.x; de app zelf blijft
+  ongewijzigd op zijn eigen SDK via CDN).
+- **tests/rules/firebase.json + workflow:** firebase-tools accepteert geen
+  rules-pad buiten de eigen map; de workflow kopieert firestore.rules nu
+  vóór het testen naar de testmap.
+- **Rules-job blokkerend:** continue-on-error verwijderd nadat beide jobs
+  (63 unit-tests, 22 rules-tests) op 19-07-2026 groen draaiden. Elke
+  test-fout geeft voortaan een rood kruis.
+
+Geen wijzigingen aan app, rules of Cloud Functions.
+
+---
+
+## v3.31.0 — Fase 4: geautomatiseerd testpakket + CI
+
+Sluitstuk van het audit-traject. Geen wijzigingen aan app-gedrag, rules of
+Cloud Functions — deze release voegt uitsluitend een bewakingslaag toe die
+bij elke toekomstige upload automatisch controleert of de kern zich nog
+gedraagt zoals vastgelegd.
+
+### Unit-tests (tests/unit/ — 63 tests, hier al groen gedraaid)
+- **Datum-helpers:** ISO-weeknummers (incl. jaargrens- en 53-weken-gevallen),
+  maandag-berekening, dag-rekenkunde met schrikkeljaren.
+- **Codes & wensen:** hoofdletter-reductie van functiecodes en de canonieke
+  wens-matching (vakantie / niet_beschikbaar / voorkeur).
+- **Stoel-tijdlijnen:** laatsteEntry, clipHistorieVoorWissel,
+  bezettingOpDatum en controleerBezettingHistorie — mét de corrupte
+  W1/GJG-tijdlijn van juli 2026 als blijvende regressietest (3 problemen
+  gedetecteerd; gerepareerde variant schoon).
+- **Validatie-engine:** alle regeltypes (limiet, conflict, uniciteit,
+  bezetting incl. W-slots, verplichte functies, inactieve regels) en de
+  cel-level pre-check.
+- **Beveiligingshelpers:** esc(), wachtwoordbeleid (12+, standaard-weigering),
+  crypto-generator, permissie-model (rol-defaults + overrides).
+
+### Rules-tests (tests/rules/ — 22 tests, draaien in CI tegen de emulator)
+- Rollen-matrix voor beheerder/radioloog/lezer over indeling (schema-bewaking,
+  vakantie-toggle-beperking), wijzigingen (vaste veldenset, eigen uid,
+  server-timestamp, append-only), audit_log (onschrijfbaar, alleen
+  beheerder-leesbaar) en gebruikers (eigen-profiel-whitelist).
+- Eén K1-gedragstest: een merge op één cel laat de cel van een collega intact.
+- Draait uitsluitend tegen de lokale emulator; raakt nooit echte data.
+
+### CI (.github/workflows/tests.yml)
+- Draait automatisch bij elke push/upload; resultaat onder "Actions".
+- De emulator-job staat de eerste periode op niet-blokkerend
+  (continue-on-error) tot hij aantoonbaar stabiel groen is — zie
+  DEPLOY-FASE4.md voor het omzetten.
+
+### Technisch
+- Nieuw: app/package.json (type: module) zodat Node de app-modules kan
+  importeren voor de tests. Browser en app negeren dit bestand.
+- De tests- en .github-mappen gaan mee naar GitHub (nodig voor CI) maar
+  zijn geen onderdeel van de app.
+
+---
+
 ## v3.30.0 — Fase 3 beveiligingsrelease: verharding (H3, H4, M1, M2, M3, M5, M6)
 
 Derde en laatste release n.a.v. de betrouwbaarheidsaudit. Vereist een

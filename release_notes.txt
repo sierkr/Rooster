@@ -1,3 +1,27 @@
+Rooster v3.31.0 — Release notes
+==================================
+
+FASE 4: GEAUTOMATISEERD TESTPAKKET + CI
+----------------------------------------------------------------------------
+Geen wijzigingen aan app-gedrag, rules of Cloud Functions. Deze release
+voegt 63 unit-tests, 22 rules-tests en een GitHub Actions-workflow toe die
+bij elke upload automatisch draaien. Groen vinkje onder "Actions" = veilig
+om naar productie te gaan; rood kruis = eerst melden.
+
+- Unit-tests dekken de datum-helpers, wens-matching, stoel-tijdlijnen
+  (incl. de W1/GJG-casus als blijvende regressietest), de complete
+  validatie-engine en de beveiligingshelpers. Alle 63 zijn bij het bouwen
+  al groen gedraaid.
+
+- Rules-tests verifiëren per rol wat wel en niet mag volgens
+  firestore.rules, tegen een lokale emulator (nooit echte data). Deze job
+  staat de eerste periode op niet-blokkerend tot hij stabiel groen is.
+
+- Upload dit keer de HELE zip-inhoud inclusief de mappen .github en tests
+  (wel zoals altijd zonder Rooster-functions). Zie DEPLOY-FASE4.md.
+
+----------------------------------------------------------------------------
+
 Rooster v3.30.0 — Release notes
 ==================================
 

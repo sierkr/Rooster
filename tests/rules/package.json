@@ -1,0 +1,12 @@
+{
+  "comment": "Rules-tests (v3.31.0, fase 4). Draaien tegen de lokale Firestore-emulator; raken nooit echte data. Vereist: npm install (hier), firebase-tools (globaal) en Java. In CI gebeurt dit automatisch.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-rooster \"node --test rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.0",
+    "firebase": "^11.0.0"
+  }
+}

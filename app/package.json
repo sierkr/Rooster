@@ -1,0 +1,4 @@
+{
+  "comment": "v3.31.0 (fase 4): markeert de app-modules als ES modules zodat Node.js ze kan importeren in de unit-tests (tests/unit/). De browser en de app zelf negeren dit bestand volledig.",
+  "type": "module"
+}
