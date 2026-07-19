@@ -1,0 +1,18 @@
+Vendor-map (v3.30.0, M3) — optioneel maar aanbevolen
+====================================================
+
+Plaats hier lokale kopieën van de twee Excel-bibliotheken. De app gebruikt
+ze dan in plaats van de CDN's: geen externe afhankelijkheid meer, werkt
+offline, en immuun voor CDN-compromittering. Ontbreken ze, dan valt de app
+automatisch terug op de (versie-gepinde) CDN's — niets breekt.
+
+Download (eenmalig, in je browser, daarna in deze map opslaan):
+
+1. xlsx.full.min.js
+   https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js
+
+2. exceljs.min.js
+   https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js
+
+Let op: exact deze bestandsnamen gebruiken. Upload de vendor-map daarna
+gewoon mee naar GitHub (beide repos).

@@ -2,6 +2,11 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
+<!-- v3.30.0 (M2): Content-Security-Policy. Beperkt scripts tot de eigen
+     origin + de drie vaste CDN's, en netwerkverkeer tot Google/Firebase.
+     'unsafe-inline' is nodig voor de inline onclick-handlers van de app.
+     Bij onverwachte problemen: deze meta-tag verwijderen = oude gedrag. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://*.a.run.app https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#1f3863">
 <meta name="apple-mobile-web-app-capable" content="yes">

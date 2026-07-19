@@ -1,3 +1,69 @@
+## v3.30.0 — Fase 3 beveiligingsrelease: verharding (H3, H4, M1, M2, M3, M5, M6)
+
+Derde en laatste release n.a.v. de betrouwbaarheidsaudit. Vereist een
+Cloud Functions-deploy (met Node 22-upgrade) — zie DEPLOY-FASE3.md.
+Geen rules-wijzigingen.
+
+### H3 — Wachtwoordbeleid
+- **Minimaal 12 tekens** voor nieuw gekozen wachtwoorden (was 6). Bestaande
+  wachtwoorden blijven geldig; de eis geldt bij de eerstvolgende wijziging.
+- **Geen vast standaardwachtwoord meer.** Een wachtwoord-reset genereert
+  server-side een willekeurig tijdelijk wachtwoord (crypto, 14 tekens) dat
+  de beheerder eenmalig te zien krijgt en dat nergens wordt opgeslagen.
+  Nieuwe gebruikers krijgen in het formulier een willekeurig gegenereerd
+  tijdelijk wachtwoord voorgesteld. In beide gevallen dwingt de eerste
+  login het kiezen van een eigen wachtwoord af (zoals voorheen).
+- **genereerWachtwoord** gebruikt nu Web Crypto i.p.v. Math.random.
+- **App Check (optioneel).** config.js heeft een APPCHECK_SITE_KEY-veld;
+  na eenmalige registratie in de Firebase-console bindt App Check al het
+  Firestore/Functions-verkeer aan deze webapp. Leeg = uit (huidig gedrag).
+
+### H4 — Server-side omgevingsbewaking accountfuncties
+- De app stuurt zijn omgeving ('prod'/'test') mee bij gebruikersbeheer-
+  aanroepen; de Cloud Functions weigeren nu server-side elke aanroep die
+  expliciet uit de testomgeving komt. Voorheen was die blokkade alleen
+  client-side.
+
+### M1/M6 — agendaFeed-verharding en privacy
+- Tokenformaat wordt afgedwongen (UUID) vóór er een database-query loopt.
+- Best-effort rate limiting: max 30 verzoeken per 5 minuten per token.
+- **Dag-opmerkingen zitten niet meer in de feed** — die kunnen informatie
+  over anderen bevatten. De eigen cel-opmerking blijft. In de app zelf
+  verandert er niets.
+- Cache-Control/nosniff-headers toegevoegd.
+
+### M2 — XSS-verharding
+- **esc() consequent doorgevoerd:** 47 interpolaties van vrije-tekstvelden
+  (namen, e-mails, opmerkingen, toelichtingen, regelberichten) in alle
+  views worden nu ge-escaped vóór ze het DOM ingaan.
+- **CSS-injectie-bewaking:** functiecodes worden gevalideerd voordat ze als
+  CSS-klasse worden geïnjecteerd.
+- **Content-Security-Policy** in index.html: scripts alleen van eigen
+  origin + de drie vaste CDN's; netwerkverkeer alleen naar Google/Firebase.
+  Bij onverwachte problemen: de meta-tag verwijderen herstelt het oude gedrag.
+
+### M3 — Supply chain
+- **Vendor-first laden:** staan er lokale kopieën van SheetJS/ExcelJS in de
+  nieuwe vendor/-map (zie vendor/LEESMIJ.txt), dan worden díe gebruikt —
+  geen CDN-afhankelijkheid, Excel-import/-export werkt offline. Zonder
+  lokale kopieën valt de app terug op de versie-gepinde CDN's.
+- De service worker cachet de vendor-bestanden als ze aanwezig zijn
+  (installatie faalt niet als ze ontbreken).
+
+### M5 — Configureerbaarheid
+- **Import-kolom-mapping** is aanvulbaar via
+  instellingen/algemeen.import_kolom_mapping (Firestore-console), zonder
+  code-release. Basis blijft: codes uit de stamgegevens.
+- **Hoofdbeheerder-adres** is configureerbaar via
+  instellingen/algemeen.vaste_beheerder_email (fallback: de constante).
+
+### Onderhoud
+- **Cloud Functions naar Node 22** (Node 20 wordt 30-10-2026 uitgefaseerd),
+  firebase-functions ^6, firebase-admin ^13. `npm install` vernieuwt het
+  lock-bestand automatisch.
+
+---
+
 ## v3.29.0 — Fase 2 beveiligingsrelease: beschikbaarheid (H1, H2, offline)
 
 Tweede van drie releases n.a.v. de betrouwbaarheidsaudit. Geen rules- of

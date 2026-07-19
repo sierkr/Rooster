@@ -14,7 +14,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state, DAGEN_NL, MAANDEN } from '../state.js';
-import {
+import { esc,
   vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
   radiologenMap, vandaagIso,
 } from '../helpers.js';
@@ -375,7 +375,7 @@ export function renderVakView() {
         // expliciete rank op deze dag.
         const huidigeRank = rank || '';
         const opties = state.vakantieRankings.map(rk =>
-          `<option value="${rk.naam}" ${rk.naam === huidigeRank ? 'selected' : ''}>${rk.label || rk.naam}</option>`
+          `<option value="${esc(rk.naam)}" ${rk.naam === huidigeRank ? 'selected' : ''}>${rk.label || rk.naam}</option>`
         ).join('');
         rCel = `<div class="vak-cell-readonly" style="${rijStyle} padding: 2px;"><select onchange="window.vakSetRank('${iso}', this.value)" style="width:100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 3px; padding: 2px; font-size: 10px; background: transparent;"><option value="">\u2014</option>${opties}</select></div>`;
       } else {
@@ -695,7 +695,7 @@ window.openVakBlokSheet = function(datum) {
       if (vCode(v[r.id]) === 'V') tellingen[r.id]++;
     });
   });
-  const tellLijst = rads.map(r => `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);"><span>${r.code} \u00b7 ${r.achternaam}</span><strong>${tellingen[r.id]} V</strong></div>`).join('');
+  const tellLijst = rads.map(r => `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);"><span>${r.code} \u00b7 ${esc(r.achternaam)}</span><strong>${tellingen[r.id]} V</strong></div>`).join('');
 
   document.getElementById('sheetTitle').textContent = `Vakantieblok: ${ranking?.label || blok.rank}`;
   document.getElementById('sheetSub').textContent = `${blok.start} t/m ${blok.eind} (${dagen.length} dagen)`;
@@ -827,7 +827,7 @@ window.vakBevriezenPreview = function() {
       if (vCode(v[r.id]) === 'V') tellingen[r.id]++;
     });
   });
-  const tellLijst = rads.map(r => `<div style="display:flex; justify-content:space-between; padding:2px 0;"><span>${r.code} \u00b7 ${r.achternaam}</span><strong>${tellingen[r.id]} V</strong></div>`).join('');
+  const tellLijst = rads.map(r => `<div style="display:flex; justify-content:space-between; padding:2px 0;"><span>${r.code} \u00b7 ${esc(r.achternaam)}</span><strong>${tellingen[r.id]} V</strong></div>`).join('');
 
   preview.innerHTML = `
     <div style="font-size:12px;">
@@ -861,8 +861,8 @@ window.openVakRankings = function() {
             <div style="font-size:13px; font-weight:500;">${rk.label || rk.naam}</div>
             <div class="muted" style="font-size:11px;">anker ${rk.anker_jaar} \u00b7 ${(rk.anker_volgorde||[]).length} maten</div>
           </div>
-          <button class="btn" style="font-size:12px; padding:4px 8px;" onclick="window.openVakRankingEdit('${rk.naam}')">Bewerk</button>
-          <button class="btn" style="font-size:12px; padding:4px 8px; color:#c0392b;" onclick="window.vakVerwijderRanking('${rk.naam}')">\u00d7</button>
+          <button class="btn" style="font-size:12px; padding:4px 8px;" onclick="window.openVakRankingEdit('${esc(rk.naam)}')">Bewerk</button>
+          <button class="btn" style="font-size:12px; padding:4px 8px; color:#c0392b;" onclick="window.vakVerwijderRanking('${esc(rk.naam)}')">\u00d7</button>
         </div>
       `).join('');
 
@@ -890,7 +890,7 @@ window.openVakRankingEdit = function(naam) {
     return `<div class="vak-rank-item" draggable="true" data-rid="${rid}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:#f5f5f5; border-radius:6px; margin-bottom:4px; cursor:grab;">
       <span style="color:#aaa; font-size:18px;">\u22ee\u22ee</span>
       <span class="vak-rank-pos" style="font-weight:600; min-width:24px;">${i+1}.</span>
-      <span style="font-size:13px;">${r ? `${r.code} \u00b7 ${r.achternaam}` : rid}</span>
+      <span style="font-size:13px;">${r ? `${r.code} \u00b7 ${esc(r.achternaam)}` : rid}</span>
     </div>`;
   }).join('');
 
@@ -899,7 +899,7 @@ window.openVakRankingEdit = function(naam) {
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field">
       <label class="form-label">Naam (intern, geen spaties)</label>
-      <input type="text" class="input" id="vakRkNaam" value="${bestaand?.naam || ''}" placeholder="bv. zomer1">
+      <input type="text" class="input" id="vakRkNaam" value="${esc(bestaand?.naam || '')}" placeholder="bv. zomer1">
       ${naam ? '<div style="font-size:11px; color:#888; margin-top:4px;">Let op: bij naamswijziging worden alle gekoppelde dagen automatisch bijgewerkt.</div>' : ''}
     </div>
     <div class="form-field">

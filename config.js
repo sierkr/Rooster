@@ -20,8 +20,14 @@ window.FIREBASE_CONFIG = {
   appId: "1:798466630775:web:65252d0d0a606ab9141272"
 };
 
+// v3.30.0 (optioneel): Firebase App Check. Laat leeg ('') om App Check uit te
+// laten. Vul hier de reCAPTCHA v3 site key in NA registratie in de Firebase-
+// console (zie DEPLOY-FASE3.md) om alle Firestore/Functions-verkeer te binden
+// aan deze webapp.
+window.APPCHECK_SITE_KEY = '';
+
 // Basis-versienummer (cache-busting). In test krijgt het label '-TEST' erbij.
-window.APP_VERSIE_BASIS = "3.29.0";
+window.APP_VERSIE_BASIS = "3.30.0";
 
 (function bepaalOmgeving() {
   var pad = (typeof location !== 'undefined' && location.pathname) ? location.pathname : '';

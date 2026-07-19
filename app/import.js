@@ -26,16 +26,24 @@ export const IMPORT_KOLOM_NAAR_RADID = {
   'W5': 'W5', 'W4': 'W4', 'W3': 'W3', 'W2': 'W2', 'W1': 'W1',
 };
 
+// v3.30.0 (M3): vendor-first laden — lokale kopie in vendor/ heeft voorrang,
+// CDN (versie-gepind) is fallback. Zie DEPLOY-FASE3.md.
 let _xlsxPromise = null;
 function laadSheetJS() {
   if (_xlsxPromise) return _xlsxPromise;
   _xlsxPromise = new Promise((resolve, reject) => {
     if (window.XLSX) return resolve(window.XLSX);
-    const s = document.createElement('script');
-    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-    s.onload = () => resolve(window.XLSX);
-    s.onerror = () => reject(new Error('Kon SheetJS niet laden (offline?).'));
-    document.head.appendChild(s);
+    const laad = (src, opFout) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = opFout;
+      document.head.appendChild(s);
+    };
+    laad('vendor/xlsx.full.min.js', () => {
+      laad('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+        () => reject(new Error('Kon SheetJS niet laden (offline en geen lokale vendor-kopie?).')));
+    });
   });
   return _xlsxPromise;
 }
@@ -246,7 +254,14 @@ export async function actImportFile(input, renderGebView) {
 
     // Radioloog-kolommen: alleen de zone vóór de Dienst-kolom.
     const radZoneEind = (kolDienst >= 2 ? kolDienst : range.e.c + 1) - 1;
-    const dynMap = Object.keys(kolomNaarRadId()).length > 0 ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
+    // v3.30.0 (M5): kolom→stoel-mapping is nu drietraps configureerbaar:
+    //  1. basis: de codes uit de stamgegevens (radiologen-collectie), met de
+    //     hardcoded lijst enkel als fallback voor een lege database;
+    //  2. overlay: instellingen/algemeen.import_kolom_mapping — een map
+    //     { "EXCELKOP": "stoelId" } die in de Firestore-console beheerd kan
+    //     worden zonder code-release (bv. bij een personeelswissel).
+    const basisMap = Object.keys(kolomNaarRadId()).length > 0 ? kolomNaarRadId() : IMPORT_KOLOM_NAAR_RADID;
+    const dynMap = { ...basisMap, ...(state.instellingen?.import_kolom_mapping || {}) };
     const kolNaarRadId = {};
     const gevondenCodes = new Set();
     for (let c = 2; c <= radZoneEind; c++) {

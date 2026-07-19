@@ -2,7 +2,7 @@
 import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
-import { functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags } from '../helpers.js';
+import { esc, functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags } from '../helpers.js';
 
 
 // Eenmalige migratie: corrigeer werkvloer-waarden die door oude code fout zijn opgeslagen.
@@ -73,7 +73,7 @@ export function renderRegView() {
         <div class="regel-item" style="${actief ? '' : 'opacity: 0.5;'}">
           <div class="regel-hoofd">
             <div style="flex: 1; min-width: 0;">
-              <div class="regel-titel">${r.bericht || r.id}</div>
+              <div class="regel-titel">${esc(r.bericht || r.id)}</div>
               <div class="regel-meta">${r.id}</div>
             </div>
             <div class="toggle-switch ${actief ? 'aan' : ''}" onclick="window.regelToggle('${r.id}')"></div>

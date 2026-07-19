@@ -2,7 +2,7 @@
 // Per week een kolom, per dag (ma-zo) een rij. Elke cel toont de functiecode
 // met bijbehorende kleur. Klikbaar naar beheer-overzicht.
 import { state, VASTE_RAD_IDS } from '../state.js';
-import {
+import { esc,
   vasteRads, radiologenMap, vandaagIso, huidigKalenderJaar,
   fclass, magWijzigen, plusDagen, isoWeekVan,
 } from '../helpers.js';
@@ -79,9 +79,9 @@ export function renderJaaView() {
 
   const radSelector = isBeheer
     ? `<select class="select" style="font-size: 14px; padding: 4px 8px;" onchange="window.jaaZetRad(this.value)">
-        ${zichtbareRads.map(r => `<option value="${r.id}" ${r.id === rad.id ? 'selected' : ''}>${r.achternaam}</option>`).join('')}
+        ${zichtbareRads.map(r => `<option value="${r.id}" ${r.id === rad.id ? 'selected' : ''}>${esc(r.achternaam)}</option>`).join('')}
        </select>`
-    : `<span style="font-weight: 500;">${rad.achternaam}</span>`;
+    : `<span style="font-weight: 500;">${esc(rad.achternaam)}</span>`;
 
   // Grid: 1 kolom label + weken kolommen
   const aantalWeken = weken.length;

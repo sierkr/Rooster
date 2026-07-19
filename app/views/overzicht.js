@@ -245,7 +245,7 @@ window.toonConflictenSheet = function(weekId) {
       fouten.forEach(c => {
         const radNaam = c.radId ? bezetterLabelOpDatum(c.radId, c.datum).code : '';
         body += `<div class="conflict-item conflict-error">
-          <div>${c.bericht}</div>
+          <div>${esc(c.bericht)}</div>
           <div class="conflict-meta">${formatDatum(c.datum, 'kort')}${radNaam ? ' · ' + radNaam : ''} ${c.codes?.join(',') ? '· ' + c.codes.join(',') : ''}</div>
         </div>`;
       });
@@ -255,7 +255,7 @@ window.toonConflictenSheet = function(weekId) {
       warnings.forEach(c => {
         const radNaam = c.radId ? bezetterLabelOpDatum(c.radId, c.datum).code : '';
         body += `<div class="conflict-item conflict-warn">
-          <div>${c.bericht}</div>
+          <div>${esc(c.bericht)}</div>
           <div class="conflict-meta">${formatDatum(c.datum, 'kort')}${radNaam ? ' · ' + radNaam : ''} ${c.codes?.join(',') ? '· ' + c.codes.join(',') : ''}</div>
         </div>`;
       });
@@ -286,7 +286,7 @@ window.toonCelDetail = function(datum, radId) {
   // Datum-canoniek: toon wie op DIE dag op de stoel zit, niet de top-level
   // (die na een toekomstige wissel/→Vast al de nieuwe bezetter bevat).
   const l = bezetterLabelOpDatum(radId, datum);
-  const label = l.achternaam ? `${l.code} · ${l.achternaam}` : l.code;
+  const label = l.achternaam ? `${l.code} · ${esc(l.achternaam)}` : l.code;
   const codes = toewijzingVoor(datum, radId);
   const huidigCode = codes[0] || '';
   const dag = state.indelingMap[datum];

@@ -66,9 +66,9 @@ export function renderAfdView() {
     items.forEach(it => {
       const kleur = functiesMap()[it.code]?.kleur || '#ccc';
       if (it.isAfwezig) {
-        html += `<div class="afd-item inactive"><div><div class="afd-item-title">${it.rad.code} · ${it.rad.achternaam}</div><div class="afd-item-sub">${it.naam}</div></div></div>`;
+        html += `<div class="afd-item inactive"><div><div class="afd-item-title">${it.rad.code} · ${esc(it.rad.achternaam)}</div><div class="afd-item-sub">${esc(it.naam)}</div></div></div>`;
       } else {
-        html += `<div class="afd-item"><div><div class="afd-item-title">${it.naam}</div><div class="afd-item-sub">${it.rad.code} · ${it.rad.achternaam}</div></div><div class="dot" style="background: ${kleur};"></div></div>`;
+        html += `<div class="afd-item"><div><div class="afd-item-title">${esc(it.naam)}</div><div class="afd-item-sub">${it.rad.code} · ${esc(it.rad.achternaam)}</div></div><div class="dot" style="background: ${kleur};"></div></div>`;
       }
     });
 
@@ -133,9 +133,9 @@ window.printAfdWeek = function() {
 
       items.forEach(it => {
         if (it.isAfwezig) {
-          inhoud += `<div class="item afwezig"><div class="t">${it.rad.code} \u00b7 ${it.rad.achternaam}</div><div class="s">${it.naam}</div></div>`;
+          inhoud += `<div class="item afwezig"><div class="t">${it.rad.code} \u00b7 ${esc(it.rad.achternaam)}</div><div class="s">${esc(it.naam)}</div></div>`;
         } else {
-          inhoud += `<div class="item"><div class="dot" style="background:${it.kleur};"></div><div><div class="t">${it.naam}</div><div class="s">${it.rad.code} \u00b7 ${it.rad.achternaam}</div></div></div>`;
+          inhoud += `<div class="item"><div class="dot" style="background:${it.kleur};"></div><div><div class="t">${esc(it.naam)}</div><div class="s">${it.rad.code} \u00b7 ${esc(it.rad.achternaam)}</div></div></div>`;
         }
       });
 

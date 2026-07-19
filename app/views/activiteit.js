@@ -1,7 +1,7 @@
 // Activiteit-view: matrix met counts/ratios/verdeling per radioloog × functie.
 // Groot bestand omdat alle berekeningen, helpers en handlers hier samenkomen.
 import { state, VASTE_RAD_IDS, DAGEN_NL, HOOFD_FUNCTIES, BELASTING_GRENS } from '../state.js';
-import {
+import { esc,
   vasteRads, actieveInvallers, vasteRadsOpDatum, actieveInvallersOpDatum,
   bezettingenInRange, alleVasteStoelIds, isVasteStoel,
   radiologenMap, vandaagIso, formatDatum, fclass,
@@ -493,7 +493,7 @@ window.actToggleHoofd = function(letter){ state.actUitgeklapt[letter] = !state.a
 
 window.actToonDrilldown = function(radId, kind, code, vanSub, totSub) {
   const rad = radiologenMap()[radId];
-  const radLabel = rad ? `${rad.code} · ${rad.achternaam}` : radId;
+  const radLabel = rad ? `${rad.code} · ${esc(rad.achternaam)}` : radId;
   const data = berekenActiviteit();
   const { datums, dienstDatums } = data;
   const inSub = (d) => (!vanSub || d >= vanSub) && (!totSub || d <= totSub);

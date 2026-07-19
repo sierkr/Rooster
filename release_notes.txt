@@ -1,3 +1,38 @@
+Rooster v3.30.0 — Release notes
+==================================
+
+FASE 3 BEVEILIGINGSRELEASE: VERHARDING (H3, H4, M1, M2, M3, M5, M6)
+----------------------------------------------------------------------------
+Derde en laatste release n.a.v. de betrouwbaarheidsaudit.
+Deployen: functions-deploy (Node 22) + app-upload. Geen rules-wijziging.
+Volg DEPLOY-FASE3.md.
+
+- H3: wachtwoorden minimaal 12 tekens bij (eerste) wijziging; resets en
+  nieuwe accounts krijgen een willekeurig tijdelijk wachtwoord i.p.v. het
+  vaste standaardwachtwoord; generator is nu cryptografisch. Optioneel:
+  App Check via config.js.
+
+- H4: gebruikersbeheer-functies weigeren nu ook server-side aanroepen uit
+  de testomgeving.
+
+- M1/M6: agenda-feed: tokenformaat afgedwongen, rate limiting, en de
+  dag-opmerking (kan info over anderen bevatten) zit niet meer in de feed.
+
+- M2: 47 vrije-tekst-interpolaties ge-escaped, CSS-injectie-bewaking, en
+  een Content-Security-Policy in index.html.
+
+- M3: nieuwe vendor/-map: zet daar lokale kopieën van SheetJS/ExcelJS in
+  (zie vendor/LEESMIJ.txt) en de app is CDN-onafhankelijk; zonder die
+  kopieën verandert er niets.
+
+- M5: import-kolom-mapping en hoofdbeheerder-adres zijn nu via de
+  instellingen-collectie aanpasbaar zonder code-release.
+
+- Onderhoud: Cloud Functions naar Node 22, firebase-functions 6,
+  firebase-admin 13.
+
+----------------------------------------------------------------------------
+
 Rooster v3.29.0 — Release notes
 ==================================
 

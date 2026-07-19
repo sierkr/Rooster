@@ -7,6 +7,29 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 export const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
+
+// v3.30.0 (H3, optioneel): Firebase App Check met reCAPTCHA v3. Wordt alléén
+// geactiveerd als in config.js een site key is gezet (window.APPCHECK_SITE_KEY).
+// Activering vereist eenmalige registratie in de Firebase-console — zie
+// DEPLOY-FASE3.md. Zonder site key verandert er niets aan het gedrag.
+if (typeof window !== 'undefined' && window.APPCHECK_SITE_KEY) {
+  // Async IIFE (géén top-level await: dat zou op oudere Safari-versies de
+  // volledige module-graph laten stranden op een parse error).
+  (async () => {
+    try {
+      const { initializeAppCheck, ReCaptchaV3Provider } = await import(
+        "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js"
+      );
+      initializeAppCheck(firebaseApp, {
+        provider: new ReCaptchaV3Provider(window.APPCHECK_SITE_KEY),
+        isTokenAutoRefreshEnabled: true,
+      });
+    } catch (e) {
+      console.warn('App Check kon niet worden geïnitialiseerd:', e && e.message);
+    }
+  })();
+}
+
 export const auth = getAuth(firebaseApp);
 
 // ----------------------------------------------------------------------------

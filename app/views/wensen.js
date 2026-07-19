@@ -69,7 +69,7 @@ export function renderWenView() {
 function renderWensCard(w, eigen) {
   const radsMap = radiologenMap();
   const rad = radsMap[w.radioloog_id];
-  const naam = rad ? `${rad.code} · ${rad.achternaam}` : w.radioloog_id;
+  const naam = rad ? `${rad.code} · ${esc(rad.achternaam)}` : w.radioloog_id;
   const typeLabel = { vakantie: 'Vakantie', niet_beschikbaar: 'Niet beschikbaar', voorkeur: 'Voorkeur' }[w.type] || w.type;
   const typeKleur = { vakantie: 'f-V', niet_beschikbaar: 'f-K', voorkeur: 'f-W' }[w.type] || 'f-V';
   const voorkeur = w.voorkeur_code ? ` → ${w.voorkeur_code}` : '';

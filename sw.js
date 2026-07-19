@@ -2,7 +2,7 @@
 // Cache-naam bevat versienummer. Bij een nieuwe versie worden oude caches
 // automatisch verwijderd en alle bestanden opnieuw gecached.
 
-const VERSION = '3.29.0';
+const VERSION = '3.30.0';
 const CACHE = `rooster-${VERSION}`;
 
 const PRECACHE = [
@@ -43,12 +43,24 @@ const PRECACHE = [
 // bestand rechtstreeks van de server komt en nooit uit de HTTP-cache van de
 // browser — anders kan een nieuwe SW-versie stiekem oude bestanden precachen
 // (komt vooral op iOS/Safari voor, waar die cache lang blijft hangen).
+// v3.30.0 (M3): optionele vendor-bestanden (lokale kopieën van SheetJS en
+// ExcelJS). Als ze in de repo staan worden ze gecached (import/export werkt
+// dan volledig offline); ontbreken ze, dan mag de install NIET falen.
+const PRECACHE_OPTIONEEL = [
+  './vendor/xlsx.full.min.js',
+  './vendor/exceljs.min.js',
+];
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE)
       .then(cache => cache.addAll(
         PRECACHE.map(url => new Request(url, { cache: 'reload' }))
-      ))
+      ).then(() => Promise.all(
+        PRECACHE_OPTIONEEL.map(url =>
+          cache.add(new Request(url, { cache: 'reload' })).catch(() => null)
+        )
+      )))
       .then(() => self.skipWaiting())
   );
 });

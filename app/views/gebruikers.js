@@ -2,7 +2,14 @@
 import { collection, doc, getDocs, query, where, setDoc, updateDoc, writeBatch, deleteField, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, fnGebruikerAanmaken, fnGebruikerVerwijderen, fnGebruikerResetWachtwoord, IS_TEST_DB } from '../firebase-init.js';
 import { state, SLOTS, VASTE_RAD_IDS, VASTE_BEHEERDER_EMAIL } from '../state.js';
-import {
+
+// v3.30.0 (M5): het beschermde hoofdbeheerder-adres is nu configureerbaar via
+// instellingen/algemeen.vaste_beheerder_email (Firestore-console); de
+// hardcoded constante blijft als fallback.
+function vasteBeheerderEmail() {
+  return String(state.instellingen?.vaste_beheerder_email || VASTE_BEHEERDER_EMAIL).toLowerCase();
+}
+import { esc,
   vasteRads, vasteRadsOpDatum, actieveInvallers, radiologenMap, parttimeFactor, defaultPermissies,
   magGebruikersBeheren, magRegelsBeheren, genereerWachtwoord, bezettingOpDatum, vandaagIso, plusDagen, formatDatum,
   alleVasteStoelIds, isVasteStoel, nieuwPersoonId, laatsteEntry, clipHistorieVoorWissel,
@@ -94,15 +101,15 @@ export async function renderGebView() {
       <div class="gebruiker-item">
         <div class="gebruiker-hoofd">
           <div style="flex: 1; min-width: 0;">
-            <div style="font-weight: 500; overflow: hidden; text-overflow: ellipsis;">${g.naam || g.email}</div>
-            ${rad ? `<div class="muted">${rad.code} · ${rad.achternaam}</div>` : ''}
+            <div style="font-weight: 500; overflow: hidden; text-overflow: ellipsis;">${esc(g.naam || g.email)}</div>
+            ${rad ? `<div class="muted">${rad.code} · ${esc(rad.achternaam)}</div>` : ''}
           </div>
           <span class="rol-badge rol-${g.rol}">${titel}</span>
         </div>
         <div style="margin-top: 10px; display: flex; gap: 6px;">
           <button class="btn" style="flex: 1; font-size: 12px; padding: 6px;" onclick="window.gebruikerBewerken('${g.id}')">Rol wijzigen</button>
-          <button class="btn" style="font-size: 12px; padding: 6px 10px;" onclick="window.gebruikerWachtwoordReset('${g.id}', '${g.naam || g.email}')">🔑</button>
-          ${(g.id !== state.user.uid && (g.email||'').toLowerCase() !== VASTE_BEHEERDER_EMAIL) ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${g.naam || g.email}')">🗑</button>` : ''}
+          <button class="btn" style="font-size: 12px; padding: 6px 10px;" onclick="window.gebruikerWachtwoordReset('${g.id}', '${esc(g.naam || g.email)}')">🔑</button>
+          ${(g.id !== state.user.uid && (g.email||'').toLowerCase() !== vasteBeheerderEmail()) ? `<button class="btn" style="font-size: 12px; padding: 6px 10px; color: #501313;" onclick="window.gebruikerVerwijderen('${g.id}', '${esc(g.naam || g.email)}')">🗑</button>` : ''}
         </div>
       </div>
     `;
@@ -155,7 +162,7 @@ export async function renderGebView() {
             <div style="display: grid; grid-template-columns: 50px 1fr 120px 56px 56px 120px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <div style="font-weight: 500;">${r.code}</div>
               <div style="min-width: 0;">
-                <div class="muted" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.achternaam || ''}</div>
+                <div class="muted" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(r.achternaam || '')}</div>
                 ${geplandVertrek ? (opvolger
                   ? `<div style="font-size: 10px; color: #9c5700;">opgevolgd door ${(opvolger.code || '').replace(/"/g, '&quot;')} per ${formatDatum(geplandVertrek, 'kort')}</div>`
                   : `<div style="font-size: 10px; color: #b3261e;">vertrekt per ${formatDatum(geplandVertrek, 'kort')}</div>`) : ''}
@@ -211,7 +218,7 @@ export async function renderGebView() {
           ${vertrokken.map(v => `
             <div style="display: grid; grid-template-columns: 50px 1fr 110px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <div style="font-weight: 500;">${v.code}</div>
-              <div class="muted" style="font-size: 13px;">${v.achternaam} <span style="font-size: 11px;">· weg sinds ${formatDatum(plusDagen(v.tot, 1), 'kort')}</span></div>
+              <div class="muted" style="font-size: 13px;">${esc(v.achternaam)} <span style="font-size: 11px;">· weg sinds ${formatDatum(plusDagen(v.tot, 1), 'kort')}</span></div>
               <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.vertrekIntrekken('${v.id}')">Herstellen</button>
             </div>
           `).join('')}
@@ -851,7 +858,7 @@ window.openWnrStopSheet = function(slotId) {
   document.getElementById('sheetSub').textContent = 'Vanaf welke datum is deze waarnemer geen waarnemer meer?';
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-info" style="margin-bottom:12px; font-size:12px;">
-      <b>${bez?.code || ''}</b> · ${bez?.achternaam || ''} is waarnemer op ${slotId}. Vanaf de opgegeven datum verdwijnt de waarnemer uit het rooster en de tellingen. De historie ervóór blijft behouden.
+      <b>${bez?.code || ''}</b> · ${esc(bez?.achternaam || '')} is waarnemer op ${slotId}. Vanaf de opgegeven datum verdwijnt de waarnemer uit het rooster en de tellingen. De historie ervóór blijft behouden.
     </div>
     <div class="form-field"><label class="form-label">Geen waarnemer meer vanaf</label>
       <input type="date" class="input" id="wdDatum" value="${defDatum}"></div>
@@ -900,7 +907,7 @@ window.nieuweGebruiker = function(preRol) {
   const sel = (r) => preRol === r ? ' selected' : '';
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-field"><label class="form-label">Naam</label><input type="text" class="input" id="nuNaam" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="voornaam.achternaam"></div>
-    <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${STANDAARD_WACHTWOORD}"></div>
+    <div class="form-field"><label class="form-label">Tijdelijk wachtwoord</label><input type="text" class="input" id="nuPw" value="${genereerWachtwoord()}"><div class="muted" style="font-size:11px; margin-top:3px;">Willekeurig gegenereerd (v3.30.0) — noteer het vóór opslaan; de gebruiker kiest bij eerste login zelf een nieuw wachtwoord.</div></div>
     <div class="form-field"><label class="form-label">Rol</label>
       <select class="select" id="nuRol" onchange="window.nuRolWissel()">
         <option value="radioloog"${sel('radioloog')}>Radioloog</option>
@@ -913,10 +920,10 @@ window.nieuweGebruiker = function(preRol) {
       <select class="select" id="nuRadId">
         <option value="">— geen —</option>
         <optgroup label="Vaste radiologen">
-          ${rads.map(r => `<option value="${r.id}">${r.code} · ${r.achternaam}</option>`).join('')}
+          ${rads.map(r => `<option value="${r.id}">${r.code} · ${esc(r.achternaam)}</option>`).join('')}
         </optgroup>
         ${waarnemers.length ? `<optgroup label="Waarnemers">
-          ${waarnemers.map(r => `<option value="${r.id}">${r.id} — ${r.code} · ${r.achternaam}</option>`).join('')}
+          ${waarnemers.map(r => `<option value="${r.id}">${r.id} — ${r.code} · ${esc(r.achternaam)}</option>`).join('')}
         </optgroup>` : ''}
       </select>
     </div>
@@ -961,7 +968,7 @@ window.opslaanNieuweGebruiker = async function() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span>'; }
 
   try {
-    await fnGebruikerAanmaken({ email, naam, wachtwoord: pw, rol, radioloog_id: radId || null });
+    await fnGebruikerAanmaken({ email, naam, wachtwoord: pw, rol, radioloog_id: radId || null, omgeving: window.APP_ENV });
     closeSheet();
     alert(`Gebruiker aangemaakt.\nNaam: ${naam}\nWachtwoord: ${pw}\n\nNoteer dit; het wachtwoord is nu niet meer op te vragen.`);
     await laadGebruikers();
@@ -985,7 +992,7 @@ window.gebruikerBewerken = function(uid) {
     if (stoel) waarnemers.push(stoel);
   }
   const isEigenAccount = uid === state.user.uid;
-  const isVasteBeheerder = (g.email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL;
+  const isVasteBeheerder = (g.email || '').toLowerCase() === vasteBeheerderEmail();
 
   const huidigePerm = g.permissies || defaultPermissies(g.rol);
 
@@ -1015,10 +1022,10 @@ window.gebruikerBewerken = function(uid) {
       <select class="select" id="wzRadId" ${isVasteBeheerder?'disabled':''}>
         <option value="" ${!g.radioloog_id?'selected':''}>— geen —</option>
         <optgroup label="Vaste radiologen">
-          ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${r.achternaam}</option>`).join('')}
+          ${rads.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.code} · ${esc(r.achternaam)}</option>`).join('')}
         </optgroup>
         ${waarnemers.length ? `<optgroup label="Waarnemers">
-          ${waarnemers.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.id} — ${r.code || ''} · ${r.achternaam || ''}</option>`).join('')}
+          ${waarnemers.map(r => `<option value="${r.id}" ${g.radioloog_id===r.id?'selected':''}>${r.id} — ${r.code || ''} · ${esc(r.achternaam || '')}</option>`).join('')}
         </optgroup>` : ''}
       </select>
     </div>
@@ -1062,7 +1069,7 @@ window.wzPermissiesReset = function() {
 
 window.opslaanGebruikerUpdate = async function(uid) {
   const g = state.gebruikers.find(x => x.id === uid);
-  const isVasteBeheerder = (g?.email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL;
+  const isVasteBeheerder = (g?.email || '').toLowerCase() === vasteBeheerderEmail();
 
   const rol = isVasteBeheerder ? 'beheerder' : document.getElementById('wzRol').value;
   let radId = isVasteBeheerder ? (g.radioloog_id || '') : document.getElementById('wzRadId').value;
@@ -1095,18 +1102,25 @@ window.opslaanGebruikerUpdate = async function(uid) {
   }
 };
 
+// v3.30.0 (H3): de reset genereert server-side een willekeurig tijdelijk
+// wachtwoord (geen vast standaardwachtwoord meer) en toont dat eenmalig.
 window.gebruikerWachtwoordReset = async function(uid, email) {
-  if (!confirm(`Wachtwoord van ${email} terugzetten naar het standaard wachtwoord?\n\nDe gebruiker moet daarna opnieuw inloggen en een nieuw wachtwoord kiezen.`)) return;
+  if (!confirm(`Wachtwoord van ${email} resetten?\n\nEr wordt een willekeurig tijdelijk wachtwoord gegenereerd dat je eenmalig te zien krijgt. De gebruiker moet daarna bij de eerste login zelf een nieuw wachtwoord kiezen.`)) return;
   try {
-    await fnGebruikerResetWachtwoord({ uid });
-    alert(`Wachtwoord van ${email} is teruggezet naar het standaard wachtwoord.`);
+    const res = await fnGebruikerResetWachtwoord({ uid, omgeving: window.APP_ENV });
+    const tijdelijk = res?.data?.tijdelijkWachtwoord;
+    if (tijdelijk) {
+      prompt(`Tijdelijk wachtwoord voor ${email} — noteer of kopieer het nu; het is later niet meer op te vragen:`, tijdelijk);
+    } else {
+      alert(`Wachtwoord van ${email} is gereset.`);
+    }
   } catch (e) {
     alert('Reset mislukt: ' + (e.message || 'onbekende fout'));
   }
 };
 
 window.gebruikerVerwijderen = async function(uid, email) {
-  if ((email || '').toLowerCase() === VASTE_BEHEERDER_EMAIL) {
+  if ((email || '').toLowerCase() === vasteBeheerderEmail()) {
     alert('Hoofdbeheerder-account kan niet verwijderd worden.');
     return;
   }
@@ -1121,7 +1135,7 @@ window.gebruikerVerwijderen = async function(uid, email) {
   }
   if (!confirm(`Gebruiker ${email} verwijderen?\n\nDit verwijdert zowel het account als het profiel.`)) return;
   try {
-    await fnGebruikerVerwijderen({ uid });
+    await fnGebruikerVerwijderen({ uid, omgeving: window.APP_ENV });
     await laadGebruikers();
     renderGebView();
   } catch (e) {
@@ -1189,7 +1203,7 @@ window.openWisselSheet = function(slotId) {
     : 'Nieuwe radioloog op deze vaste stoel per datum';
 
   document.getElementById('sheetBody').innerHTML = `
-    ${huidigB ? `<div class="form-info" style="margin-bottom: 12px; font-size: 12px;">Huidig: <b>${huidigB.code}</b> · ${huidigB.achternaam || ''}${huidigB.van ? ` (sinds ${formatDatum(huidigB.van, 'kort')})` : ''}</div>` : `<div class="form-info" style="margin-bottom: 12px; font-size: 12px;">Stoel is leeg.</div>`}
+    ${huidigB ? `<div class="form-info" style="margin-bottom: 12px; font-size: 12px;">Huidig: <b>${huidigB.code}</b> · ${esc(huidigB.achternaam || '')}${huidigB.van ? ` (sinds ${formatDatum(huidigB.van, 'kort')})` : ''}</div>` : `<div class="form-info" style="margin-bottom: 12px; font-size: 12px;">Stoel is leeg.</div>`}
     <div class="form-field"><label class="form-label">Code (initialen, max 4)</label><input type="text" class="input" id="wsCode" maxlength="4" placeholder="bv. AV"></div>
     <div class="form-field"><label class="form-label">Voornaam</label><input type="text" class="input" id="wsVoornaam" placeholder="Anna"></div>
     <div class="form-field"><label class="form-label">Achternaam</label><input type="text" class="input" id="wsAchternaam" placeholder="de Vries"></div>
@@ -1409,15 +1423,15 @@ window.openMaakVastSheet = function(wSlotId) {
   const huidig = bezettingOpDatum(wSlotId, vandaagIso());
   const defDatum = vandaagIso();
   const opties = vasteRadsOpDatum(vandaagIso()).map(r => {
-    return `<option value="${r.id}">${r.code || r.id} · ${r.achternaam || ''} (vervangen)</option>`;
+    return `<option value="${r.id}">${r.code || r.id} · ${esc(r.achternaam || '')} (vervangen)</option>`;
   }).join('') + `<option value="__NIEUW__">➕ Nieuwe stoel (kolom erbij)</option>`;
 
   document.getElementById('sheetTitle').textContent = `Maak ${huidig?.code || wSlotId} vast`;
-  document.getElementById('sheetSub').textContent = `${huidig?.achternaam || ''} verhuist van ${wSlotId} naar een vaste stoel`;
+  document.getElementById('sheetSub').textContent = `${esc(huidig?.achternaam || '')} verhuist van ${wSlotId} naar een vaste stoel`;
 
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-info" style="margin-bottom: 12px; font-size: 12px;">
-      <b>${huidig?.code || ''}</b> · ${huidig?.achternaam || ''} (nu in ${wSlotId}) wordt per datum de bezetter van een vaste stoel. Toewijzingen, vakantie-V, diensten en wensen vanaf die datum verhuizen mee. Historie van vóór de datum blijft op ${wSlotId}.
+      <b>${huidig?.code || ''}</b> · ${esc(huidig?.achternaam || '')} (nu in ${wSlotId}) wordt per datum de bezetter van een vaste stoel. Toewijzingen, vakantie-V, diensten en wensen vanaf die datum verhuizen mee. Historie van vóór de datum blijft op ${wSlotId}.
     </div>
     <div class="form-field"><label class="form-label">Welke vaste stoel?</label>
       <select class="select" id="mvSlot">${opties}</select>
@@ -1456,7 +1470,7 @@ window.mvUpdatePreview = async function(wSlotId) {
       <li>${p.wensen} wensen</li>
       <li>${p.gebruikersGekoppeld} gekoppelde gebruiker(s)</li>
     </ul>
-    ${huidigDoel ? `<div style="margin-top: 6px;">Huidige bezetter van <b>${naarSlot}</b> (${huidigDoel.code} · ${huidigDoel.achternaam || ''}) wordt afgesloten op ${formatDatum(plusDagen(datum, -1), 'kort')}.</div>` : ''}
+    ${huidigDoel ? `<div style="margin-top: 6px;">Huidige bezetter van <b>${naarSlot}</b> (${huidigDoel.code} · ${esc(huidigDoel.achternaam || '')}) wordt afgesloten op ${formatDatum(plusDagen(datum, -1), 'kort')}.</div>` : ''}
   `;
 };
 
@@ -1526,7 +1540,7 @@ window.openVertrekSheet = function(slotId) {
   document.getElementById('sheetSub').textContent = 'De stoel verdwijnt vanaf de opgegeven datum';
   document.getElementById('sheetBody').innerHTML = `
     <div class="form-info" style="margin-bottom: 12px; font-size: 12px;">
-      <b>${huidig?.code || ''}</b> · ${huidig?.achternaam || ''} verlaat de stoel. Vanaf de vertrekdatum verdwijnt de kolom uit het overzicht; de historie van vóór die datum blijft zichtbaar.
+      <b>${huidig?.code || ''}</b> · ${esc(huidig?.achternaam || '')} verlaat de stoel. Vanaf de vertrekdatum verdwijnt de kolom uit het overzicht; de historie van vóór die datum blijft zichtbaar.
     </div>
     <div class="form-field"><label class="form-label">Vertrekdatum <span class="muted" style="font-weight:400;">(vanaf deze dag is de stoel weg)</span></label>
       <input type="date" class="input" id="vtDatum" value="${defDatum}">
@@ -1605,7 +1619,7 @@ window.vertrekIntrekken = async function(slotId) {
   const e = laatsteEntry(hist);
   const li = e ? hist.indexOf(e) : -1;
   if (li < 0 || !e.tot) { alert('Deze stoel heeft geen vertrek om in te trekken.'); return; }
-  if (!confirm(`Vertrek van ${e.code || slotId} (${e.achternaam || ''}) intrekken?\n\nDe stoel wordt weer doorlopend actief en de kolom komt terug.`)) return;
+  if (!confirm(`Vertrek van ${e.code || slotId} (${esc(e.achternaam || '')}) intrekken?\n\nDe stoel wordt weer doorlopend actief en de kolom komt terug.`)) return;
   hist[li] = { ...e, tot: null };
   try {
     await setDoc(doc(db, 'radiologen', slotId), { bezetting_historie: hist }, { merge: true });

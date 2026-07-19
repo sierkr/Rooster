@@ -68,7 +68,7 @@ export function renderDieView() {
         <div class="dienst-rij">
           <div class="dienst-datum">${datumKort}${isVandaag ? ' · nu' : ''}</div>
           <div class="dienst-rad">
-            ${dienstRad ? `${dienstRad.code} · ${dienstRad.achternaam}` : '<span class="muted">— geen dienst —</span>'}
+            ${dienstRad ? `${dienstRad.code} · ${esc(dienstRad.achternaam)}` : '<span class="muted">— geen dienst —</span>'}
           </div>
           ${dienstRad?.dect ? `<a class="dienst-dect-btn" href="${telLink(dienstRad.dect)}" onclick="event.stopPropagation();">📞 ${dienstRad.dect}</a>` : ''}
         </div>
@@ -91,7 +91,7 @@ export function renderDieView() {
         </div>
         ${[...rads].sort((a,b) => a.achternaam.localeCompare(b.achternaam)).map(r => `
           <div class="dect-rij">
-            <div class="dect-naam">${r.code} · ${r.achternaam}</div>
+            <div class="dect-naam">${r.code} · ${esc(r.achternaam)}</div>
             ${r.dect ? `<a class="dect-num" href="${telLink(r.dect)}">${r.dect}</a>` : '<span class="muted" style="font-size: 12px;">—</span>'}
           </div>
         `).join('')}
@@ -116,7 +116,7 @@ window.openDienstSheet = function(datum) {
       ${rads.map(r => `
         <div class="picker-option ${r.id === huidigDienstId ? 'selected' : ''}" style="text-align: left; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;" onclick="window.zetDienst('${datum}', '${r.id}')">
           <div>
-            <div style="font-weight: 500;">${r.code} · ${r.achternaam}</div>
+            <div style="font-weight: 500;">${r.code} · ${esc(r.achternaam)}</div>
             ${r.dect ? `<div class="muted" style="font-size: 11px;">DECT ${r.dect}</div>` : ''}
           </div>
         </div>

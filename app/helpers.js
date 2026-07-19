@@ -572,9 +572,13 @@ export function vertalFirebaseFout(code) {
   return map[code] || `Fout: ${code}`;
 }
 
+// v3.30.0 (H3): cryptografisch veilige generator (Web Crypto) i.p.v.
+// Math.random, en langer (14 tekens). Tekenset zonder verwarbare tekens.
 export function genereerWachtwoord() {
   const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
-  return Array.from({length: 10}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const buf = new Uint32Array(14);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, n => chars[n % chars.length]).join('');
 }
 
 // Standaard-wachtwoord voor nieuwe gebruikers. Bij eerste login wordt
@@ -582,9 +586,11 @@ export function genereerWachtwoord() {
 export const STANDAARD_WACHTWOORD = 'RoosterZMC';
 
 // Validatie. Voorlopig alleen min. 6 tekens; eisen kunnen hier worden uitgebreid.
+// v3.30.0 (H3): minimumlengte 6 → 12 voor nieuw gekozen wachtwoorden.
+// Bestaande wachtwoorden blijven geldig; de eis geldt bij (eerste) wijziging.
 export function valideerWachtwoord(pw) {
   if (typeof pw !== 'string') return 'Wachtwoord ontbreekt';
-  if (pw.length < 6) return 'Wachtwoord moet minimaal 6 tekens zijn';
+  if (pw.length < 12) return 'Wachtwoord moet minimaal 12 tekens zijn';
   if (pw === STANDAARD_WACHTWOORD) return 'Kies een ander wachtwoord dan het standaard wachtwoord';
   return null; // geldig
 }

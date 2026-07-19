@@ -111,16 +111,26 @@ function kolLetter(n) {
 }
 
 // ---- ExcelJS laden ----------------------------------------------------------
+// v3.30.0 (M3): vendor-first laden. Staat er een lokale kopie in vendor/
+// (zie DEPLOY-FASE3.md), dan wordt die gebruikt — geen CDN-afhankelijkheid,
+// werkt offline en is immuun voor CDN-compromittering. Ontbreekt de lokale
+// kopie, dan valt de loader terug op het (versie-gepinde) CDN.
 let _excelJsPromise = null;
 function laadExcelJS() {
   if (_excelJsPromise) return _excelJsPromise;
   _excelJsPromise = new Promise((resolve, reject) => {
     if (window.ExcelJS) return resolve(window.ExcelJS);
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
-    s.onload = () => resolve(window.ExcelJS);
-    s.onerror = () => reject(new Error('Kon ExcelJS niet laden (offline?).'));
-    document.head.appendChild(s);
+    const laad = (src, opFout) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve(window.ExcelJS);
+      s.onerror = opFout;
+      document.head.appendChild(s);
+    };
+    laad('vendor/exceljs.min.js', () => {
+      laad('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
+        () => reject(new Error('Kon ExcelJS niet laden (offline en geen lokale vendor-kopie?).')));
+    });
   });
   return _excelJsPromise;
 }

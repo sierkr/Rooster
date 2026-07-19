@@ -35,9 +35,9 @@ export function renderRadView() {
 
   const radSelector = isBeheer
     ? `<select class="select" style="font-weight: 500; font-size: 15px; padding: 4px 8px;" onchange="window.zetRadId(this.value)">
-        ${zichtbareRads.map(r => `<option value="${r.id}" ${r.id===rad.id?'selected':''}>${r.achternaam}</option>`).join('')}
+        ${zichtbareRads.map(r => `<option value="${r.id}" ${r.id===rad.id?'selected':''}>${esc(r.achternaam)}</option>`).join('')}
        </select>`
-    : `<span style="font-weight: 500; font-size: 15px;">${rad.achternaam}</span>`;
+    : `<span style="font-weight: 500; font-size: 15px;">${esc(rad.achternaam)}</span>`;
 
   let html = `
     <div class="card">
@@ -124,7 +124,7 @@ window.toonDagDetail = function(datum, radId) {
   const codes = toewijzingVoor(datum, radId);
 
   document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
-  document.getElementById('sheetSub').textContent = `${rad.code} · ${rad.achternaam}`;
+  document.getElementById('sheetSub').textContent = `${rad.code} · ${esc(rad.achternaam)}`;
 
   let body = `<div style="padding: 0 0 1rem;">`;
   if (codes.length > 0) {

@@ -447,6 +447,10 @@ window.injecteerNieuweKleuren = function(functies) {
     .filter(f => f.kleur && (f.code || f.id))
     .map(f => {
       const code = f.code || f.id;
+      // v3.30.0 (M2): CSS-injectie-bewaking — een code die geen geldige
+      // CSS-klassenaam is (alleen letters/cijfers/punt/underscore/streepje)
+      // wordt overgeslagen i.p.v. rauw in het <style>-element te belanden.
+      if (!/^[A-Za-z0-9._-]+$/.test(String(code))) return '';
       const hex = f.kleur.replace('#', '');
       if (hex.length !== 6) return '';
       const r = parseInt(hex.slice(0,2), 16);
