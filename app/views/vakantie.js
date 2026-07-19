@@ -486,6 +486,11 @@ window.vakNavMaand = function(delta) {
   const nj = d.getFullYear();
   const nm = String(d.getMonth() + 1).padStart(2, '0');
   state.vakZichtbareMaand = `${nj}-${nm}`;
+  // v3.29.0 (H2): maand kan buiten het geladen datumvenster liggen;
+  // breid het venster uit (re-render volgt automatisch via de listener).
+  if (window.zorgIndelingVenster) {
+    window.zorgIndelingVenster(`${nj}-${nm}-01`);
+  }
   renderVakView();
 };
 
@@ -969,7 +974,13 @@ window.vakOpslaanRanking = async function(origineelNaam) {
     });
 
     if (naamGewijzigd) {
-      // Update alle indeling-docs die de oude naam als vakantie_rank hebben
+      // Update alle indeling-docs die de oude naam als vakantie_rank hebben.
+      // v3.29.0 (H2): venster eerst uitbreiden vanaf het ankerjaar tot de
+      // laatste roosterdag, zodat ook rank-verwijzingen buiten het geladen
+      // venster hernoemd worden.
+      if (window.zorgIndelingVensterTotEinde) {
+        await window.zorgIndelingVensterTotEinde(`${ankerJaar}-01-01`);
+      }
       const dagenTeUpdaten = Object.values(state.indelingMap)
         .filter(dag => dag?.vakantie_rank === origineelNaam && dag?.datum);
 

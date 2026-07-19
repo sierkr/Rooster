@@ -1,7 +1,7 @@
 // Entry point van de app. Laadt alle modules in juiste volgorde, registreert
 // algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, doc, getDoc, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, updateDoc, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
@@ -135,6 +135,7 @@ window.showView = function(v) {
 
 window.navigeerWeek = function(delta) {
   state.weekMaandag = plusDagen(state.weekMaandag || mandagVanIso(vandaagIso()), delta * 7);
+  window.zorgIndelingVenster(state.weekMaandag, plusDagen(state.weekMaandag, 6));
   render();
 };
 
@@ -142,6 +143,7 @@ window.navigeerDag = function(delta) {
   const huidig = state.huidigeDatum || vandaagIso();
   state.huidigeDatum = plusDagen(huidig, delta);
   state.weekMaandag = mandagVanIso(state.huidigeDatum);
+  window.zorgIndelingVenster(state.huidigeDatum);
   render();
 };
 
@@ -161,6 +163,7 @@ window.weekKiezerWissel = function(input) {
   if (!v) return;
   state.huidigeDatum = v;
   state.weekMaandag = mandagVanIso(v);
+  window.zorgIndelingVenster(state.weekMaandag, plusDagen(state.weekMaandag, 6));
   render();
 };
 
@@ -169,6 +172,7 @@ window.springNaarBeheer = function(datum) {
   state.huidigeDatum = datum;
   state.weekMaandag = mandagVanIso(datum);
   state.huidigeView = 'beh';
+  window.zorgIndelingVenster(state.weekMaandag, plusDagen(state.weekMaandag, 6));
   render();
 };
 
@@ -268,6 +272,82 @@ async function laadProfiel(uid) {
   return { id: uid, ...snap.data() };
 }
 
+// ==== Indeling-datumvenster (v3.29.0, H2) ====================================
+// De indeling-collectie groeit onbegrensd (één doc per dag, jaar na jaar).
+// In plaats van de hele collectie te streamen, abonneren we op een datum-
+// venster: standaard vorig t/m volgend kalenderjaar. Navigeert de gebruiker
+// (of een functie) buiten dat bereik, dan breidt het venster automatisch uit
+// en her-abonneert de listener. Eerder geladen docs buiten het venster
+// blijven in de cache staan (historisch, praktisch read-only); binnen het
+// venster is de realtime snapshot leidend, inclusief verwijderingen.
+
+let _indelingUnsub = null;
+const _indelingLogoutUnsub = () => {
+  if (_indelingUnsub) { _indelingUnsub(); _indelingUnsub = null; }
+};
+
+function standaardVensterVan() { return `${new Date().getFullYear() - 1}-01-01`; }
+function standaardVensterTot() { return `${new Date().getFullYear() + 1}-12-31`; }
+
+// Abonneer (of her-abonneer) op [vanIso .. totIso]. Returnt een Promise die
+// vervult zodra de eerste snapshot binnen is — awaiten vóór berekeningen die
+// de volledige indelingMap in dit bereik nodig hebben.
+function abonneerIndeling(vanIso, totIso) {
+  return new Promise((resolve) => {
+    if (_indelingUnsub) { _indelingUnsub(); _indelingUnsub = null; }
+    // Logout-hook eenmalig (per sessie) registreren
+    if (!state.unsubscribers.includes(_indelingLogoutUnsub)) {
+      state.unsubscribers.push(_indelingLogoutUnsub);
+    }
+    state.indelingVenster = { van: vanIso, tot: totIso };
+    let eerste = true;
+    const q = query(
+      collection(db, 'indeling'),
+      where('datum', '>=', vanIso),
+      where('datum', '<=', totIso)
+    );
+    _indelingUnsub = onSnapshot(q, (snap) => {
+      const map = {};
+      Object.entries(state.indelingMap || {}).forEach(([k, v]) => {
+        if (k < vanIso || k > totIso) map[k] = v; // behoud buiten venster
+      });
+      snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
+      state.indelingMap = map;
+      render();
+      if (eerste) { eerste = false; resolve(); }
+    });
+  });
+}
+
+// Zorg dat het venster (minimaal) de opgegeven datums dekt. Afgerond op hele
+// kalenderjaren zodat her-abonneren zelden nodig is. Returnt Promise die
+// vervult zodra de data beschikbaar is (direct als het venster al dekt).
+window.zorgIndelingVenster = function(vanIso, totIso) {
+  if (!vanIso && !totIso) return Promise.resolve();
+  const a = vanIso || totIso;
+  const b = totIso || vanIso;
+  const doelVan = `${(a < b ? a : b).slice(0, 4)}-01-01`;
+  const doelTot = `${(a > b ? a : b).slice(0, 4)}-12-31`;
+  const huidig = state.indelingVenster;
+  if (huidig && huidig.van <= doelVan && huidig.tot >= doelTot) return Promise.resolve();
+  const nieuwVan = (huidig && huidig.van < doelVan) ? huidig.van : doelVan;
+  const nieuwTot = (huidig && huidig.tot > doelTot) ? huidig.tot : doelTot;
+  return abonneerIndeling(nieuwVan, nieuwTot);
+};
+
+// Variant voor bulk-operaties die ALLE data vanaf een datum nodig hebben
+// (stoel-migraties, impact-previews): bepaalt eerst de laatste datum die in
+// Firestore bestaat en breidt het venster tot daar uit.
+window.zorgIndelingVensterTotEinde = async function(vanafIso) {
+  let maxDatum = null;
+  try {
+    const snap = await getDocs(query(collection(db, 'indeling'), orderBy('datum', 'desc'), limit(1)));
+    if (!snap.empty) maxDatum = snap.docs[0].data().datum || snap.docs[0].id;
+  } catch (e) { /* val terug op standaard venster-uitbreiding */ }
+  const tot = (maxDatum && maxDatum > standaardVensterTot()) ? maxDatum : standaardVensterTot();
+  return window.zorgIndelingVenster(vanafIso || vandaagIso(), tot);
+};
+
 function luisterNaarData() {
   // render() mag pas lopen als functies geladen zijn (kleuren nodig voor weergave)
   let functiesGeladen = false;
@@ -293,12 +373,11 @@ function luisterNaarData() {
     state.besprekingen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }));
 
-  state.unsubscribers.push(onSnapshot(collection(db, 'indeling'), (snap) => {
-    const map = {};
-    snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
-    state.indelingMap = map;
-    render();
-  }));
+  // v3.29.0 (H2): de indeling-listener is begrensd op een datumvenster
+  // (standaard: vorig t/m volgend kalenderjaar) i.p.v. de hele collectie.
+  // Het venster breidt automatisch uit zodra ergens in de app een datum
+  // buiten het bereik nodig is (zie zorgIndelingVenster hieronder).
+  abonneerIndeling(standaardVensterVan(), standaardVensterTot());
 
   state.unsubscribers.push(onSnapshot(collection(db, 'validatie_regels'), (snap) => {
     state.validatieRegels = snap.docs.map(d => ({ id: d.id, ...d.data() }));

@@ -29,9 +29,12 @@ const serviceAccount = require('./serviceAccountKey.json');
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
+// v3.29.0: vakantie_rankings, bezetting_mutaties en audit_log toegevoegd —
+// die ontbraken in de server-side backup.
 const COLLECTIES = [
   'radiologen', 'functies', 'besprekingen', 'indeling',
   'validatie_regels', 'wensen', 'gebruikers', 'instellingen', 'wijzigingen',
+  'vakantie_rankings', 'bezetting_mutaties', 'audit_log',
 ];
 
 function tijdstempel() {

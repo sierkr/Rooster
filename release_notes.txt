@@ -1,3 +1,31 @@
+Rooster v3.29.0 — Release notes
+==================================
+
+FASE 2 BEVEILIGINGSRELEASE: BESCHIKBAARHEID (H1, H2, OFFLINE)
+----------------------------------------------------------------------------
+Tweede van drie releases n.a.v. de betrouwbaarheidsaudit.
+Deployen = alleen app-bestanden uploaden (GEEN rules- of functions-stap).
+Eenmalig daarnaast: automatische backups aanzetten, zie DEPLOY-FASE2.md.
+
+- OFFLINE: persistente lokale cache. Bij netwerkuitval toont de app het
+  laatst bekende rooster i.p.v. een lege pagina; offline gedane wijzigingen
+  worden automatisch verstuurd zodra de verbinding terug is.
+
+- H2: de realtime listener streamt een datumvenster (vorig t/m volgend jaar)
+  i.p.v. de hele indeling-collectie. Navigatie buiten het venster breidt het
+  automatisch uit. Bulk-operaties (stoel-migraties, previews, import-diff)
+  wachten eerst op een volledig venster en werken dus nooit op een
+  gedeeltelijke cache. Starttijd en leeskosten blijven constant, ongeacht
+  hoeveel jaren er in de database staan.
+
+- H1: restore kan de database nu exact gelijkmaken aan de backup (nieuwere
+  documenten worden dan verwijderd; eigen profiel en logs nooit).
+  bezetting_mutaties zit nu in de in-app backup; de server-scripts zijn
+  gecompleteerd. Instructies voor automatische dagelijkse backups staan in
+  DEPLOY-FASE2.md.
+
+----------------------------------------------------------------------------
+
 Rooster v3.28.0 — Release notes
 ==================================
 

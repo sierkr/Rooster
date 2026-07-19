@@ -1,3 +1,55 @@
+## v3.29.0 — Fase 2 beveiligingsrelease: beschikbaarheid (H1, H2, offline)
+
+Tweede van drie releases n.a.v. de betrouwbaarheidsaudit. Geen rules- of
+functions-wijzigingen: alleen app-bestanden uploaden. Wel één belangrijke
+eenmalige console-actie: automatische backups aanzetten (zie DEPLOY-FASE2.md).
+
+### Offline-modus
+- **Persistente lokale cache (IndexedDB, multi-tab).** Eenmaal geladen data
+  blijft op het apparaat beschikbaar. Valt het netwerk weg, dan toont de app
+  het laatst bekende rooster in plaats van een lege pagina; wijzigingen die
+  offline gedaan worden, worden automatisch verstuurd zodra de verbinding
+  terugkeert. In private browsing valt de app terug op het oude gedrag.
+
+### H2 — Datumvenster op de indeling-listener
+- **Begrensde realtime listener.** De app streamt niet langer de complete
+  indeling-collectie (die jaar na jaar groeit), maar een datumvenster van
+  vorig t/m volgend kalenderjaar. Dat houdt de starttijd en leeskosten
+  constant, hoeveel jaren er ook in de database staan.
+- **Automatische uitbreiding.** Navigeren buiten het venster (week/dag-pijlen,
+  datumkiezer, Vakantie-maand, Activiteit-periode) breidt het venster
+  vanzelf uit; de weergave vult zich zodra de data binnen is.
+- **Bulk-operaties blijven volledig.** Stoel-migraties (→ Vast, wissel,
+  vertrek), impact-previews, ranking-hernoemen en de import-diff wachten
+  eerst tot het venster tot de laatste bestaande roosterdag is uitgebreid,
+  zodat deze operaties nooit op een gedeeltelijke cache werken.
+- De Excel-export bevroeg Firestore al rechtstreeks per jaar en is ongewijzigd.
+
+### H1 — Backup & restore
+- **Volledige terugzetting als keuze bij restore.** Naast het oude
+  aanvul-gedrag kan een restore de database nu exact gelijkmaken aan de
+  backup: documenten die ná de backup zijn ontstaan worden dan verwijderd.
+  Aanbevolen bij het terugdraaien van een mislukte import. Veiligheidsnet:
+  het eigen beheerdersprofiel wordt nooit verwijderd; de logs
+  (wijzigingen/audit_log) worden nooit aangeraakt.
+- **bezetting_mutaties zit nu in de in-app backup** (het terugdraai-logboek
+  van stoel-ingrepen ontbrak).
+- **Server-scripts (backup.js/restore.js) gecompleteerd** met
+  vakantie_rankings, bezetting_mutaties en audit_log.
+- **Automatische dagelijkse backups**: instructies (eenmalig, ± 5 minuten,
+  Firestore-console of gcloud) staan in DEPLOY-FASE2.md — dit dekt het
+  risico "handmatige backup vergeten / wachtwoord kwijt" structureel af.
+
+### Let op
+- Historische data buiten het venster die tijdens een sessie is bijgeladen is
+  praktisch read-only: bewerkingen aan zulke dagen gebeuren gewoon in
+  Firestore, maar het venster verschuift daarbij automatisch mee zodra je
+  ernaartoe navigeert, dus in de praktijk merk je hier niets van.
+- Eerste start na deze update bouwt de lokale cache op; daarna zijn starts
+  sneller dan voorheen.
+
+---
+
 ## v3.28.0 — Fase 1 beveiligingsrelease: integriteit (K1, K2, K3, M4)
 
 Eerste van drie geplande releases n.a.v. de betrouwbaarheidsaudit (juli 2026).

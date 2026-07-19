@@ -22,9 +22,12 @@ if (!backupMap) {
   process.exit(1);
 }
 
+// v3.29.0: vakantie_rankings, bezetting_mutaties en audit_log toegevoegd
+// (Admin SDK omzeilt de rules, dus ook de append-only logs zijn herstelbaar).
 const COLLECTIES = [
   'radiologen', 'functies', 'besprekingen', 'instellingen',
   'validatie_regels', 'gebruikers', 'wensen', 'indeling', 'wijzigingen',
+  'vakantie_rankings', 'bezetting_mutaties', 'audit_log',
 ];
 
 async function importCollectie(naam) {

@@ -1253,6 +1253,9 @@ window.opslaanWissel = async function(slotId) {
 
   // Planner helpen: laat zien wat er vanaf de ingangsdatum al op deze stoel
   // gepland staat (blijft staan, maar hoort daarna bij de nieuwe persoon).
+  // v3.29.0 (H2): eerst het datumvenster uitbreiden tot de laatste bestaande
+  // roosterdag, anders telt de impact-preview alleen het geladen venster.
+  if (window.zorgIndelingVensterTotEinde) await window.zorgIndelingVensterTotEinde(datum);
   const impW = impactVanaf(datum, [slotId]);
   if (impW.toew || impW.vak || impW.dienst || impW.wensen) {
     let msg = `Let op: vanaf ${formatDatum(datum, 'kort')} staat op stoel ${slotId} al gepland: ${impactTekst(impW)}.\n`
@@ -1435,11 +1438,13 @@ window.openMaakVastSheet = function(wSlotId) {
   openSheet();
 };
 
-window.mvUpdatePreview = function(wSlotId) {
+window.mvUpdatePreview = async function(wSlotId) {
   const naarSlot = document.getElementById('mvSlot').value;
   const datum = document.getElementById('mvDatum').value;
   const el = document.getElementById('mvPreview');
   if (!datum || !naarSlot) { el.textContent = 'Kies stoel en datum.'; return; }
+  // v3.29.0 (H2): venster uitbreiden zodat de preview alle roosterdata telt
+  if (window.zorgIndelingVensterTotEinde) await window.zorgIndelingVensterTotEinde(datum);
   const p = previewMigratie(wSlotId, naarSlot, datum);
   const huidigDoel = bezettingOpDatum(naarSlot, datum);
   el.innerHTML = `
@@ -1542,6 +1547,9 @@ window.vertrekDoorvoeren = async function(slotId) {
   if (!confirm(`Laat stoel ${slotId} vertrekken per ${formatDatum(datum, 'kort')}?\n\nDe kolom verdwijnt vanaf die datum. De historie ervóór blijft behouden.`)) return;
 
   // Planner helpen: wat staat er vanaf de vertrekdatum nog op deze stoel?
+  // v3.29.0 (H2): eerst het datumvenster uitbreiden tot de laatste bestaande
+  // roosterdag, anders telt de impact-preview alleen het geladen venster.
+  if (window.zorgIndelingVensterTotEinde) await window.zorgIndelingVensterTotEinde(datum);
   const impV = impactVanaf(datum, [slotId]);
   if (impV.toew || impV.vak || impV.dienst || impV.wensen) {
     let msg = `Let op: vanaf ${formatDatum(datum, 'kort')} staat op stoel ${slotId} nog gepland: ${impactTekst(impV)}.\n`
@@ -1611,6 +1619,11 @@ window.vertrekIntrekken = async function(slotId) {
 // Doet de daadwerkelijke batch-migratie. Schrijft in <500-doc batches om
 // firestore-limieten te respecteren.
 async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
+  // v3.29.0 (H2): de migratie-loop hieronder itereert over state.indelingMap
+  // vanaf `datum`. Zorg dat het datumvenster tot de laatste bestaande
+  // roosterdag reikt, anders zou roosterdata buiten het venster stilzwijgend
+  // niet meeverhuizen.
+  if (window.zorgIndelingVensterTotEinde) await window.zorgIndelingVensterTotEinde(datum);
   // 1. Bezetting van vanSlot ophalen
   const vanStoel = state.radiologen.find(r => r.id === vanSlot);
   const vanHist = Array.isArray(vanStoel?.bezetting_historie) ? [...vanStoel.bezetting_historie] : [];

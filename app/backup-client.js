@@ -13,13 +13,16 @@ import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/fireba
 import { db, IS_TEST_DB } from './firebase-init.js';
 import { state } from './state.js';
 
-// 'wijzigingen' zit er bewust NIET in: de Firestore-rules maken de audit-log
+// 'wijzigingen' zit er bewust NIET in: de Firestore-rules maken dat log
 // append-only (create eist uid == eigen uid, geen updates/deletes), dus een
-// restore van die collectie zou tegen de rules stranden.
+// restore van die collectie zou tegen de rules stranden. Zelfde geldt voor
+// 'audit_log' (alleen server-side beschrijfbaar).
+// v3.29.0 (H1): 'bezetting_mutaties' toegevoegd — het terugdraai-logboek van
+// stoel-ingrepen hoort bij een volledige backup.
 const BACKUP_COLLECTIES = [
   'radiologen', 'functies', 'indeling', 'wensen',
   'gebruikers', 'instellingen', 'validatie_regels', 'besprekingen',
-  'vakantie_rankings',
+  'vakantie_rankings', 'bezetting_mutaties',
 ];
 
 function tijdstempel() {
@@ -205,6 +208,7 @@ export async function herstelClientBackup(file, onVoortgang = () => {}) {
   const { writeBatch, doc: fsDoc } = await import(
     "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"
   );
+  // getDocs en collection zijn bovenin dit bestand al statisch geïmporteerd.
 
   const tekst  = await file.text();
   const envelop = JSON.parse(tekst);
@@ -227,15 +231,31 @@ export async function herstelClientBackup(file, onVoortgang = () => {}) {
 
   onVoortgang(`Backup bevat ${Object.values(meta.aantallen || {}).reduce((a,b)=>a+b,0)} documenten.`);
 
+  // v3.29.0 (H1): keuze tussen volledige terugzetting en aanvullen.
+  // De oude restore was altijd een merge: documenten die ná de backup zijn
+  // ontstaan bleven staan, met een inconsistente mengstaat als risico
+  // (bv. een import terugdraaien terwijl de import ook nieuwe dagen aanmaakte).
+  const volledig = confirm(
+    'Volledige terugzetting?\n\n' +
+    'OK — de database wordt exact gelijkgemaakt aan de backup: documenten ' +
+    'die NA de backup zijn ontstaan worden verwijderd. Aanbevolen bij het ' +
+    'terugdraaien van een mislukte import of wijziging.\n\n' +
+    'Annuleren — alleen overschrijven/aanvullen: documenten van na de ' +
+    'backup blijven staan (oude gedrag).\n\n' +
+    '(Het wijzigingen- en audit-log wordt in beide gevallen nooit aangeraakt.)'
+  );
+
   const collecties = meta.collecties || BACKUP_COLLECTIES;
   let totaal = 0;
+  let verwijderdTotaal = 0;
 
   for (const naam of collecties) {
     const items = data[naam];
-    if (!Array.isArray(items) || items.length === 0) {
-      onVoortgang(`${naam}: overgeslagen`);
+    if (!Array.isArray(items)) {
+      onVoortgang(`${naam}: niet in backup, overgeslagen`);
       continue;
     }
+
     for (let i = 0; i < items.length; i += 400) {
       const batch = writeBatch(db);
       for (const item of items.slice(i, i + 400)) {
@@ -247,8 +267,33 @@ export async function herstelClientBackup(file, onVoortgang = () => {}) {
     }
     totaal += items.length;
     onVoortgang(`${naam}: ${items.length} documenten teruggezet`);
+
+    if (volledig) {
+      try {
+        const backupIds = new Set(items.map(it => String(it.id)));
+        const huidigSnap = await getDocs(collection(db, naam));
+        const teVerwijderen = huidigSnap.docs
+          .map(d => d.id)
+          .filter(id => !backupIds.has(String(id)))
+          // Veiligheidsnet: verwijder nooit het eigen gebruikersprofiel —
+          // anders sluit de restore de uitvoerende beheerder zelf buiten.
+          .filter(id => !(naam === 'gebruikers' && id === state?.user?.uid));
+        for (let i = 0; i < teVerwijderen.length; i += 400) {
+          const batch = writeBatch(db);
+          teVerwijderen.slice(i, i + 400).forEach(id => batch.delete(fsDoc(db, naam, id)));
+          await batch.commit();
+        }
+        if (teVerwijderen.length > 0) {
+          verwijderdTotaal += teVerwijderen.length;
+          onVoortgang(`${naam}: ${teVerwijderen.length} nieuwere document${teVerwijderen.length === 1 ? '' : 'en'} verwijderd`);
+        }
+      } catch (err) {
+        onVoortgang(`${naam}: opruimen van nieuwere documenten mislukt — ${err.message}`);
+      }
+    }
   }
 
-  onVoortgang(`Klaar — ${totaal} documenten hersteld.`);
+  onVoortgang(`Klaar — ${totaal} documenten hersteld`
+    + (volledig ? `, ${verwijderdTotaal} nieuwere documenten verwijderd.` : ' (aanvullende modus).'));
   return totaal;
 }

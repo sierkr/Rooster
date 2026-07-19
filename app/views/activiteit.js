@@ -481,6 +481,11 @@ window.actZetVanafTot = function() {
   const b = document.getElementById('actTot').value;
   if (a) state.actVanaf = a;
   if (b) state.actTot = b;
+  // v3.29.0 (H2): custom bereik kan buiten het geladen datumvenster vallen;
+  // breid het venster uit (re-render volgt automatisch via de listener).
+  if (state.actVanaf && state.actTot && window.zorgIndelingVenster) {
+    window.zorgIndelingVenster(state.actVanaf, state.actTot);
+  }
   renderActView();
 };
 window.actToggleInvallers = function() { state.actInvallers = !state.actInvallers; renderActView(); };

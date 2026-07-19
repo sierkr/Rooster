@@ -3,7 +3,7 @@
 // worden direct uit de Firebase modules geïmporteerd in de modules die ze nodig hebben.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 export const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
@@ -20,9 +20,19 @@ const FIRESTORE_DB = (typeof window !== 'undefined' && window.FIRESTORE_DB)
   : '(default)';
 export const IS_TEST_DB = FIRESTORE_DB !== '(default)';
 
+// v3.29.0 (Fase 2, offline): persistente lokale cache met multi-tab-support.
+// Data die eenmaal geladen is blijft in IndexedDB beschikbaar, ook zonder
+// netwerk: bij een netwerkstoring toont de app het laatst bekende rooster
+// (alleen-lezen tot de verbinding terug is; writes worden dan gequeued).
+// Als IndexedDB niet beschikbaar is (bv. private browsing) valt de SDK
+// automatisch terug op geheugen-cache — zelfde gedrag als vóór v3.29.0.
+const CACHE_INSTELLING = {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+};
+
 export const db = IS_TEST_DB
-  ? getFirestore(firebaseApp, FIRESTORE_DB)
-  : getFirestore(firebaseApp);
+  ? initializeFirestore(firebaseApp, CACHE_INSTELLING, FIRESTORE_DB)
+  : initializeFirestore(firebaseApp, CACHE_INSTELLING);
 
 export const functions = getFunctions(firebaseApp, 'europe-west1');
 

@@ -9,6 +9,7 @@ export const state = {
   functies: [],
   besprekingen: [],
   indelingMap: {},        // datum (ISO) -> indeling-doc
+  indelingVenster: null,  // { van, tot } — datumbereik van de realtime listener (v3.29.0, H2)
   validatieRegels: [],    // array van regels
   wensen: [],             // array van wensen-documenten
   vakantieRankings: [],   // array van vakantie_rankings-documenten

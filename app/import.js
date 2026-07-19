@@ -329,6 +329,14 @@ export async function actImportFile(input, renderGebView) {
       dagen.push(docData);
     }
 
+    // v3.29.0 (H2): zorg dat het datumvenster van de indeling-listener het
+    // volledige bereik van het bestand dekt, anders vergelijkt de diff
+    // hieronder tegen een onvolledige cache en lijkt álles gewijzigd.
+    if (dagen.length > 0 && window.zorgIndelingVenster) {
+      const datumsSorted = dagen.map(d => d.datum).sort();
+      await window.zorgIndelingVenster(datumsSorted[0], datumsSorted[datumsSorted.length - 1]);
+    }
+
     // K2 (v3.28.0): valideer de geparste dagen tegen de actieve validatie-
     // regels VOORDAT er geschreven wordt. Voorheen gold de regelvalidatie
     // alleen voor losse cel-bewerkingen in de app; een import kon blokkerende
