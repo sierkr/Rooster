@@ -1,3 +1,38 @@
+Rooster v3.32.4 — Release notes
+==================================
+
+HELPPAGINA'S KLOPPEND GEMAAKT
+----------------------------------------------------------------------------
+Deployen = alleen app-bestanden uploaden. Geen wijziging aan de app zelf;
+alleen help/gebruiker.html en help/beheerder.html.
+
+- BELANGRIJKSTE CORRECTIE: de rode waarschuwing bij de Excel-import beweerde
+  dat er geen automatische backup is. Die is er wél: de app maakt vóór elke
+  import een backup, zichtbaar in de geschiedenis als "vóór import". De
+  waarschuwing wijst daar nu op, en blijft melden dat een import niet met
+  één knop terug te draaien is.
+
+- Het offline-verhaal klopte in beide handleidingen niet meer. De data
+  blijft bewaard ook als je de app afsluit, en offline gedane wijzigingen
+  worden verstuurd zodra er weer verbinding is.
+
+- Diverse kleinere onjuistheden: de knop heet "Nu" en niet "Vandaag", het
+  raster loopt ma t/m zo, de wijzigingsmarkering is een driehoekje en geen
+  bolletje, W is weekradioloog, en het profielpaneel heeft geen optie om je
+  wachtwoord te wijzigen.
+
+- Alle tab-verwijzingen volgen nu de Beheer-structuur met vier sub-tabs. De
+  losse tabs "Gebruikers" en "Regels" bestonden al niet meer.
+
+- Nieuw beschreven voor beheerders: backup maken en terugzetten, het
+  audit-spoor, het wachtwoordbeleid (minimaal 12 tekens, willekeurige
+  tijdelijke wachtwoorden), gegevensbeheer en de drie soorten gebruikers.
+
+- Nieuw beschreven voor gebruikers: het W-slots-schuifje en de som-kolom,
+  ochtend/middag-codes, de markeringen in een cel en hoe vakantie werkt.
+
+----------------------------------------------------------------------------
+
 Rooster v3.32.3 — Release notes
 ==================================
 

@@ -41,7 +41,7 @@
 <div class="wrap">
 
   <h1>Rooster radiologen</h1>
-  <p class="subtitle">Gebruikershandleiding · versie mei 2026</p>
+  <p class="subtitle">Gebruikershandleiding · augustus 2026 · app-versie 3.32.4</p>
 
   <div class="toc">
     <h2>Inhoud</h2>
@@ -63,21 +63,36 @@
   <p>Open de app via de gedeelde link. Je logt in met de gebruikersnaam en het wachtwoord dat de beheerder voor jou heeft aangemaakt.</p>
   <h3>Wachtwoord vergeten</h3>
   <p>Neem contact op met de beheerder zodat je wachtwoord gereset kan worden.</p>
+  <p>Log je voor het eerst in, dan vraagt de app je meteen om een eigen wachtwoord te kiezen. Dat moet minimaal 12 tekens lang zijn. Je komt pas in de app zodra dat gelukt is.</p>
   <h3>Je profielchip</h3>
-  <p>Rechtsboven staat een ronde chip met je initialen. Tik erop voor een overzicht van je account: naam, gekoppeld radioloog-profiel en de optie om je wachtwoord te wijzigen of uit te loggen.</p>
+  <p>Rechtsboven staat een ronde chip met je initialen. Tik erop voor een overzicht van je account: je naam, je rol, het radioloog-profiel waaraan je gekoppeld bent, een schuifje voor meldingen (zie <a href="#overzicht">Ongelezen dag-opmerkingen</a>) en de knop om uit te loggen.</p>
+  <div class="tip"><b>Tip:</b> Wil je je wachtwoord later nog wijzigen, vraag de beheerder dan om een reset. Je krijgt dan een tijdelijk wachtwoord en kiest bij de volgende inlog opnieuw je eigen wachtwoord.</div>
 
   <!-- 2 -->
   <h2 id="overzicht">2. Overzicht – het weekrooster</h2>
-  <p>De tab <span class="badge">Overzicht</span> toont het rooster van de lopende week. Navigeer met de pijltjesknopjes naar andere weken, of tik op <em>Vandaag</em> om terug te springen.</p>
+  <p>De tab <span class="badge">Overzicht</span> toont het rooster van de lopende week. Navigeer met de pijltjes ‹ en › naar een andere week, tik op <em>Nu</em> om terug te springen naar deze week, of tik op <em>Week …</em> in het midden om een datum te kiezen en direct naar die week te springen.</p>
 
   <h3>Het raster</h3>
-  <p>Elke rij is een dag (ma–vr), elke kolom een radioloog. In de cel staat de functiecode voor die dag, bijvoorbeeld <span class="badge">W</span> (werkvloer), <span class="badge">V</span> (vakantie) of <span class="badge">K</span> (cursus). Kleuren komen overeen met de functiecodes zoals ingesteld door de beheerder.</p>
+  <p>Elke rij is een dag (maandag tot en met zondag), elke kolom een radioloog. In de cel staat de functiecode voor die dag, bijvoorbeeld <span class="badge">W</span> (weekradioloog), <span class="badge">B</span> (bucky/echo), <span class="badge">V</span> (vakantie) of <span class="badge">K</span> (cursus). Kleuren komen overeen met de functiecodes zoals ingesteld door de beheerder; onder het raster staat een legenda.</p>
+  <p>Staan er twee codes met een schuine streep ertussen, bijvoorbeeld <span class="badge">B / M</span>, dan geldt de eerste code voor de ochtend en de tweede voor de middag.</p>
+  <p>Feestdagen herken je aan een subtiele markering op de dagcel.</p>
+
+  <h3>Waarnemers en het aantal</h3>
+  <p>Rechtsboven het raster staat een schuifje <em>W-slots</em>. Zet je dat aan, dan komen de waarnemerskolommen (W1 tot en met W5) erbij, gescheiden door een verticale lijn, plus een extra kolom <strong>∑</strong> aan de rechterkant. Die kolom telt hoeveel radiologen er die dag op een meetellende functie staan: rood bij vier of minder, lichtgroen bij vijf en donkergroen bij zes of meer.</p>
 
   <h3>Jouw cel</h3>
   <p>Je eigen cel is licht gemarkeerd. Tik erop voor een detailvenster met je volledige toewijzing, eventuele opmerkingen en je ingediende wens voor die dag.</p>
 
+  <h3>Markeringen op een cel</h3>
+  <p>In de hoeken van een cel kunnen kleine tekens staan:</p>
+  <ul>
+    <li><strong>Rood driehoekje linksboven</strong> – er staat een opmerking bij deze cel. Tik erop om hem te lezen.</li>
+    <li><strong>Oranje driehoekje rechtsboven</strong> – jouw toewijzing voor die dag is recent gewijzigd.</li>
+    <li><strong>Gekleurd bolletje</strong> – er ligt een wens voor die dag: oranje betekent nog niet behandeld, groen goedgekeurd en grijs afgewezen.</li>
+  </ul>
+
   <h3>Wijzigingsmarkering</h3>
-  <p>Een klein oranje bolletje op een cel geeft aan dat jouw toewijzing recent is gewijzigd. Tik op de cel om de details te zien en de melding als gelezen te markeren. Het getal op de <span class="badge">Overzicht</span>-tab geeft aan hoeveel ongelezen wijzigingen er zijn.</p>
+  <p>Het oranje driehoekje rechtsboven in een cel geeft aan dat jouw toewijzing recent is gewijzigd. Tik op de cel om te zien wat er is veranderd en tik op <em>Gezien ✓</em> om de melding te wissen. Het oranje getal op de <span class="badge">Overzicht</span>-tab geeft aan hoeveel ongelezen wijzigingen er nog zijn.</p>
 
   <div class="tip"><b>Tip:</b> Het rooster is altijd actueel — bij elke aanpassing door de beheerder zie je direct de nieuwe indeling zonder de pagina te verversen.</div>
 
@@ -103,7 +118,7 @@
 
   <!-- 5 -->
   <h2 id="dienst">5. Dienst – bereikbaarheidsoverzicht</h2>
-  <p>De tab <span class="badge">Dienst</span> toont de dienstdoende radiologen voor de komende dagen: naam, DECT-nummer en eventuele opmerkingen. Je kunt direct bellen via de DECT-knop als je de app op een telefoon gebruikt.</p>
+  <p>De tab <span class="badge">Dienst</span> toont een overzicht van veertien dagen: wie er dienst heeft, met naam, DECT-nummer en eventuele opmerkingen. Je kunt direct bellen via de DECT-knop als je de app op een telefoon gebruikt. Onderaan staat een tabel met de vaste DECT-nummers.</p>
 
   <!-- 6 -->
   <h2 id="wensen">6. Wensen – verlof en voorkeuren indienen</h2>
@@ -131,21 +146,24 @@
   <!-- 7 -->
   <h2 id="vakantie">7. Vakantie – vakantieplanning</h2>
   <p>De tab <span class="badge">Vakantie</span> toont een maandoverzicht van alle vakantieplanningen. Je ziet per radioloog hoeveel vakantiedagen er in een maand zijn ingepland en wat je eigen positie is in de volgorderotatie.</p>
-  <p>Vanuit dit scherm kun je vakantieblokken aanvragen. De beheerder verwerkt deze in het definitieve rooster.</p>
+  <p>Je zet een vakantiedag rechtstreeks in de kalender: <strong>één tik</strong> zet de dag aan of uit als V-dag, <strong>dubbeltikken</strong> opent een keuzevenster waarin je in plaats van V ook K (cursus) of Z (ziek) kunt kiezen. De beheerder verwerkt dit in het definitieve rooster.</p>
+  <div class="tip"><b>Let op:</b> een dag hier aanzetten is een planning, geen goedkeuring. Gaat het om een aanvraag die beoordeeld moet worden, dien die dan in via de tab <span class="badge">Wensen</span>.</div>
 
   <!-- 8 -->
   <h2 id="notificaties">8. Notificaties en wijzigingen</h2>
-  <p>Wanneer de beheerder een Excel-rooster importeert en jouw indeling binnen 30 dagen wordt gewijzigd, verschijnt er een markering op je cel in het Overzicht. Het tabblad toont dan ook een getal.</p>
+  <p>Wordt jouw indeling gewijzigd voor een dag die binnen 30 dagen valt, dan krijg je daar een melding van. Dat geldt zowel bij een handmatige aanpassing door de beheerder als bij een Excel-import. Er verschijnt een oranje driehoekje rechtsboven in je cel in het Overzicht, en het tabblad toont een oranje getal.</p>
   <ol>
     <li>Tik op de gemarkeerde cel</li>
-    <li>Lees de details van de wijziging</li>
-    <li>Tik op <em>Gezien</em> om de melding te wissen</li>
+    <li>Lees wat er is veranderd: je ziet de oude en de nieuwe code en wanneer het is gewijzigd</li>
+    <li>Tik op <em>Gezien ✓</em> om de melding te wissen</li>
   </ol>
+  <p>Wijzigingen verder dan 30 dagen vooruit leveren geen melding op — die vallen nog ruim binnen de normale planning.</p>
+  <p>Los daarvan staan de <a href="#overzicht">dag-opmerkingen</a>: die gelden voor iedereen en hebben hun eigen balk en knipperende markering.</p>
 
   <!-- 9 -->
   <h2 id="tips">9. Praktische tips</h2>
   <ul>
-    <li>De app werkt ook offline zolang je de app niet afsluit — eerder geladen data blijft dan beschikbaar. Zodra je weer verbinding hebt, wordt alles gesynchroniseerd.</li>
+    <li>De app werkt ook zonder internet. Het laatst geladen rooster wordt op je toestel bewaard en blijft beschikbaar, ook als je de app tussendoor afsluit. Wat je offline invult (bijvoorbeeld een vakantiedag of een bevestigde opmerking) wordt vanzelf verstuurd zodra je weer verbinding hebt.</li>
     <li>Installeer de app op je telefoon via <em>Toevoegen aan beginscherm</em> in je browser voor snelle toegang.</li>
     <li>Het rooster ververst automatisch als er een wijziging is — je hoeft de pagina nooit handmatig te verversen.</li>
     <li>Heb je een vraag of zie je een fout in het rooster? Neem contact op met de beheerder, niet met de app-ontwikkelaar.</li>

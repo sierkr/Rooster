@@ -1,3 +1,51 @@
+## v3.32.4 — Helppagina's kloppend gemaakt
+
+Beide handleidingen waren blijven staan op de situatie van rond v3.27 en
+klopten op een aantal punten niet meer. Geen wijziging aan de app zelf.
+
+### Feitelijke correcties
+- **De rode waarschuwing bij de Excel-import beweerde dat er geen automatische
+  backup is.** Die is er wél sinds v3.29.0: de app maakt vóór elke import een
+  backup met de reden "vóór import". De box waarschuwt nu nog steeds dat een
+  import niet met één knop terug te draaien is, maar wijst op het vangnet en
+  hoe je het gebruikt.
+- "Wijzigingen zijn alleen mogelijk met een actieve verbinding" en "werkt
+  offline zolang je de app niet afsluit" klopten allebei niet meer: de lokale
+  cache overleeft afsluiten en offline gedane wijzigingen worden verstuurd
+  zodra er weer verbinding is.
+- De profielchip zou een optie "wachtwoord wijzigen" bevatten; die zit daar
+  niet. Beschreven is nu wat er wél staat, inclusief het meldingen-schuifje.
+- Het raster loopt van maandag tot en met zondag, niet ma–vr.
+- De knop heet "Nu", niet "Vandaag"; de datumkiezer ontbrak.
+- De wijzigingsmarkering is een oranje driehoekje rechtsboven, geen bolletje —
+  bolletjes zijn de wens-markers.
+- W staat voor weekradioloog, niet werkvloer.
+- De rollentabel had vier rijen onder de kop "drie niveaus".
+- Nieuwe accounts krijgen sinds v3.30.0 een willekeurig tijdelijk wachtwoord;
+  de tekst sprak nog van zelf een wachtwoord instellen.
+
+### Navigatie bijgewerkt
+Alle verwijzingen volgen nu de huidige structuur: de losse tabs "Gebruikers" en
+"Regels" bestaan niet meer, alles zit onder Beheer met de vier sub-tabs Stoel
+bezetting, App gebruikers, Excel en Control. Die structuur wordt in hoofdstuk 1
+ook uitgelegd.
+
+### Nieuw beschreven
+- **Beheerders:** een heel hoofdstuk "Backup, herstel en veiligheid" over
+  handmatige en automatische backups, de waarschuwing bij een backup ouder dan
+  30 dagen, terugzetten, het server-side audit-spoor, het wachtwoordbeleid,
+  gegevensbeheer en offline werken. Ook de drie soorten gebruikers
+  (radioloog, technicus, secretariaat) staan er nu in.
+- **Gebruikers:** het W-slots-schuifje en de ∑-kolom, duo-codes zoals `B / M`
+  voor ochtend en middag, een overzicht van de markeringen in een cel, de
+  feestdagmarkering, en hoe vakantie in de kalender werkt (één tik is een
+  V-toggle, dubbeltikken opent de codekeuze).
+
+### Deploy
+Alleen een app-upload.
+
+---
+
 ## v3.32.3 — Balktekst bij alles gelezen
 
 De gedempte balk eindigde op "alle gelezen" en nodigde daarmee niet uit om er

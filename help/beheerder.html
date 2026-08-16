@@ -54,7 +54,7 @@
 <div class="wrap">
 
   <h1>Rooster radiologen – Beheerder</h1>
-  <p class="subtitle">Beheerdershandleiding · juni 2026 · app-versie 3.27.110</p>
+  <p class="subtitle">Beheerdershandleiding · augustus 2026 · app-versie 3.32.4</p>
 
   <div class="toc">
     <h2>Inhoud</h2>
@@ -69,6 +69,7 @@
       <li><a href="#gebruikers">Gebruikers beheren</a></li>
       <li><a href="#excel-export">Excel-export – workflow en formaat</a></li>
       <li><a href="#excel-import">Excel-import – workflow en beperkingen</a></li>
+      <li><a href="#veiligheid">Backup, herstel en veiligheid</a></li>
       <li><a href="#beperkingen">Beperkingen en bekende limieten</a></li>
       <li><a href="#workflow">Aanbevolen workflow</a></li>
     </ol>
@@ -76,16 +77,37 @@
 
   <!-- 1 -->
   <h2 id="rollen">1. Rollen en rechten</h2>
-  <p>De app kent drie niveaus:</p>
+
+  <h3>Soorten gebruikers</h3>
+  <p>Een account heeft een <strong>soort</strong>, die bepaalt waar het in de gebruikerslijst terechtkomt en of het aan een stoel gekoppeld kan worden:</p>
   <table>
-    <tr><th>Rol</th><th>Wat mag de gebruiker?</th></tr>
+    <tr><th>Soort</th><th>Toelichting</th></tr>
+    <tr><td><strong>Radioloog</strong></td><td>De enige soort die aan een stoel in het rooster gekoppeld kan worden. Een radioloog met beheerrechten staat in de lijst als <em>Radioloog, beheerder</em>.</td></tr>
+    <tr><td><strong>Technicus</strong></td><td>Account met beperktere toegang, krijgt geen stoel.</td></tr>
+    <tr><td><strong>Secretariaat</strong></td><td>Account met beperktere toegang, krijgt geen stoel.</td></tr>
+  </table>
+
+  <h3>Rechten</h3>
+  <p>Los van de soort stel je per gebruiker de rechten in. Er zijn vier niveaus:</p>
+  <table>
+    <tr><th>Recht</th><th>Wat mag de gebruiker?</th></tr>
     <tr><td><strong>Radioloog</strong></td><td>Eigen rooster zien, wensen indienen, Afdeling en Dienst raadplegen</td></tr>
     <tr><td><strong>Overzicht – bekijken</strong></td><td>Alle roosters zien, geen wijzigingen</td></tr>
     <tr><td><strong>Overzicht – wijzigen</strong></td><td>Roosters bewerken, opmerkingen plaatsen, wensen verwerken</td></tr>
-    <tr><td><strong>Gebruikersbeheer</strong></td><td>Alle bovenstaande + gebruikers aanmaken/verwijderen, Excel import/export, functies en validatieregels beheren</td></tr>
+    <tr><td><strong>Gebruikersbeheer</strong></td><td>Alle bovenstaande + gebruikers aanmaken/verwijderen, Excel import/export, backups, functies en validatieregels beheren</td></tr>
   </table>
-  <p>Elke gebruiker krijgt precies de tabs te zien die bij zijn rol horen. Rollen stel je in via de tab <span class="badge">Gebruikers</span> → gebruiker aantikken → permissies aanpassen.</p>
+  <p>Elke gebruiker krijgt precies de tabs te zien die bij zijn rechten horen. Rollen stel je in via <span class="badge">Beheer</span> → <span class="badge">App gebruikers</span> → gebruiker aantikken → permissies aanpassen.</p>
   <div class="warn"><b>Let op:</b> Er moet altijd minimaal één gebruiker met Gebruikersbeheer-rechten actief zijn. De app blokkeert een opslaan dat die situatie zou creëren.</div>
+
+  <h3>De Beheer-tab</h3>
+  <p>Alles wat met beheer te maken heeft zit onder één tab <span class="badge">Beheer</span>, met vier sub-tabs:</p>
+  <table>
+    <tr><th>Sub-tab</th><th>Inhoud</th></tr>
+    <tr><td><strong>Stoel bezetting</strong></td><td>Vaste radiologen (in-dienst datum, parttimefactor, vakantierecht), waarnemers, wisselen en vertrek, vertrokken stoelen</td></tr>
+    <tr><td><strong>App gebruikers</strong></td><td>Accounts, gesplitst in Radiologen, Technici en Secretariaat</td></tr>
+    <tr><td><strong>Excel</strong></td><td>Export (bovenaan) en import (eronder)</td></tr>
+    <tr><td><strong>Control</strong></td><td>Regels, en onder <em>Overige instellingen</em>: database-backup, app-instellingen en gegevensbeheer</td></tr>
+  </table>
 
   <!-- 2 -->
   <h2 id="overzicht">2. Overzicht – weekrooster bewerken</h2>
@@ -98,7 +120,8 @@
     <li>Kies een functiecode uit het kiezervenster. Meerdere codes zijn mogelijk (ochtend/middag).</li>
     <li>Tik op <em>Opslaan</em>. De wijziging is direct zichtbaar voor iedereen.</li>
   </ol>
-  <p>Wijzigingen binnen 30 dagen worden automatisch gemarkeerd als <em>ongelezen</em> voor de betreffende radioloog — die ziet dan een melding op zijn cel.</p>
+  <p>Wijzigingen binnen 30 dagen worden automatisch gemarkeerd als <em>ongelezen</em> voor de betreffende radioloog — die ziet dan een oranje driehoekje op zijn cel en een teller op de Overzicht-tab. Wijzigingen verder vooruit leveren geen melding op.</p>
+  <p>Elke roosterwijziging wordt daarnaast server-side vastgelegd in een audit-spoor dat niet vanuit de app te wijzigen is: wie wat wanneer heeft aangepast. Dat spoor is alleen voor beheerders in te zien en dient als laatste controlemiddel bij twijfel over wat er is gebeurd.</p>
 
   <h3>Opmerkingen</h3>
   <p>Tik op een cel en scroll omlaag voor het opmerkingenveld. Opmerkingen zijn zichtbaar voor alle gebruikers met leesrechten en worden ook meegenomen in de Excel-export.</p>
@@ -114,7 +137,7 @@
 
   <!-- 3 -->
   <h2 id="afdeling">3. Afdeling en Dienst</h2>
-  <p><span class="badge">Afdeling</span> toont wie er op een specifieke dag op elke plek staat, gegroepeerd per functietype. Handig als referentie voor dagelijkse afstemming. Je kunt de weergave ook exporteren als wekelijks Excel-overzicht via het map-icoontje rechtsboven.</p>
+  <p><span class="badge">Afdeling</span> toont wie er op een specifieke dag op elke plek staat, met de aanwezige radiologen bovenaan en de afwezige (vakantie, ziek, cursus, administratie) daaronder. Handig als referentie voor dagelijkse afstemming. Je kunt de weergave ook exporteren als wekelijks Excel-overzicht via het map-icoontje rechtsboven.</p>
   <p><span class="badge">Dienst</span> toont de dienstdoende radiologen met hun DECT-nummers. Als beheerder kun je hier ook de dienstrooster invullen en dienst-toewijzingen aanpassen.</p>
 
   <!-- 4 -->
@@ -146,7 +169,7 @@
 
   <!-- 7 -->
   <h2 id="regels">7. Regels – functies en validatie</h2>
-  <p>De tab <span class="badge">Regels</span> is alleen zichtbaar voor beheerders met Gebruikersbeheer-rechten.</p>
+  <p>Je vindt de regels onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Regels</em>. Zichtbaar voor beheerders met regel- of gebruikersbeheerrechten.</p>
 
   <h3>Functies</h3>
   <p>Elke functie heeft:</p>
@@ -171,17 +194,18 @@
 
   <!-- 8 -->
   <h2 id="gebruikers">8. Gebruikers beheren</h2>
-  <p>Via de tab <span class="badge">Gebruikers</span> beheer je accounts, koppel je gebruikers aan radioloog-profielen en stel je permissies in.</p>
+  <p>Via <span class="badge">Beheer</span> → <span class="badge">App gebruikers</span> beheer je accounts, koppel je gebruikers aan radioloog-profielen en stel je permissies in. De lijst is gesplitst in drie onder-tabs: Radiologen, Technici en Secretariaat.</p>
 
   <h3>Nieuwe gebruiker aanmaken</h3>
   <ol class="steps">
-    <li>Tik op <em>+ Nieuwe gebruiker</em>.</li>
+    <li>Kies de juiste onder-tab en tik op <em>+ Nieuwe radioloog</em> (of technicus of secretariaat).</li>
     <li>Vul naam en e-mailadres in. Het e-mailadres wordt gebruikt als inlognaam en kan later niet worden gewijzigd.</li>
-    <li>Stel een tijdelijk wachtwoord in (of gebruik het gegenereerde wachtwoord).</li>
-    <li>Koppel de gebruiker aan een radioloog-profiel als die er al is.</li>
+    <li>Koppel de gebruiker aan een radioloog-profiel als die er al is. Dit kan alleen bij radiologen.</li>
+    <li>Het veld <em>Tijdelijk wachtwoord</em> is al ingevuld met een willekeurig gegenereerd wachtwoord. <strong>Noteer of kopieer het vóór je opslaat</strong> — je hebt het nodig om het aan de gebruiker door te geven.</li>
     <li>Stel de permissies in en tik op <em>Opslaan</em>.</li>
-    <li>Deel het wachtwoord veilig met de gebruiker en vraag hem het bij eerste inlog te wijzigen.</li>
   </ol>
+  <div class="warn"><b>Let op:</b> ben je het tijdelijke wachtwoord kwijt, gebruik dan <em>Wachtwoord resetten</em> bij de gebruiker. Er wordt dan server-side een nieuw willekeurig wachtwoord aangemaakt dat je eenmalig te zien krijgt; daarna is het niet meer op te vragen. Er is sinds v3.30.0 geen vast standaardwachtwoord meer.</div>
+  <p>Bij de eerste inlog moet de gebruiker verplicht een eigen wachtwoord kiezen van minimaal 12 tekens. Hij komt niet in de app voordat dat gelukt is, dus een tijdelijk wachtwoord kan nooit blijven hangen.</p>
 
   <h3>Radiologen (stoelen)</h3>
   <p>Radiologen zijn de "stoelen" in het rooster. Een gebruiker (inlog) is gekoppeld aan een radioloog-profiel; één profiel kan maar aan één gebruiker tegelijk gekoppeld zijn. De indeling wordt per <em>stoel</em> bewaard, niet per persoon — zo blijft de historie van een stoel kloppen, ook als de bezetter verandert.</p>
@@ -298,30 +322,68 @@
     <li>Het sheetblad moet de naam <em>Indeling [jaar]</em> hebben (bijv. <em>Indeling 2026</em>). Bij een afwijkende naam zoekt de app automatisch naar een sheet met dat patroon.</li>
     <li>Formules in cellen worden als waarde geïmporteerd (de berekende waarde, niet de formule zelf). Zorg dat cellen met formules correct uitgerekend zijn vóór het opslaan.</li>
     <li>De import vervangt <em>alles</em> voor de betrokken periode — er is geen partiële import per week of per radioloog.</li>
-    <li>Een annuleren na de preview werkt altijd; na het bevestigen is de actie niet ongedaan te maken.</li>
+    <li>Een annuleren na de preview werkt altijd; na het bevestigen is de actie niet met één knop ongedaan te maken.</li>
   </ul>
 
-  <div class="danger"><b>Let op:</b> Maak altijd eerst een export vóór je importeert. Er is geen automatische back-up en de import is onomkeerbaar.</div>
+  <div class="danger"><b>Let op:</b> Een import is niet met één knop terug te draaien. Wél maakt de app <strong>vóór elke import automatisch een backup</strong> van de hele database; die verschijnt in de backup-geschiedenis met de reden <em>vóór import</em>. Ging er iets mis, dan zet je die backup terug — zie <a href="#veiligheid">Backup, herstel en veiligheid</a>. Maak daarnaast gerust eerst een export als extra houvast.</div>
 
   <!-- 11 -->
-  <h2 id="beperkingen">11. Beperkingen en bekende limieten</h2>
+  <h2 id="veiligheid">11. Backup, herstel en veiligheid</h2>
+  <p>Je vindt dit onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Overige instellingen</em>.</p>
+
+  <h3>Database-backup</h3>
+  <p>Een backup is een versleutelde momentopname van de hele database, die je als bestand downloadt. Er zijn twee manieren waarop er een ontstaat:</p>
+  <ul>
+    <li><strong>Handmatig</strong> via de knop <em>Nu backup maken</em>.</li>
+    <li><strong>Automatisch vóór elke Excel-import.</strong> Dat gebeurt zonder dat je er iets voor hoeft te doen, en is het vangnet als een import verkeerd uitpakt.</li>
+  </ul>
+  <p>Bovenaan de kaart staat wanneer de laatste backup is gemaakt. Is er nog nooit een gemaakt, of is de laatste ouder dan 30 dagen, dan verschijnt er een gekleurde waarschuwing. Daaronder staat de backup-geschiedenis met per regel het tijdstip, de reden (<em>handmatig</em> of <em>vóór import</em>) en de bestandsnaam, zodat je het juiste bestand op je computer kunt terugvinden.</p>
+  <div class="warn"><b>Let op:</b> de backup wordt versleuteld met jouw wachtwoord en op jouw computer opgeslagen — niet in de app. Bewaar de bestanden op een plek waar je ze terugvindt, en onthoud met welk wachtwoord ze versleuteld zijn. Zonder dat wachtwoord is een backup niet meer te openen.</div>
+
+  <h3>Backup terugzetten</h3>
+  <ol class="steps">
+    <li>Tik op <em>Backup terugzetten</em> en kies het <code>.json</code>-bestand.</li>
+    <li>Voer het wachtwoord in waarmee de backup versleuteld is.</li>
+    <li>Kies of je de database exact gelijk wilt maken aan de backup. Doe je dat, dan worden documenten die na de backup zijn ontstaan verwijderd. Je eigen profiel en de logboeken blijven altijd bewaard.</li>
+  </ol>
+  <p>Inloggegevens zelf zitten niet in de backup: accounts blijven bestaan via Firebase Authentication en raken door een herstel nooit kwijt.</p>
+
+  <h3>Audit-spoor</h3>
+  <p>Bij elke roosterwijziging wordt server-side een record weggeschreven met wie wat wanneer heeft aangepast. Dat gebeurt buiten de app om, zodat het vanuit de app niet te wijzigen of te wissen is. Alleen beheerders kunnen het inzien. Gebruik het als er onduidelijkheid ontstaat over wie een cel heeft veranderd.</p>
+
+  <h3>Wachtwoorden</h3>
+  <ul>
+    <li>Een eigen wachtwoord moet minimaal 12 tekens lang zijn.</li>
+    <li>Nieuwe accounts en resets krijgen een willekeurig gegenereerd tijdelijk wachtwoord. Er is geen vast standaardwachtwoord meer.</li>
+    <li>Bij de eerste inlog wordt de gebruiker verplicht een eigen wachtwoord te kiezen voordat hij de app in kan.</li>
+  </ul>
+
+  <h3>Gegevensbeheer</h3>
+  <p>Onder dezelfde sub-tab staan twee opruimacties: <em>Verlopen wensen</em> verwijdert wensen met een datum vóór vandaag, en <em>Gegevens ouder dan 2 jaar</em> verwijdert indeling en wensen van vóór de bewaartermijn. Beide zijn bedoeld om aan de afspraken over gegevensbewaring te voldoen.</p>
+  <div class="tip"><b>Tip:</b> maak een backup vóór je opruimt. Opruimen is niet terug te draaien.</div>
+
+  <h3>Offline werken</h3>
+  <p>De app bewaart de geladen gegevens lokaal op het toestel. Valt het netwerk weg, dan blijft het laatst bekende rooster zichtbaar en worden wijzigingen bewaard tot de verbinding terug is; daarna worden ze vanzelf verstuurd. Er gaat dus niets verloren als iemand midden in een aanpassing zijn verbinding kwijtraakt.</p>
+
+  <!-- 12 -->
+  <h2 id="beperkingen">12. Beperkingen en bekende limieten</h2>
   <table>
     <tr><th>Beperking</th><th>Detail</th></tr>
     <tr><td>Functiecodes wijzigen</td><td>Verander nooit een functiecode van een reeds gebruikte functie. Historische toewijzingen raken dan los van de definitie.</td></tr>
     <tr><td>Meerdere codes per cel</td><td>Komma-gescheiden codes (bijv. <code>W,V</code>) worden ondersteund. De eerste code bepaalt de kleur en telt mee voor de bezetting.</td></tr>
     <tr><td>Importgrootte</td><td>Bestanden tot ~5 MB worden probleemloos verwerkt. Grotere bestanden kunnen traag zijn op mobiel.</td></tr>
-    <tr><td>Offline gebruik</td><td>De app werkt offline met gecachede data. Wijzigingen zijn alleen mogelijk met een actieve verbinding.</td></tr>
+    <tr><td>Offline gebruik</td><td>De app werkt offline met lokaal bewaarde data; ook wijzigingen kunnen offline en worden verstuurd zodra er weer verbinding is.</td></tr>
     <tr><td>Gebruikersaantal</td><td>Geen hard limiet, maar bij meer dan ~50 actieve gebruikers kan de real-time synchronisatie merkbaar trager worden.</td></tr>
-    <tr><td>Histori</td><td>Alle roosterdata blijft bewaard in Firestore. Gebruik de opschoonfunctie in de Gebruikers-tab om verlopen wensen en oude indelingen te verwijderen.</td></tr>
+    <tr><td>Historie</td><td>Alle roosterdata blijft bewaard in Firestore. Gebruik het gegevensbeheer onder Beheer → Control → Overige instellingen om verlopen wensen en oude indelingen te verwijderen.</td></tr>
   </table>
 
-  <!-- 12 -->
-  <h2 id="workflow">12. Aanbevolen workflow voor roosterbeheer</h2>
+  <!-- 13 -->
+  <h2 id="workflow">13. Aanbevolen workflow voor roosterbeheer</h2>
   <ol class="steps">
     <li><strong>Plan maken in Excel.</strong> Exporteer het huidige rooster als startpunt. Vul de nieuwe periode in — gebruik alleen geldige functiecodes.</li>
     <li><strong>Wensen checken.</strong> Raadpleeg de Wensen-tab vóór het finaliseren van het rooster. Verwerk open wensen zoveel mogelijk.</li>
     <li><strong>Activiteit controleren.</strong> Gebruik de Activiteit-tab om te zien of de werkvloerverdeling in balans is.</li>
-    <li><strong>Importeren.</strong> Importeer het definitieve rooster. Controleer de preview zorgvuldig, let op de waarschuwing bij wijzigingen binnen 30 dagen.</li>
+    <li><strong>Importeren.</strong> Importeer het definitieve rooster. Controleer de preview zorgvuldig, let op de waarschuwing bij wijzigingen binnen 30 dagen. De app maakt vlak vóór het schrijven automatisch een backup; noteer waar die terechtkomt.</li>
     <li><strong>Validatie checken.</strong> Open de Overzicht-tab en kijk of er conflicten zijn (rode/oranje meldingen). Pas indien nodig handmatig aan.</li>
     <li><strong>Wensen synchroniseren.</strong> De app heeft de wens-statussen automatisch bijgewerkt. Check of er wensen zijn teruggezet naar <em>Open</em> die aandacht vereisen.</li>
   </ol>
