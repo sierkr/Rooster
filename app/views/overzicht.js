@@ -9,8 +9,8 @@ import {
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
   magAlleWensenZien, isFeestdag, isHoofd, esc,
-  opmerkingStatus, ongelezenOpmerkingenInWeek, eerderGelezenTekst,
-  dagOpmerkingTekst,
+  opmerkingStatus, ongelezenOpmerkingenInWeek, opmerkingenInWeek,
+  eerderGelezenTekst, dagOpmerkingTekst,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
@@ -114,18 +114,30 @@ export function renderBehView() {
     </div>`;
   }
 
-  // v3.32.0: aparte balk voor ongelezen dag-opmerkingen, direct onder de
-  // indelingswaarschuwing. Bewust een eigen (blauwe) kleur: dit is géén
-  // roosterconflict, en de twee mogen niet met elkaar verward worden.
-  // Telt uitsluitend de zichtbare week, dus maximaal zeven.
+  // v3.32.0: aparte balk voor dag-opmerkingen, direct onder de indelings-
+  // waarschuwing. Bewust een eigen kleur: dit is géén roosterconflict, en de
+  // twee mogen niet met elkaar verward worden. Telt uitsluitend de zichtbare
+  // week, dus maximaal zeven.
+  //
+  // v3.32.1: de balk blijft staan zolang er in die week opmerkingen zijn, ook
+  // als je ze allemaal gelezen hebt — zo zie je altijd dát er iets staat. Wel
+  // in twee toestanden: blauw met een teller zolang er nog iets te lezen is,
+  // daarna gedempt grijs zodat hij geen aandacht meer trekt.
+  const opmDagen       = opmerkingenInWeek(wkMa);
   const ongelezenDagen = ongelezenOpmerkingenInWeek(wkMa);
   let opmBannerHtml = '';
-  if (ongelezenDagen.length > 0) {
-    const n = ongelezenDagen.length;
-    opmBannerHtml = `<div class="validatie-banner validatie-banner-opm" onclick="window.toonOngelezenOpmerkingen('${wkMa}')">
-      <div class="validatie-icon validatie-icon-opm">!</div>
-      <div><b>${n} ongelezen opmerking${n === 1 ? '' : 'en'}</b> deze week — tik voor details</div>
-    </div>`;
+  if (opmDagen.length > 0) {
+    const totaal    = opmDagen.length;
+    const ongelezen = ongelezenDagen.length;
+    opmBannerHtml = ongelezen > 0
+      ? `<div class="validatie-banner validatie-banner-opm" onclick="window.toonWeekOpmerkingen('${wkMa}')">
+          <div class="validatie-icon validatie-icon-opm">!</div>
+          <div><b>${ongelezen} van ${totaal} opmerking${totaal === 1 ? '' : 'en'}</b> niet gelezen — tik voor details</div>
+        </div>`
+      : `<div class="validatie-banner validatie-banner-opm-ok" onclick="window.toonWeekOpmerkingen('${wkMa}')">
+          <div class="validatie-icon validatie-icon-opm-ok">✓</div>
+          <div><b>${totaal} opmerking${totaal === 1 ? '' : 'en'}</b> deze week — alle gelezen</div>
+        </div>`;
   }
 
   let html = `
@@ -334,43 +346,54 @@ function isOngelezenOpm(datum) {
 // Bevestigen is altijd een expliciete handeling: openen en wegklikken telt
 // bewust niet als gelezen.
 //
-// terugNaarWeek wordt meegegeven vanuit de lijst: staan er in die week nog
-// meer ongelezen opmerkingen, dan blijft de lijst open zodat je ze achter
-// elkaar kunt afwerken in plaats van hem telkens opnieuw te moeten openen.
+// terugNaarWeek wordt meegegeven vanuit de lijst: die blijft dan open, zodat
+// je meerdere opmerkingen achter elkaar kunt afwerken én ziet dat de regel
+// omslaat naar "Gelezen". Vanuit een los dagpaneel (geen weekId) sluit het
+// paneel gewoon.
 window.bevestigOpmerkingGelezen = async function(datum, terugNaarWeek) {
   await markeerOpmerkingGelezen(datum);
   if (typeof window.__rooster_render === 'function') window.__rooster_render();
-  if (terugNaarWeek && ongelezenOpmerkingenInWeek(terugNaarWeek).length > 0) {
-    window.toonOngelezenOpmerkingen(terugNaarWeek);
+  if (terugNaarWeek && opmerkingenInWeek(terugNaarWeek).length > 0) {
+    window.toonWeekOpmerkingen(terugNaarWeek);
   } else {
     closeSheet();
   }
 };
 
-// Overzicht van alle ongelezen dag-opmerkingen in de zichtbare week. De tekst
-// staat er voluit in, zodat bevestigen in deze lijst betekent dat je hem ook
-// werkelijk gelezen hebt. Bewust géén "alles bevestigen"-knop.
-window.toonOngelezenOpmerkingen = function(weekId) {
-  const dagen = ongelezenOpmerkingenInWeek(weekId);
+// Overzicht van ALLE dag-opmerkingen in de zichtbare week (v3.32.1), niet
+// alleen de ongelezen: zo kun je ook iets teruglezen dat je eerder al hebt
+// bevestigd. De tekst staat voluit in de lijst, zodat bevestigen hier betekent
+// dat je hem ook werkelijk gelezen hebt. Bewust géén "alles bevestigen"-knop.
+window.toonWeekOpmerkingen = function(weekId) {
+  const dagen     = opmerkingenInWeek(weekId);
+  const ongelezen = ongelezenOpmerkingenInWeek(weekId).length;
   document.getElementById('sheetTitle').textContent = `Week ${isoWeekVan(weekId)} — opmerkingen`;
-  document.getElementById('sheetSub').textContent =
-    `${dagen.length} ongelezen opmerking${dagen.length === 1 ? '' : 'en'}`;
+  document.getElementById('sheetSub').textContent = ongelezen > 0
+    ? `${ongelezen} van ${dagen.length} niet gelezen`
+    : `${dagen.length} opmerking${dagen.length === 1 ? '' : 'en'} — alle gelezen`;
 
   let body = '';
   if (dagen.length === 0) {
-    body = `<div class="muted" style="font-style: italic;">Alles gelezen.</div>`;
+    body = `<div class="muted" style="font-style: italic;">Geen opmerkingen deze week.</div>`;
   } else {
-    body = dagen.map(d => `
+    body = dagen.map(d => {
+      const status = opmerkingStatus(d);
+      const isNieuw     = status === 'nieuw';
+      const isGewijzigd = status === 'gewijzigd';
+      const merk = isGewijzigd ? ' · aangepast' : (isNieuw ? ' · nieuw' : '');
+      const was  = isGewijzigd ? eerderGelezenTekst(d) : null;
+      return `
       <div class="summary">
-        <div class="summary-label">${formatDatum(d, 'lang')}${opmerkingStatus(d) === 'gewijzigd' ? ' · aangepast' : ' · nieuw'}</div>
+        <div class="summary-label">${formatDatum(d, 'lang')}${merk}</div>
         <div class="summary-text" style="white-space: pre-wrap;">${esc(dagOpmerkingTekst(d))}</div>
-        ${opmerkingStatus(d) === 'gewijzigd' && eerderGelezenTekst(d)
-          ? `<div class="opm-wijz-label" style="margin-top: 6px;">Was</div>
-             <div class="opm-wijz-tekst opm-wijz-was">${esc(eerderGelezenTekst(d))}</div>`
-          : ''}
-        <button class="btn btn-primary" style="width: 100%; margin-top: 8px;"
-                onclick="window.bevestigOpmerkingGelezen('${d}', '${weekId}')">Gelezen ✓</button>
-      </div>`).join('');
+        ${was ? `<div class="opm-wijz-label" style="margin-top: 6px;">Was</div>
+             <div class="opm-wijz-tekst opm-wijz-was">${esc(was)}</div>` : ''}
+        ${(isNieuw || isGewijzigd)
+          ? `<button class="btn btn-primary" style="width: 100%; margin-top: 8px;"
+                     onclick="window.bevestigOpmerkingGelezen('${d}', '${weekId}')">Gelezen ✓</button>`
+          : `<div class="opm-gelezen-label">✓ Gelezen</div>`}
+      </div>`;
+    }).join('');
   }
   body += `<button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>`;
   document.getElementById('sheetBody').innerHTML = body;

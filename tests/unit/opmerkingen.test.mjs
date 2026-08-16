@@ -6,7 +6,7 @@ import { state } from '../../app/state.js';
 import {
   bepaalOpmerkingStatus, opmerkingStatus, opmerkingIsOngelezen,
   dagOpmerkingTekst, eerderGelezenTekst, ongelezenOpmerkingenInWeek,
-  ongelezenOpmerkingenTotaal, snoeiGelezen,
+  opmerkingenInWeek, ongelezenOpmerkingenTotaal, snoeiGelezen,
 } from '../../app/helpers.js';
 
 const VANDAAG = '2026-08-17'; // maandag
@@ -120,6 +120,55 @@ test('ongelezenOpmerkingenInWeek slaat gelezen en lege dagen over', () => {
   };
   state.opmerkingGelezen = { '2026-08-18': 'b' };
   assert.deepEqual(ongelezenOpmerkingenInWeek('2026-08-17', VANDAAG), ['2026-08-17']);
+});
+
+// ---- opmerkingenInWeek: totaal voor de balk "2 van 4" (v3.32.1) ------------
+
+test('opmerkingenInWeek telt gelezen én ongelezen opmerkingen', () => {
+  state.indelingMap = {
+    '2026-08-17': { opmerking: 'a' },
+    '2026-08-18': { opmerking: 'b' },
+    '2026-08-19': { opmerking: 'c' },
+    '2026-08-20': { opmerking: 'd' },
+  };
+  state.opmerkingGelezen = { '2026-08-18': 'b', '2026-08-20': 'd' };
+  assert.equal(opmerkingenInWeek('2026-08-17').length, 4, 'totaal blijft 4');
+  assert.equal(ongelezenOpmerkingenInWeek('2026-08-17', VANDAAG).length, 2, '2 van 4 ongelezen');
+});
+
+test('opmerkingenInWeek slaat lege en ontbrekende opmerkingen over', () => {
+  state.indelingMap = {
+    '2026-08-17': { opmerking: 'a' },
+    '2026-08-18': { opmerking: '   ' },
+    '2026-08-19': { opmerking: null },
+    '2026-08-20': {},
+  };
+  assert.deepEqual(opmerkingenInWeek('2026-08-17'), ['2026-08-17']);
+});
+
+test('opmerkingenInWeek blijft binnen de zeven dagen van de week', () => {
+  state.indelingMap = {
+    '2026-08-16': { opmerking: 'vorige week' },
+    '2026-08-17': { opmerking: 'in de week' },
+    '2026-08-24': { opmerking: 'volgende week' },
+  };
+  assert.deepEqual(opmerkingenInWeek('2026-08-17'), ['2026-08-17']);
+});
+
+test('een opmerking in het verleden telt mee in het totaal maar nooit als ongelezen', () => {
+  // Kijk je op vrijdag naar deze week, dan hoort maandag bij "deze week".
+  state.indelingMap = {
+    '2026-08-17': { opmerking: 'maandag' },  // vóór de peildatum hieronder
+    '2026-08-21': { opmerking: 'vrijdag' },
+  };
+  const peildatum = '2026-08-20';
+  assert.equal(opmerkingenInWeek('2026-08-17').length, 2);
+  assert.deepEqual(ongelezenOpmerkingenInWeek('2026-08-17', peildatum), ['2026-08-21']);
+});
+
+test('zonder opmerkingen in de week is het totaal nul (balk blijft dan weg)', () => {
+  state.indelingMap = { '2026-08-17': { opmerking: '' }, '2026-08-18': {} };
+  assert.deepEqual(opmerkingenInWeek('2026-08-17'), []);
 });
 
 test('ongelezenOpmerkingenTotaal negeert het verleden en sorteert oplopend', () => {

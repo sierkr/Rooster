@@ -205,10 +205,15 @@
   }
 
   /* v3.32.0 — balk voor ongelezen dag-opmerkingen. Bewust blauw: dit is geen
-     roosterconflict en mag niet met de rode/oranje validatiebalken botsen. */
+     roosterconflict en mag niet met de rode/oranje validatiebalken botsen.
+     v3.32.1 — de balk blijft staan zodra er opmerkingen zijn; is alles
+     gelezen, dan valt hij terug op de gedempte -ok-variant. */
   .validatie-banner-opm { background: #e7f0fa; color: #123253; }
   .validatie-icon-opm { background: #378add; }
+  .validatie-banner-opm-ok { background: #f1efe8; color: #444441; }
+  .validatie-icon-opm-ok { background: #b4b2a9; color: #2c2c2a; }
   .tab-badge-opm { background: #378add !important; }
+  .opm-gelezen-label { font-size: 11px; color: #5f5e5a; margin-top: 8px; }
 
   /* v3.32.0 — "Was / Nu"-blok bij een gewijzigde dag-opmerking */
   .opm-wijz-blok { background: #e7f0fa; border-left: 3px solid #378add; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; }
@@ -350,6 +355,10 @@
     .opm-wijz-blok { background: rgba(55,138,221,0.15); }
     .opm-wijz-kop { color: #cfe0ff; }
     .opm-wijz-label { color: #999; }
+    /* v3.32.1 — gedempte variant als alles gelezen is */
+    .validatie-banner-opm-ok { background: rgba(255,255,255,0.06); color: #999; }
+    .validatie-icon-opm-ok { background: #5f5e5a; color: #e5e5e5; }
+    .opm-gelezen-label { color: #999; }
   }
 
   /* Feestdag: 🎉 emoji als subtiele achtergrond op de dagcel */

@@ -1,4 +1,9 @@
-# Deploy-stappenplan — v3.32.0 (ongelezen dag-opmerkingen)
+# Deploy-stappenplan — v3.32.0 / v3.32.1 (ongelezen dag-opmerkingen)
+
+> **Kom je van v3.32.0 en ga je naar v3.32.1?** Dan is stap 1 al gedaan en
+> hoef je alleen stap 2 (app uploaden) te doen. De rules zijn in v3.32.1
+> niet gewijzigd. Sla je v3.32.0 over en ga je van v3.31.1 rechtstreeks naar
+> v3.32.1, dan gelden beide stappen gewoon.
 
 Twee stappen: de app uploaden én de rules publiceren. De rules-stap is
 **verplicht** — zonder die stap kan de app de leesstatus niet opslaan en blijft
@@ -67,13 +72,13 @@ Gewijzigde bestanden in deze release:
 In de testomgeving, ingelogd als beheerder:
 
 1. Ga naar **Overzicht** en zet een opmerking op een dag in de huidige week.
-   Sla op. → Er verschijnt **geen** waarschuwing: wat je zelf schrijft is
-   meteen gelezen.
-2. Log in als een andere gebruiker (of gebruik een tweede browser). → Onder de
-   indelingswaarschuwing staat een blauwe balk, en het driehoekje bij die dag
-   is groter en knippert.
-3. Tik de dag aan, lees de opmerking, tik **Gelezen ✓**. → Balk weg,
-   driehoekje weer klein en stil.
+   Sla op. → De balk toont een **grijze** regel "1 opmerking deze week — alle
+   gelezen": wat je zelf schrijft is meteen gelezen.
+2. Log in als een andere gebruiker (of gebruik een tweede browser). → De balk
+   is daar **blauw** ("1 van 1 opmerkingen niet gelezen") en het driehoekje bij
+   die dag is groter en knippert.
+3. Tik de dag aan, lees de opmerking, tik **Gelezen ✓**. → Balk wordt grijs
+   (hij verdwijnt niet), driehoekje weer klein en stil.
 4. Wijzig als beheerder de tekst van diezelfde opmerking. → Bij de andere
    gebruiker komt de waarschuwing terug, en het paneel toont "Was" (doorgehaald)
    en "Nu".

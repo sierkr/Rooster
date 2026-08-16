@@ -1,3 +1,29 @@
+Rooster v3.32.1 — Release notes
+==================================
+
+OPMERKINGENBALK BLIJFT STAAN MET EEN TELLER
+----------------------------------------------------------------------------
+Deployen = alleen app-bestanden uploaden. GEEN rules-stap: de rules van
+v3.32.0 blijven ongewijzigd.
+
+- De balk verdween zodra je alles gelezen had. Daardoor zag je niet meer dát
+  er die week opmerkingen stonden. Hij blijft nu staan zolang er opmerkingen
+  zijn: blauw met "2 van 4 opmerkingen niet gelezen" zolang er iets te lezen
+  is, daarna gedempt grijs met "4 opmerkingen deze week - alle gelezen".
+
+- De lijst achter de balk toont voortaan alle opmerkingen van die week, ook
+  de al bevestigde. Die krijgen het label "Gelezen"; de rest houdt de knop en
+  het Was/Nu-blok. Na bevestigen blijft de lijst open, zodat je meerdere
+  opmerkingen achter elkaar kunt afwerken.
+
+- Opmerkingen op dagen die al voorbij zijn tellen mee in het totaal, maar
+  gelden nooit als ongelezen. Kijk je op vrijdag naar deze week, dan zit
+  maandag wel in de "4" en niet in de "2".
+
+- Aan de knipperende driehoek in het raster verandert niets.
+
+----------------------------------------------------------------------------
+
 Rooster v3.32.0 — Release notes
 ==================================
 

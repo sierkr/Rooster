@@ -1,3 +1,42 @@
+## v3.32.1 — Opmerkingenbalk blijft staan met een teller
+
+De balk verdween zodra alles gelezen was, waardoor je niet meer kon zien dát er
+die week opmerkingen stonden. Hij blijft nu staan zolang er opmerkingen zijn,
+in twee toestanden:
+
+- **Nog iets te lezen** → blauw, met een teller: "2 van 4 opmerkingen niet
+  gelezen — tik voor details".
+- **Alles bevestigd** → gedempt grijs met een vinkje: "4 opmerkingen deze week
+  — alle gelezen". Blijft klikbaar, maar trekt geen aandacht meer.
+
+De lijst achter de balk toont voortaan **alle** opmerkingen van die week, niet
+alleen de ongelezen. Zo kun je ook iets teruglezen dat je eerder al bevestigd
+hebt. Gelezen regels krijgen het label "✓ Gelezen"; ongelezen regels houden de
+knop en, bij een aanpassing, het "Was / Nu"-blok. Na een bevestiging blijft de
+lijst open, zodat je ziet dat de regel omslaat en meerdere opmerkingen achter
+elkaar kunt afwerken.
+
+Opmerkingen op dagen die al voorbij zijn tellen mee in het totaal — ze horen
+immers bij die week — maar kunnen nooit als ongelezen gelden. Kijk je op vrijdag
+naar de lopende week, dan zit maandag dus wel in de "4" en niet in de "2".
+
+Aan de dagmarkering in het raster verandert niets: pulserend zolang ongelezen,
+daarna klein en stil.
+
+### Technisch
+- Nieuwe helper `opmerkingenInWeek()` naast de bestaande ongelezen-telling.
+- `toonOngelezenOpmerkingen()` heet nu `toonWeekOpmerkingen()`, omdat de lijst
+  niet langer op ongelezen filtert.
+- Twee CSS-varianten erbij (`.validatie-banner-opm-ok`, `.opm-gelezen-label`),
+  inclusief donkere modus.
+- 5 nieuwe unit-tests; totaal nu 89.
+
+### Deploy
+Alleen een app-upload. **Geen** rules-publicatie nodig — de rules van v3.32.0
+blijven ongewijzigd.
+
+---
+
 ## v3.32.0 — Ongelezen dag-opmerkingen worden niet meer gemist
 
 Dag-opmerkingen in het Overzicht (tik op een dag) werden regelmatig over het

@@ -660,6 +660,13 @@ export function eerderGelezenTekst(datum) {
   return Object.prototype.hasOwnProperty.call(map, datum) ? map[datum] : null;
 }
 
+// Alle datums binnen één week waarop een dag-opmerking staat, gelezen of niet.
+// v3.32.1: de balk blijft staan zolang er opmerkingen zijn, dus is naast het
+// aantal ongelezen ook het totaal nodig ("2 van 4 niet gelezen").
+export function opmerkingenInWeek(maandagIso) {
+  return datumsVanWeek(maandagIso).filter(d => dagOpmerkingTekst(d) !== '');
+}
+
 // Ongelezen datums binnen één week (de balk in het Overzicht).
 export function ongelezenOpmerkingenInWeek(maandagIso, vandaag = vandaagIso()) {
   return datumsVanWeek(maandagIso).filter(d => opmerkingIsOngelezen(d, vandaag));
