@@ -79,6 +79,7 @@ export async function renderGebView() {
 
   let htmlBezetting = '';
   let htmlOverig = '';
+  let htmlExcel  = '';
 
   // ---- App gebruikers: accounts gesplitst per soort medewerker -------------
   // Categorie bepaalt de onder-tab; alleen radiologen kunnen aan een stoel
@@ -268,10 +269,36 @@ export async function renderGebView() {
 
   htmlBezetting += renderRecenteMutaties();
 
+  // ---- Excel-tab (v3.32.2) ---------------------------------------------
+  // Export en import stonden voorheen weggestopt onder Control > Overige
+  // instellingen. Ze hebben nu een eigen tab. Export staat boven import:
+  // export is de dagelijkse handeling, import vervangt bestaande dagen en
+  // hoort daarom niet als eerste onder de duim.
+  // Excel-export sectie
+  htmlExcel += `
+    <div style="margin-top: 1rem;">
+      <div class="summary-label" style="margin-bottom: 6px;">Excel-export</div>
+      <div class="card">
+        <p class="muted" style="margin: 0 0 10px;">Exporteer de Firestore-indeling van een jaar naar een <code>.xlsx</code> in hetzelfde formaat als de import.</p>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <select class="select" id="expJaar" style="width: auto; padding: 6px 8px; font-size: 13px;">
+            ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${j===new Date().getFullYear()?'selected':''}>${j}</option>`).join('')}
+          </select>
+          <input type="text" id="expBestandsnaam" class="input" placeholder="Bestandsnaam (optioneel)"
+            style="width: 220px; padding: 6px 8px; font-size: 13px;"
+            value="${(localStorage.getItem('rooster_export_naam') || '')}"
+            oninput="localStorage.setItem('rooster_export_naam', this.value.trim())" />
+          <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value, document.getElementById('expBestandsnaam').value.trim())">⬇ Exporteer</button>
+        </div>
+        <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Laat leeg voor de standaardnaam (<code>Indeling_[jaar].xlsx</code>).</p>
+      </div>
+    </div>
+  `;
+
   // Excel-import sectie
   const p = state.importPreview;
   const bezig = state.importBezig;
-  htmlOverig += `
+  htmlExcel += `
     <div style="margin-top: 1.5rem;">
       <div class="summary-label" style="margin-bottom: 6px;">Excel-import</div>
       <div class="card">
@@ -350,27 +377,6 @@ export async function renderGebView() {
             <button class="btn btn-primary" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportSchrijven()">${bezig ? 'Schrijven…' : 'Importeer (vervangt Firestore)'}</button>
           </div>
         `}
-      </div>
-    </div>
-  `;
-
-  // Excel-export sectie
-  htmlOverig += `
-    <div style="margin-top: 1rem;">
-      <div class="summary-label" style="margin-bottom: 6px;">Excel-export</div>
-      <div class="card">
-        <p class="muted" style="margin: 0 0 10px;">Exporteer de Firestore-indeling van een jaar naar een <code>.xlsx</code> in hetzelfde formaat als de import.</p>
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <select class="select" id="expJaar" style="width: auto; padding: 6px 8px; font-size: 13px;">
-            ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${j===new Date().getFullYear()?'selected':''}>${j}</option>`).join('')}
-          </select>
-          <input type="text" id="expBestandsnaam" class="input" placeholder="Bestandsnaam (optioneel)"
-            style="width: 220px; padding: 6px 8px; font-size: 13px;"
-            value="${(localStorage.getItem('rooster_export_naam') || '')}"
-            oninput="localStorage.setItem('rooster_export_naam', this.value.trim())" />
-          <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value, document.getElementById('expBestandsnaam').value.trim())">⬇ Exporteer</button>
-        </div>
-        <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Laat leeg voor de standaardnaam (<code>Indeling_[jaar].xlsx</code>).</p>
       </div>
     </div>
   `;
@@ -492,10 +498,13 @@ export async function renderGebView() {
     `;
   }
 
-  // ---- Assemblage: Beheer met drie sub-tabs --------------------------------
+  // ---- Assemblage: Beheer met vier sub-tabs ---------------------------------
+  // v3.32.2: Excel is een eigen tab geworden, tussen App gebruikers en Control.
+  // Zichtbaar voor dezelfde groep die de secties voorheen onder Overige
+  // instellingen zag (mag_gebruikers), zodat er niets aan rechten verandert.
   const v = window.APP_VERSIE || '?';
-  const showBez = canGeb, showGeb = canGeb, showCtl = canReg;
-  const beschikbareTabs = [showBez && 'bezetting', showGeb && 'gebruikers', showCtl && 'control'].filter(Boolean);
+  const showBez = canGeb, showGeb = canGeb, showExc = canGeb, showCtl = canReg;
+  const beschikbareTabs = [showBez && 'bezetting', showGeb && 'gebruikers', showExc && 'excel', showCtl && 'control'].filter(Boolean);
   const eersteTab = (_behTab1 && beschikbareTabs.includes(_behTab1)) ? _behTab1 : beschikbareTabs[0];
   const disp = (id) => id === eersteTab ? 'block' : 'none';
   const tab1 = (id, label) => `<button class="beh-tab1 ${id===eersteTab?'active':''}" data-t="${id}" onclick="window.gebTab1('${id}')">${label}</button>`;
@@ -504,6 +513,7 @@ export async function renderGebView() {
   let tabs1 = '';
   if (showBez) tabs1 += tab1('bezetting', 'Stoel bezetting');
   if (showGeb) tabs1 += tab1('gebruikers', 'App gebruikers');
+  if (showExc) tabs1 += tab1('excel', 'Excel');
   if (showCtl) tabs1 += tab1('control', 'Control');
 
   // App gebruikers-paneel met onder-tabs Radiologen / Technici / Secretariaat
@@ -552,7 +562,7 @@ export async function renderGebView() {
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <p style="font-size:17px; font-weight:500; margin:0;">Beheer</p>
-          <p class="muted" style="margin:2px 0 0;">Stoel bezetting, app gebruikers en instellingen</p>
+          <p class="muted" style="margin:2px 0 0;">Stoel bezetting, app gebruikers, Excel en instellingen</p>
         </div>
         <span class="muted" style="font-size:11px;">v${v}</span>
       </div>
@@ -560,6 +570,7 @@ export async function renderGebView() {
     <div class="beh-tabs1">${tabs1}</div>
     ${showBez ? `<div id="behpanel-bezetting" class="behpanel" style="display:${disp('bezetting')};">${htmlBezetting}</div>` : ''}
     ${showGeb ? `<div id="behpanel-gebruikers" class="behpanel" style="display:${disp('gebruikers')};">${gebPanel}</div>` : ''}
+    ${showExc ? `<div id="behpanel-excel" class="behpanel" style="display:${disp('excel')};">${htmlExcel}</div>` : ''}
     ${showCtl ? `<div id="behpanel-control" class="behpanel" style="display:${disp('control')};">${controlPanel}</div>` : ''}
   `;
 
@@ -576,11 +587,12 @@ export async function renderGebView() {
 }
 
 // Sub-tab-navigatie binnen Beheer (niveau 1: Stoel bezetting / App gebruikers /
-// Control). Panelen blijven in de DOM en worden alleen getoond/verborgen, zodat
-// ingevulde formuliervelden en knop-statussen behouden blijven.
+// Excel / Control). Panelen blijven in de DOM en worden alleen getoond of
+// verborgen, zodat ingevulde formuliervelden en knop-statussen behouden
+// blijven — o.a. het gekozen importbestand en de preview.
 window.gebTab1 = function(id) {
   _behTab1 = id;
-  ['bezetting','gebruikers','control'].forEach(k => {
+  ['bezetting','gebruikers','excel','control'].forEach(k => {
     const el = document.getElementById('behpanel-' + k);
     if (el) el.style.display = (k === id) ? 'block' : 'none';
   });

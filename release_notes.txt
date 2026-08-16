@@ -1,3 +1,28 @@
+Rooster v3.32.2 — Release notes
+==================================
+
+EXCEL KRIJGT EEN EIGEN TAB IN BEHEER
+----------------------------------------------------------------------------
+Deployen = alleen app-bestanden uploaden. Geen rules- of functions-stap.
+
+- Excel-export en -import zaten achter Control > Overige instellingen, onder
+  de backup- en opruimfuncties. Ze staan nu op een eigen tab. De rij in
+  Beheer is: Stoel bezetting - App gebruikers - Excel - Control.
+
+- Onder Excel staat export bovenaan en import eronder. Import vervangt
+  bestaande dagen in Firestore, dus die staat bewust niet als eerste.
+
+- Aan de blokken zelf verandert niets: dezelfde jaarfilter, dezelfde
+  bestandsnaam die bewaard blijft, dezelfde preview met waarschuwingen.
+
+- Database-backup blijft onder Control staan, samen met App-instellingen en
+  Gegevensbeheer. De automatische backup vóór elke import gebeurt gewoon.
+
+- Wie de Excel-secties voorheen kon zien, ziet nu de Excel-tab. Er verandert
+  niets aan de rechten.
+
+----------------------------------------------------------------------------
+
 Rooster v3.32.1 — Release notes
 ==================================
 

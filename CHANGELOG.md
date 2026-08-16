@@ -1,3 +1,39 @@
+## v3.32.2 — Excel krijgt een eigen tab in Beheer
+
+Excel-export en -import zaten weggestopt achter **Control → Overige
+instellingen**, onder de backup- en opruimfuncties. Voor iets dat wekelijks
+gebruikt wordt was dat te diep weggeklikt. Ze staan nu op een eigen tab.
+
+- De tabrij in Beheer is: **Stoel bezetting · App gebruikers · Excel · Control**.
+  Excel staat vóór Control, zodat het dagelijkse werk links staat en de
+  instellingen rechts.
+- Onder Excel staat **export bovenaan en import eronder**. Export is de
+  routinehandeling; import vervangt bestaande dagen in Firestore en hoort
+  daarom niet als eerste onder de duim.
+- Aan de blokken zelf verandert niets: dezelfde jaarfilter, dezelfde
+  bestandsnaam die in de browser bewaard blijft, dezelfde importpreview met
+  waarschuwingen en de melding bij wijzigingen binnen 30 dagen.
+- **Database-backup blijft onder Control** staan, samen met App-instellingen en
+  Gegevensbeheer. Een backup is geen Excel-handeling — de automatische backup
+  vóór elke import gebeurt sowieso vanzelf.
+- Rechten zijn ongewijzigd: de Excel-tab is zichtbaar voor precies dezelfde
+  groep die deze secties voorheen zag (`mag_gebruikers`). Wie alleen regels mag
+  beheren ziet Control zonder Excel, net als voorheen.
+
+### Technisch
+- De twee secties zijn afgesplitst naar een eigen `htmlExcel`-variabele; de
+  paneelinhoud is letterlijk verplaatst, niet herschreven. Geen wijziging aan
+  `import.js` of `export.js`.
+- `gebTab1()` en de terugkeerlogica na opnieuw tekenen kennen nu vier panelen,
+  zodat je na het kiezen van een importbestand op de Excel-tab blijft staan.
+- Geen nieuwe rekenlogica, dus geen nieuwe unit-tests; de bestaande 89 blijven
+  groen.
+
+### Deploy
+Alleen een app-upload. Geen rules- of functions-stap.
+
+---
+
 ## v3.32.1 — Opmerkingenbalk blijft staan met een teller
 
 De balk verdween zodra alles gelezen was, waardoor je niet meer kon zien dát er
