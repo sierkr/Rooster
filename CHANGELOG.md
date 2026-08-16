@@ -1,3 +1,68 @@
+## v3.32.0 — Ongelezen dag-opmerkingen worden niet meer gemist
+
+Dag-opmerkingen in het Overzicht (tik op een dag) werden regelmatig over het
+hoofd gezien: het enige signaal was een klein rood driehoekje dat er ook stond
+als je de opmerking al lang gelezen had. Deze release maakt onderscheid tussen
+gelezen en ongelezen, en houdt dat per gebruiker bij.
+
+### Wat de gebruiker ziet
+- **Waarschuwingsbalk** onder de indelingswaarschuwing met het aantal ongelezen
+  opmerkingen in de zichtbare week. Bewust blauw, zodat hij niet te verwarren
+  is met een rood/oranje roosterconflict. Tikken opent een lijst waarin de
+  volledige tekst staat en je per dag kunt bevestigen.
+- **Pulserende dagmarkering**: het driehoekje bij een ongelezen opmerking is
+  groter en knippert rustig. Zodra je bevestigt valt het terug op de gewone,
+  stilstaande weergave van vóór deze release. Wie systeembreed bewegende
+  interface-elementen heeft uitgezet (`prefers-reduced-motion`), krijgt alleen
+  de vergroting zonder animatie.
+- **Bevestigen is expliciet.** Alleen de knop "Gelezen ✓" markeert een
+  opmerking als gelezen; openen en wegklikken telt niet.
+- **Wordt de opmerking daarna aangepast, dan is hij opnieuw ongelezen.** Het
+  paneel toont dan "Was" en "Nu" onder elkaar, met de oude tekst doorgehaald.
+  Alleen melden dát er iets veranderd is bleek te weinig: bij een subtiele
+  aanpassing (bv. twee namen die van plaats wisselen) zoek je het verschil
+  anders zelf.
+- **Optionele teller op de Overzicht-tab** voor ongelezen opmerkingen buiten de
+  zichtbare week. Staat standaard **uit**; iedere gebruiker zet hem zelf aan
+  via het profielpaneel (tik op je initialen rechtsboven). Uit betekent: je
+  ziet er nooit meer dan zeven tegelijk, namelijk die van de week die je
+  bekijkt.
+- Wat je zelf opslaat is meteen gelezen; je waarschuwt jezelf dus nooit.
+- Dagen in het verleden waarschuwen niet.
+- In de lijst blijf je na een bevestiging staan zolang er in die week nog
+  ongelezen opmerkingen over zijn, zodat je ze achter elkaar kunt afwerken.
+
+### Meegenomen correctie
+Een tik op de dag-aanduiding deed niets voor gebruikers die het rooster wél
+mogen wijzigen maar geen dag-opmerkingen mogen schrijven (rol anders dan
+beheerder, met `mag_beheer`-permissie). Zij krijgen nu het lees-paneel. Met een
+knipperende markering ernaast was stilzwijgend niets doen geen houdbare
+uitkomst.
+
+### Technisch
+- Nieuwe collectie **`opmerking_gelezen/{uid}`**: één document per gebruiker met
+  een map `datum -> de gelezen tekst`, plus de voorkeur `melden_buiten_week`.
+  Er wordt de tekst zelf opgeslagen en niet alleen een vlag — dat is wat de
+  "Was / Nu"-vergelijking mogelijk maakt en wat een wijziging automatisch weer
+  ongelezen maakt, zonder extra veld op het `indeling`-document.
+- De `indeling`-documenten zijn dus **niet** gewijzigd; de schema-bewaking uit
+  v3.28.0 (K2) blijft ongemoeid.
+- Rules: `opmerking_gelezen/{uid}` is uitsluitend leesbaar en beschrijfbaar door
+  de gebruiker zelf. Bewust géén beheerder-uitzondering: leesgedrag van
+  collega's hoort voor niemand inzichtelijk te zijn.
+- Het document wordt bij elke schrijfactie in zijn geheel weggeschreven en
+  daarbij worden datums vóór vandaag weggesnoeid, zodat het niet blijft groeien.
+- Bestaande opmerkingen starten als ongelezen. Er is bewust géén nulmeting:
+  niets wordt stilzwijgend als gelezen weggezet.
+- 21 nieuwe unit-tests (`tests/unit/opmerkingen.test.mjs`) en 6 nieuwe
+  rules-tests. Totaal nu 84 unit-tests en 28 rules-tests.
+
+### Deploy
+App-upload **plus** een rules-publicatie op **beide** databases — zie
+`DEPLOY-OPMERKINGEN.md`. Geen functions-deploy.
+
+---
+
 ## v3.31.1 — CI-correcties na eerste run + rules-job blokkerend
 
 De drie correcties die tijdens de eerste CI-runs in de test-repo zijn

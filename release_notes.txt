@@ -1,3 +1,58 @@
+Rooster v3.32.0 — Release notes
+==================================
+
+ONGELEZEN DAG-OPMERKINGEN VALLEN NU OP
+----------------------------------------------------------------------------
+Deployen: app-upload PLUS een rules-publicatie op BEIDE databases
+((default) en test). Geen functions-deploy. Volg DEPLOY-OPMERKINGEN.md.
+
+- Onder de indelingswaarschuwing verschijnt een blauwe balk met het aantal
+  ongelezen dag-opmerkingen in de week die je bekijkt. Tikken opent een lijst
+  met de volledige tekst; daar bevestig je ze per dag.
+
+- Het driehoekje bij een dag met een ongelezen opmerking is groter en
+  knippert rustig. Na bevestigen met "Gelezen ✓" is de weergave weer precies
+  zoals je gewend was. Alleen die knop telt: openen en wegklikken niet.
+
+- Wordt een opmerking later aangepast, dan komt de waarschuwing terug en
+  toont het paneel "Was" en "Nu" onder elkaar, met de oude tekst doorgehaald.
+  Zo zie je meteen wat er veranderd is in plaats van alleen dat er iets
+  veranderd is.
+
+- Standaard kijkt de melding alleen naar de zichtbare week, dus je ziet er
+  nooit meer dan zeven tegelijk. Wil je ook weten of er verderop in het jaar
+  iets ongelezen staat, zet dan in je profiel (tik op je initialen
+  rechtsboven) het schuifje "Ongelezen dag-opmerkingen buiten deze week
+  melden" aan. Dan komt er een teller op de Overzicht-tab.
+
+- De leesstatus is persoonlijk en volgt je over al je apparaten. Wat je zelf
+  opslaat geldt direct als gelezen. Dagen in het verleden waarschuwen niet.
+
+- LET OP bij de eerste keer: alle bestaande dag-opmerkingen vanaf vandaag
+  beginnen als ongelezen. Dat is bewust — er wordt niets stilzwijgend
+  weggezet. Je werkt ze week voor week weg, maximaal zeven per week.
+
+----------------------------------------------------------------------------
+
+Rooster v3.31.1 — Release notes
+==================================
+
+CI-CORRECTIES NA DE EERSTE RUN
+----------------------------------------------------------------------------
+Deployen = alleen app-bestanden uploaden. Geen rules- of functions-stap.
+Geen wijzigingen aan de app, de rules of de Cloud Functions.
+
+- De drie correcties die tijdens de eerste CI-runs in de test-repo handmatig
+  zijn aangebracht, zitten nu ook in de release, zodat repo en zip weer
+  gelijklopen: de firebase-SDK voor de rules-tests naar ^11, en de workflow
+  die firestore.rules vóór het testen naar de testmap kopieert.
+
+- De rules-job is blokkerend gemaakt: continue-on-error is verwijderd nadat
+  beide jobs (63 unit-tests, 22 rules-tests) op 19-07-2026 groen draaiden.
+  Een test-fout geeft voortaan een rood kruis onder "Actions".
+
+----------------------------------------------------------------------------
+
 Rooster v3.31.0 — Release notes
 ==================================
 

@@ -194,6 +194,29 @@
   .wijz-marker { position: absolute; top: 0; right: 0; width: 0; height: 0; border-style: solid; border-width: 0 8px 8px 0; border-color: transparent #ef9f27 transparent transparent; pointer-events: none; }
   .tab-badge-oranje { background: #ef9f27 !important; }
 
+  /* v3.32.0 — ongelezen dag-opmerking: grotere, pulserende driehoek.
+     Na bevestigen valt hij terug op de gewone .opm-marker hierboven. */
+  .opm-marker-nieuw { border-width: 11px 11px 0 0; animation: opm-pulse 1.2s ease-in-out infinite; }
+  @keyframes opm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  /* Wie bewegende interface-elementen heeft uitgezet, krijgt alleen de
+     vergroting — de markering blijft dus zichtbaar, maar staat stil. */
+  @media (prefers-reduced-motion: reduce) {
+    .opm-marker-nieuw { animation: none; }
+  }
+
+  /* v3.32.0 — balk voor ongelezen dag-opmerkingen. Bewust blauw: dit is geen
+     roosterconflict en mag niet met de rode/oranje validatiebalken botsen. */
+  .validatie-banner-opm { background: #e7f0fa; color: #123253; }
+  .validatie-icon-opm { background: #378add; }
+  .tab-badge-opm { background: #378add !important; }
+
+  /* v3.32.0 — "Was / Nu"-blok bij een gewijzigde dag-opmerking */
+  .opm-wijz-blok { background: #e7f0fa; border-left: 3px solid #378add; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; }
+  .opm-wijz-kop { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #123253; }
+  .opm-wijz-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: #5f5e5a; margin-top: 6px; }
+  .opm-wijz-tekst { font-size: 13px; white-space: pre-wrap; }
+  .opm-wijz-was { text-decoration: line-through; opacity: 0.65; }
+
   .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
   .status-open { background: #faeeda; color: #412402; }
   .status-verwerkt { background: #e1f5ee; color: #04342c; }
@@ -322,6 +345,11 @@
     .seg-btn.actief { background: #3a3a3a; color: #e5e5e5; }
     .act-cell.act-zone-laag { background: rgba(55, 138, 221, 0.22); }
     .act-cell.act-zone-hoog { background: rgba(239, 159, 39, 0.22); }
+    /* v3.32.0 — opmerkingen-balk en Was/Nu-blok in donkere modus */
+    .validatie-banner-opm { background: rgba(55,138,221,0.18); color: #cfe0ff; }
+    .opm-wijz-blok { background: rgba(55,138,221,0.15); }
+    .opm-wijz-kop { color: #cfe0ff; }
+    .opm-wijz-label { color: #999; }
   }
 
   /* Feestdag: 🎉 emoji als subtiele achtergrond op de dagcel */

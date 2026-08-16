@@ -205,3 +205,40 @@ test('gebruikers lezen: alleen eigen profiel of beheerder', async () => {
   await assertFails(getDoc(doc(radL, 'gebruikers/uid-admin')));
   await assertSucceeds(getDoc(doc(admin, 'gebruikers/uid-radl')));
 });
+
+// ---- opmerking_gelezen: privé leesstatus dag-opmerkingen (v3.32.0) ---------
+
+test('opmerking_gelezen: eigen document schrijven en teruglezen mag', async () => {
+  await assertSucceeds(setDoc(doc(radL, 'opmerking_gelezen/uid-radl'), {
+    uid: 'uid-radl',
+    gelezen: { '2026-07-14': 'Sjon valt in' },
+    melden_buiten_week: false,
+  }));
+  await assertSucceeds(getDoc(doc(radL, 'opmerking_gelezen/uid-radl')));
+});
+
+test('opmerking_gelezen: bijwerken van het eigen document mag', async () => {
+  await assertSucceeds(updateDoc(doc(radL, 'opmerking_gelezen/uid-radl'), {
+    melden_buiten_week: true,
+  }));
+});
+
+test('opmerking_gelezen: document van een ander beschrijven wordt geweigerd', async () => {
+  await assertFails(setDoc(doc(radL, 'opmerking_gelezen/uid-lezer'), {
+    uid: 'uid-lezer', gelezen: {}, melden_buiten_week: false,
+  }));
+});
+
+test('opmerking_gelezen: leesgedrag van een ander is niet in te zien', async () => {
+  await assertFails(getDoc(doc(lezer, 'opmerking_gelezen/uid-radl')));
+});
+
+test('opmerking_gelezen: ook een beheerder komt niet bij andermans leesstatus', async () => {
+  // Bewust geen beheerder-uitzondering in de rules: dit is privé leesgedrag.
+  await assertFails(getDoc(doc(admin, 'opmerking_gelezen/uid-radl')));
+  await assertFails(setDoc(doc(admin, 'opmerking_gelezen/uid-radl'), { gelezen: {} }));
+});
+
+test('opmerking_gelezen: eigen document verwijderen mag', async () => {
+  await assertSucceeds(deleteDoc(doc(radL, 'opmerking_gelezen/uid-radl')));
+});

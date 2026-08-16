@@ -15,7 +15,10 @@
 import { collection, doc, setDoc, updateDoc, writeBatch, deleteField, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
-import { isoWeekVan, magWijzigen, magAlleWensenZien, vandaagIso, plusDagen, wensMatcht } from './helpers.js';
+import {
+  isoWeekVan, magWijzigen, magAlleWensenZien, vandaagIso, plusDagen, wensMatcht,
+  dagOpmerkingTekst, snoeiGelezen,
+} from './helpers.js';
 import { checkCelConflict } from './validatie.js';
 
 // Basis-metadata voor een indeling-doc (idempotent, mag bij elke merge mee)
@@ -213,14 +216,68 @@ export async function slaCelOpmerkingOp(datum, radId, opmerking) {
 // maakt het doc aan als het nog niet bestaat (geen aparte not-found-fallback
 // meer nodig — dat pad schreef voorheen een compleet doc uit de cache).
 export async function slaOpmerkingOp(datum, opmerking) {
+  const tekst = (opmerking || '').trim();
   try {
     await setDoc(doc(db, 'indeling', datum), {
       ..._dagMeta(datum),
-      opmerking: opmerking || null,
+      opmerking: tekst || null,
     }, { merge: true });
   } catch (e) {
     alert('Opslaan mislukt: ' + e.message);
+    return;
   }
+  // v3.32.0: wat je zelf schrijft is per definitie gelezen. Zonder deze stap
+  // zou de auteur zijn eigen opmerking als "nieuw" terugkrijgen.
+  await markeerOpmerkingGelezen(datum, tekst);
+}
+
+// ==== Leesstatus dag-opmerkingen (v3.32.0) ===================================
+//
+// Eén document per gebruiker: opmerking_gelezen/{uid}. Het document is klein,
+// privé en volledig eigendom van die ene gebruiker, dus het wordt in zijn
+// geheel uit de in-memory state weggeschreven (géén merge). Dat is bewust:
+// alleen een volledige overschrijving kan datums vóór vandaag daadwerkelijk
+// wegsnoeien — een merge zou verlopen sleutels laten staan en het document
+// jaar na jaar laten groeien.
+//
+// De listener in main.js is tijdens het opstarten geregistreerd en levert zijn
+// eerste snapshot uit de lokale cache, dus state is al gevuld voordat de
+// gebruiker op een knop kan tikken.
+async function _schrijfLeesstatus() {
+  const uid = state.user?.uid;
+  if (!uid) return;
+  try {
+    await setDoc(doc(db, 'opmerking_gelezen', uid), {
+      uid,
+      gelezen: state.opmerkingGelezen || {},
+      melden_buiten_week: !!state.meldenBuitenWeek,
+    });
+  } catch (e) {
+    console.error('opmerking_gelezen schrijven mislukt', e);
+  }
+}
+
+// Markeer de dag-opmerking van één datum als gelezen. Slaat de TEKST op, niet
+// alleen een vlag: daarmee wordt een latere wijziging vanzelf weer ongelezen.
+// tekstOverride wordt gebruikt door slaOpmerkingOp, omdat state.indelingMap op
+// dat moment nog de oude tekst kan bevatten (de snapshot is nog onderweg).
+export async function markeerOpmerkingGelezen(datum, tekstOverride) {
+  const tekst = typeof tekstOverride === 'string'
+    ? tekstOverride.trim()
+    : dagOpmerkingTekst(datum);
+
+  const nieuw = snoeiGelezen({ ...(state.opmerkingGelezen || {}) });
+  if (tekst) nieuw[datum] = tekst;
+  else delete nieuw[datum]; // opmerking verwijderd → leesstatus overbodig
+
+  state.opmerkingGelezen = nieuw; // optimistisch: UI reageert direct, ook offline
+  await _schrijfLeesstatus();
+}
+
+// Persoonlijke voorkeur: ook melden buiten de zichtbare week (tab-badge).
+export async function zetMeldenBuitenWeek(aan) {
+  state.meldenBuitenWeek = !!aan;
+  await _schrijfLeesstatus();
 }
 
 // Dienst (dag) opslaan. Genest merge-object raakt alléén dienst.dag;

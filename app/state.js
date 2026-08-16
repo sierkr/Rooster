@@ -39,6 +39,12 @@ export const state = {
   importBezig: false,
   importJaar: '',         // '' = alle jaren in bestand, anders bv '2026'
   wijzigingen: [],        // ongelezen wijzigingen (gezien === false) voor eigen radId
+  // v3.32.0 — leesstatus dag-opmerkingen (collectie opmerking_gelezen/{uid}).
+  // opmerkingGelezen: datum (ISO) -> de tekst zoals DEZE gebruiker hem gelezen
+  // heeft. Wijkt de huidige dag-opmerking daarvan af, dan is hij ongelezen.
+  opmerkingGelezen: {},
+  opmerkingGelezenGeladen: false, // listener heeft minstens één keer gevuurd
+  meldenBuitenWeek: false,        // tab-badge over álle weken vanaf vandaag
 };
 
 // ==== Constants ==============================================================

@@ -9,10 +9,14 @@ import {
   isoWeekVan, datumsVanWeek, weekRange, formatDatum, fclass, functieNaam,
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
   magAlleWensenZien, isFeestdag, isHoofd, esc,
+  opmerkingStatus, ongelezenOpmerkingenInWeek, eerderGelezenTekst,
+  dagOpmerkingTekst,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
-import { slaToewijzingOp, slaCelOpmerkingOp, slaOpmerkingOp } from '../save.js';
+import {
+  slaToewijzingOp, slaCelOpmerkingOp, slaOpmerkingOp, markeerOpmerkingGelezen,
+} from '../save.js';
 
 export function renderBehView() {
   const container = document.getElementById('view-beh');
@@ -110,6 +114,20 @@ export function renderBehView() {
     </div>`;
   }
 
+  // v3.32.0: aparte balk voor ongelezen dag-opmerkingen, direct onder de
+  // indelingswaarschuwing. Bewust een eigen (blauwe) kleur: dit is géén
+  // roosterconflict, en de twee mogen niet met elkaar verward worden.
+  // Telt uitsluitend de zichtbare week, dus maximaal zeven.
+  const ongelezenDagen = ongelezenOpmerkingenInWeek(wkMa);
+  let opmBannerHtml = '';
+  if (ongelezenDagen.length > 0) {
+    const n = ongelezenDagen.length;
+    opmBannerHtml = `<div class="validatie-banner validatie-banner-opm" onclick="window.toonOngelezenOpmerkingen('${wkMa}')">
+      <div class="validatie-icon validatie-icon-opm">!</div>
+      <div><b>${n} ongelezen opmerking${n === 1 ? '' : 'en'}</b> deze week — tik voor details</div>
+    </div>`;
+  }
+
   let html = `
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
@@ -132,6 +150,7 @@ export function renderBehView() {
     </div>
 
     ${bannerHtml}
+    ${opmBannerHtml}
 
     <div class="grid-wrap">
       <div class="plan-grid" style="grid-template-columns: ${gridCols}; min-width: ${toonW ? '500' : '330'}px;">
@@ -157,9 +176,24 @@ export function renderBehView() {
             dagOnclick = `onclick="window.opmerkingBewerken('${datum}')"`;
             dagCursor = 'pointer';
           }
-          const dagOpmMarker = dagOpm ? `<span class="opm-marker" title="${(dagOpm+'').replace(/"/g,'&quot;')}"></span>` : '';
+          // v3.32.0: ongelezen dag-opmerking krijgt een grotere, pulserende
+          // driehoek. Zodra de gebruiker hem bevestigt valt de markering terug
+          // op de bestaande weergave (klein, statisch).
+          const opmStatus = opmerkingStatus(datum);
+          const opmOngelezen = (opmStatus === 'nieuw' || opmStatus === 'gewijzigd');
+          const opmTitel = opmOngelezen
+            ? (opmStatus === 'gewijzigd'
+                ? 'Opmerking gewijzigd sinds je hem las — tik om te lezen'
+                : 'Nieuwe opmerking — tik om te lezen')
+            : (dagOpm + '');
+          const dagOpmMarker = dagOpm
+            ? `<span class="opm-marker ${opmOngelezen ? 'opm-marker-nieuw' : ''}" title="${opmTitel.replace(/"/g,'&quot;')}"></span>`
+            : '';
+          // Extra ruimte links, anders loopt de vergrote driehoek over het
+          // dag-label heen.
+          const dagPadding = opmOngelezen ? 'padding-left: 12px;' : '';
           return `
-            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''} ${isFeest ? 'feestdag-cel' : ''}" ${dagOnclick} style="cursor: ${dagCursor}; position: relative; display: flex; justify-content: space-between; align-items: baseline; padding-right: 4px;">${dagLabel}${dagOpmMarker}</div>
+            <div class="grid-day ${isVandaag ? 'grid-day-active' : ''} ${isFeest ? 'feestdag-cel' : ''}" ${dagOnclick} style="cursor: ${dagCursor}; position: relative; display: flex; justify-content: space-between; align-items: baseline; padding-right: 4px; ${dagPadding}">${dagLabel}${dagOpmMarker}</div>
             ${allKolommen.map((k, i) => {
               const codes = toewijzingVoor(datum, k.id);
               const code1 = codes[0] || '';
@@ -266,17 +300,98 @@ window.toonConflictenSheet = function(weekId) {
   openSheet();
 };
 
+// ==== Ongelezen dag-opmerkingen (v3.32.0) ====================================
+
+// Waarschuwingsblok bovenaan een paneel. Bij een gewijzigde opmerking tonen we
+// de vorige én de huidige tekst naast elkaar: alleen "er is iets veranderd" is
+// niet genoeg om een subtiele aanpassing op te merken.
+function opmerkingWijzigingBlok(datum) {
+  const status = opmerkingStatus(datum);
+  if (status === 'gewijzigd') {
+    const was = eerderGelezenTekst(datum);
+    return `
+      <div class="opm-wijz-blok">
+        <div class="opm-wijz-kop">⚠ Aangepast sinds je hem las</div>
+        <div class="opm-wijz-label">Was</div>
+        <div class="opm-wijz-tekst opm-wijz-was">${was ? esc(was) : '(leeg)'}</div>
+        <div class="opm-wijz-label">Nu</div>
+        <div class="opm-wijz-tekst">${esc(dagOpmerkingTekst(datum))}</div>
+      </div>`;
+  }
+  if (status === 'nieuw') {
+    return `<div class="opm-wijz-blok">
+        <div class="opm-wijz-kop">⚠ Nieuwe opmerking — nog niet bevestigd</div>
+      </div>`;
+  }
+  return '';
+}
+
+function isOngelezenOpm(datum) {
+  const s = opmerkingStatus(datum);
+  return s === 'nieuw' || s === 'gewijzigd';
+}
+
+// Bevestigen is altijd een expliciete handeling: openen en wegklikken telt
+// bewust niet als gelezen.
+//
+// terugNaarWeek wordt meegegeven vanuit de lijst: staan er in die week nog
+// meer ongelezen opmerkingen, dan blijft de lijst open zodat je ze achter
+// elkaar kunt afwerken in plaats van hem telkens opnieuw te moeten openen.
+window.bevestigOpmerkingGelezen = async function(datum, terugNaarWeek) {
+  await markeerOpmerkingGelezen(datum);
+  if (typeof window.__rooster_render === 'function') window.__rooster_render();
+  if (terugNaarWeek && ongelezenOpmerkingenInWeek(terugNaarWeek).length > 0) {
+    window.toonOngelezenOpmerkingen(terugNaarWeek);
+  } else {
+    closeSheet();
+  }
+};
+
+// Overzicht van alle ongelezen dag-opmerkingen in de zichtbare week. De tekst
+// staat er voluit in, zodat bevestigen in deze lijst betekent dat je hem ook
+// werkelijk gelezen hebt. Bewust géén "alles bevestigen"-knop.
+window.toonOngelezenOpmerkingen = function(weekId) {
+  const dagen = ongelezenOpmerkingenInWeek(weekId);
+  document.getElementById('sheetTitle').textContent = `Week ${isoWeekVan(weekId)} — opmerkingen`;
+  document.getElementById('sheetSub').textContent =
+    `${dagen.length} ongelezen opmerking${dagen.length === 1 ? '' : 'en'}`;
+
+  let body = '';
+  if (dagen.length === 0) {
+    body = `<div class="muted" style="font-style: italic;">Alles gelezen.</div>`;
+  } else {
+    body = dagen.map(d => `
+      <div class="summary">
+        <div class="summary-label">${formatDatum(d, 'lang')}${opmerkingStatus(d) === 'gewijzigd' ? ' · aangepast' : ' · nieuw'}</div>
+        <div class="summary-text" style="white-space: pre-wrap;">${esc(dagOpmerkingTekst(d))}</div>
+        ${opmerkingStatus(d) === 'gewijzigd' && eerderGelezenTekst(d)
+          ? `<div class="opm-wijz-label" style="margin-top: 6px;">Was</div>
+             <div class="opm-wijz-tekst opm-wijz-was">${esc(eerderGelezenTekst(d))}</div>`
+          : ''}
+        <button class="btn btn-primary" style="width: 100%; margin-top: 8px;"
+                onclick="window.bevestigOpmerkingGelezen('${d}', '${weekId}')">Gelezen ✓</button>
+      </div>`).join('');
+  }
+  body += `<button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>`;
+  document.getElementById('sheetBody').innerHTML = body;
+  openSheet();
+};
+
 // Read-only weergave dag-opmerking (voor non-wijzigers)
 window.toonDagOpmerking = function(datum) {
-  const dag = state.indelingMap[datum];
-  const opm = dag?.opmerking || '';
+  const opm = dagOpmerkingTekst(datum);
+  const ongelezen = isOngelezenOpm(datum);
   document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
   document.getElementById('sheetSub').textContent = 'Dag-opmerking';
   document.getElementById('sheetBody').innerHTML = `
+    ${opmerkingWijzigingBlok(datum)}
     ${opm
       ? `<div class="summary"><div class="summary-label">Opmerking</div><div class="summary-text" style="white-space: pre-wrap;">${esc(opm)}</div></div>`
       : `<div class="muted" style="font-style: italic;">Geen dag-opmerking</div>`}
-    <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.closeSheet()">Sluiten</button>
+    <div style="display: flex; gap: 8px; margin-top: 1rem;">
+      <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Sluiten</button>
+      ${ongelezen ? `<button class="btn btn-primary" style="flex: 1;" onclick="window.bevestigOpmerkingGelezen('${datum}')">Gelezen ✓</button>` : ''}
+    </div>
   `;
   openSheet();
 };
@@ -469,13 +584,23 @@ window.slaCelOpmerkingAlleen = async function(datum, radId) {
 };
 
 window.opmerkingBewerken = function(datum) {
-  if (!magOpmerkingen()) return;
+  // v3.32.0: wie geen dag-opmerkingen mag schrijven krijgt voortaan het
+  // lees-paneel in plaats van niets. Voorheen deed een tik op de dag bij zo
+  // iemand stilletjes niets — met een knipperende markering ernaast is dat
+  // geen houdbare uitkomst.
+  if (!magOpmerkingen()) { window.toonDagOpmerking(datum); return; }
   const dag = state.indelingMap[datum];
   const huidig = dag?.opmerking || '';
+  const ongelezen = isOngelezenOpm(datum);
 
   document.getElementById('sheetTitle').textContent = formatDatum(datum, 'lang');
   document.getElementById('sheetSub').textContent = 'Opmerking voor deze dag';
+  // De bevestigknop staat boven het invoerveld en niet in de knoppenrij:
+  // je leest en bevestigt eerst, daarna pas bewerk je. Sla je zelf iets op,
+  // dan markeert slaOpmerkingOp de dag sowieso als gelezen.
   document.getElementById('sheetBody').innerHTML = `
+    ${opmerkingWijzigingBlok(datum)}
+    ${ongelezen ? `<button class="btn btn-primary" style="width: 100%; margin-bottom: 12px;" onclick="window.bevestigOpmerkingGelezen('${datum}')">Gelezen ✓</button>` : ''}
     <textarea class="input" id="opmInput" rows="4" style="font-family: inherit;">${esc(huidig)}</textarea>
     <div style="display: flex; gap: 8px; margin-top: 1rem;">
       <button class="btn" style="flex: 1;" onclick="window.closeSheet()">Annuleren</button>

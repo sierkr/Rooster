@@ -609,6 +609,81 @@ export function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ==== Dag-opmerkingen: leesstatus (v3.32.0) ==================================
+//
+// Een dag-opmerking geldt als ongelezen zolang de gebruiker hem niet expliciet
+// heeft bevestigd. Wordt de tekst daarna gewijzigd, dan is hij opnieuw
+// ongelezen — daarom slaan we de GELEZEN TEKST op en niet alleen een vlag:
+// zo kan het paneel ook laten zien wat er veranderd is ("Was / Nu").
+//
+// Statussen:
+//   'geen'      - er staat geen dag-opmerking op deze datum
+//   'gelezen'   - gelezen tekst is gelijk aan de huidige tekst
+//   'nieuw'     - nog nooit gelezen
+//   'gewijzigd' - wél gelezen, maar de tekst is sindsdien aangepast
+//
+// Dagen vóór vandaag waarschuwen nooit: daar valt niets meer op te anticiperen.
+
+// Genormaliseerde dag-opmerking van een datum ('' als er geen is).
+export function dagOpmerkingTekst(datum) {
+  const t = state.indelingMap?.[datum]?.opmerking;
+  return typeof t === 'string' ? t.trim() : '';
+}
+
+// Zuivere kern: geen state-afhankelijkheid, volledig te unit-testen.
+export function bepaalOpmerkingStatus(huidigeTekst, gelezenMap, datum, vandaag) {
+  const tekst = typeof huidigeTekst === 'string' ? huidigeTekst.trim() : '';
+  if (!tekst) return 'geen';
+  if (datum < vandaag) return 'gelezen';
+  const map = gelezenMap || {};
+  if (!Object.prototype.hasOwnProperty.call(map, datum)) return 'nieuw';
+  const gelezen = typeof map[datum] === 'string' ? map[datum].trim() : '';
+  return gelezen === tekst ? 'gelezen' : 'gewijzigd';
+}
+
+// Statuswrapper op basis van de live app-state.
+export function opmerkingStatus(datum, vandaag = vandaagIso()) {
+  return bepaalOpmerkingStatus(
+    dagOpmerkingTekst(datum), state.opmerkingGelezen, datum, vandaag
+  );
+}
+
+export function opmerkingIsOngelezen(datum, vandaag = vandaagIso()) {
+  const s = opmerkingStatus(datum, vandaag);
+  return s === 'nieuw' || s === 'gewijzigd';
+}
+
+// De tekst zoals de gebruiker hem las, of null als hij nooit gelezen is.
+// Gebruikt door het "Was / Nu"-blok bij status 'gewijzigd'.
+export function eerderGelezenTekst(datum) {
+  const map = state.opmerkingGelezen || {};
+  return Object.prototype.hasOwnProperty.call(map, datum) ? map[datum] : null;
+}
+
+// Ongelezen datums binnen één week (de balk in het Overzicht).
+export function ongelezenOpmerkingenInWeek(maandagIso, vandaag = vandaagIso()) {
+  return datumsVanWeek(maandagIso).filter(d => opmerkingIsOngelezen(d, vandaag));
+}
+
+// Ongelezen datums vanaf vandaag over alle geladen weken (de tab-badge).
+// Beperkt zich tot het datumvenster dat de listener geladen heeft; buiten dat
+// venster is er geen data en valt er dus ook niets te tellen.
+export function ongelezenOpmerkingenTotaal(vandaag = vandaagIso()) {
+  return Object.keys(state.indelingMap || {})
+    .filter(d => d >= vandaag && opmerkingIsOngelezen(d, vandaag))
+    .sort();
+}
+
+// Verwijdert datums vóór vandaag uit de gelezen-map. Wordt vóór élke schrijf-
+// actie toegepast zodat het document niet onbeperkt groeit.
+export function snoeiGelezen(gelezenMap, vandaag = vandaagIso()) {
+  const uit = {};
+  Object.keys(gelezenMap || {}).forEach(d => {
+    if (d >= vandaag) uit[d] = gelezenMap[d];
+  });
+  return uit;
+}
+
 // ==== Feestdagen =============================================================
 // Geeft true als de datum een Nederlandse officiële feestdag is.
 // Gebruikt de feestdagen array uit de context-feestdag validatieregel.

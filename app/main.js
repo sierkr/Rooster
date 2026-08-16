@@ -7,8 +7,9 @@ import { state, VASTE_RAD_IDS } from './state.js';
 import {
   vandaagIso, mandagVanIso, plusDagen, radiologenMap, vertalFirebaseFout,
   magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien, magWijzigen,
-  magVakantieZien, valideerWachtwoord, isVasteStoel,
+  magVakantieZien, valideerWachtwoord, isVasteStoel, ongelezenOpmerkingenTotaal,
 } from './helpers.js';
+import { zetMeldenBuitenWeek } from './save.js';
 import { openSheet, closeSheet } from './sheets.js';
 
 // Importeer alle render-functies (modules registreren ook hun window-handlers)
@@ -185,9 +186,32 @@ window.toonGebruikerSheet = function() {
     <div class="summary"><div class="summary-label">Account</div><div class="summary-text">${voornaam}</div></div>
     <div class="summary"><div class="summary-label">Rol</div><div class="summary-text">${p.rol}</div></div>
     ${p.radioloog_id ? `<div class="summary"><div class="summary-label">Gekoppeld als radioloog</div><div class="summary-text">${p.radioloog_id}</div></div>` : ''}
+    <div class="summary">
+      <div class="summary-label">Meldingen</div>
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-top: 4px;">
+        <div style="font-size: 13px;">
+          Ongelezen dag-opmerkingen buiten deze week melden
+          <div class="muted" style="font-size: 11px; margin-top: 2px;">
+            Uit: alleen een balk in de week die je bekijkt. Aan: ook een teller
+            op de Overzicht-tab voor alle dagen vanaf vandaag.
+          </div>
+        </div>
+        <span class="toggle-switch ${state.meldenBuitenWeek ? 'aan' : ''}"
+              style="flex-shrink: 0; margin-top: 2px;"
+              onclick="window.toggleMeldenBuitenWeek()"></span>
+      </div>
+    </div>
     <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="window.doLogout()">Uitloggen</button>
   `;
   openSheet();
+};
+
+// v3.32.0: persoonlijke voorkeur voor de tab-badge. Sheet wordt direct opnieuw
+// opgebouwd zodat het schuifje meteen meebeweegt.
+window.toggleMeldenBuitenWeek = async function() {
+  await zetMeldenBuitenWeek(!state.meldenBuitenWeek);
+  render();
+  window.toonGebruikerSheet();
 };
 
 // ==== Tabs + user chip =======================================================
@@ -195,12 +219,21 @@ window.toonGebruikerSheet = function() {
 function renderTabs() {
   const tabs = [
     { id: 'beh', label: (() => {
+      let label = 'Overzicht';
       const eigenRadId = state.profiel?.radioloog_id;
       if (eigenRadId && !magWijzigen()) {
         const n = (state.wijzigingen || []).length;
-        if (n > 0) return `Overzicht<span class="tab-badge tab-badge-oranje">${n}</span>`;
+        if (n > 0) label += `<span class="tab-badge tab-badge-oranje">${n}</span>`;
       }
-      return 'Overzicht';
+      // v3.32.0: tweede badge voor ongelezen dag-opmerkingen over álle weken
+      // vanaf vandaag. Staat standaard uit; de gebruiker zet hem zelf aan in
+      // zijn profiel. De blauwe kleur onderscheidt hem van de oranje badge
+      // voor gewijzigde eigen roosterdagen.
+      if (state.meldenBuitenWeek) {
+        const nOpm = ongelezenOpmerkingenTotaal().length;
+        if (nOpm > 0) label += `<span class="tab-badge tab-badge-opm">${nOpm}</span>`;
+      }
+      return label;
     })() },
     { id: 'rad', label: 'Radioloog' },
   ];
@@ -426,6 +459,28 @@ function luisterNaarData() {
     }));
   } else {
     state.wijzigingen = [];
+  }
+
+  // v3.32.0: privé leesstatus van dag-opmerkingen (één doc per gebruiker).
+  // Bestaat het document nog niet, dan blijft de map leeg en gelden álle
+  // bestaande dag-opmerkingen vanaf vandaag als ongelezen — bewust, zodat er
+  // niets stilzwijgend wordt weggeklikt. De balk toont er nooit meer dan zeven
+  // tegelijk, want die kijkt alleen naar de zichtbare week.
+  if (state.user?.uid) {
+    state.unsubscribers.push(onSnapshot(
+      doc(db, 'opmerking_gelezen', state.user.uid),
+      (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        state.opmerkingGelezen = data.gelezen || {};
+        state.meldenBuitenWeek = data.melden_buiten_week === true;
+        state.opmerkingGelezenGeladen = true;
+        render();
+      },
+      (e) => {
+        console.error('opmerking_gelezen listener', e);
+        state.opmerkingGelezenGeladen = true;
+      }
+    ));
   }
 }
 

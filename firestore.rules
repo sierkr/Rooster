@@ -282,5 +282,21 @@ service cloud.firestore {
       allow read: if magLezen();
       allow write: if isBeheerder();
     }
+
+    // -----------------------------------------------------------------------
+    // opmerking_gelezen/{uid} - v3.32.0: privé leesstatus van dag-opmerkingen
+    //
+    // Eén document per gebruiker, met daarin een map datum -> de tekst zoals
+    // die gebruiker hem gelezen heeft. Wijkt de huidige dag-opmerking daarvan
+    // af, dan geldt hij als ongelezen (nieuw of gewijzigd).
+    //
+    // Dit is puur persoonlijk leesgedrag: niemand anders heeft het nodig, ook
+    // een beheerder niet. Daarom géén beheerder-uitzondering — dat houdt het
+    // aanvalsoppervlak zo klein mogelijk en voorkomt dat het leesgedrag van
+    // collega's in te zien is.
+    // -----------------------------------------------------------------------
+    match /opmerking_gelezen/{uid} {
+      allow read, write: if isIngelogd() && request.auth.uid == uid;
+    }
   }
 }
