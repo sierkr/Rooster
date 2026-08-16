@@ -123,6 +123,9 @@ export function renderBehView() {
   // als je ze allemaal gelezen hebt — zo zie je altijd dát er iets staat. Wel
   // in twee toestanden: blauw met een teller zolang er nog iets te lezen is,
   // daarna gedempt grijs zodat hij geen aandacht meer trekt.
+  // v3.32.3: beide toestanden eindigen op "tik voor details". De kleur en het
+  // vinkje maken al duidelijk dát alles gelezen is; de tekst hoeft dan vooral
+  // te vertellen dat je er nog steeds op kunt tikken om terug te lezen.
   const opmDagen       = opmerkingenInWeek(wkMa);
   const ongelezenDagen = ongelezenOpmerkingenInWeek(wkMa);
   let opmBannerHtml = '';
@@ -136,7 +139,7 @@ export function renderBehView() {
         </div>`
       : `<div class="validatie-banner validatie-banner-opm-ok" onclick="window.toonWeekOpmerkingen('${wkMa}')">
           <div class="validatie-icon validatie-icon-opm-ok">✓</div>
-          <div><b>${totaal} opmerking${totaal === 1 ? '' : 'en'}</b> deze week — alle gelezen</div>
+          <div><b>${totaal} opmerking${totaal === 1 ? '' : 'en'}</b> deze week — tik voor details</div>
         </div>`;
   }
 

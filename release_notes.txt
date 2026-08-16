@@ -1,3 +1,20 @@
+Rooster v3.32.3 — Release notes
+==================================
+
+BALKTEKST BIJ ALLES GELEZEN
+----------------------------------------------------------------------------
+Deployen = alleen app-bestanden uploaden.
+
+- De grijze balk eindigde op "alle gelezen" en nodigde daarmee niet uit om
+  er nog op te tikken, terwijl je er wél de opmerkingen van die week kunt
+  teruglezen. Er staat nu "5 opmerkingen deze week - tik voor details".
+
+- De blauwe variant blijft "2 van 4 opmerkingen niet gelezen - tik voor
+  details". Beide balken eindigen dus hetzelfde, net als de validatiebalken
+  erboven. Dat de week schoon is zie je aan de grijze kleur en het vinkje.
+
+----------------------------------------------------------------------------
+
 Rooster v3.32.2 — Release notes
 ==================================
 

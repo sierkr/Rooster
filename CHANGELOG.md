@@ -1,3 +1,26 @@
+## v3.32.3 — Balktekst bij alles gelezen
+
+De gedempte balk eindigde op "alle gelezen" en nodigde daarmee niet uit om er
+nog op te tikken, terwijl je er wél de opmerkingen van die week kunt teruglezen.
+Beide toestanden eindigen nu op "tik voor details":
+
+- Nog iets te lezen → blauw, "2 van 4 opmerkingen niet gelezen — tik voor
+  details".
+- Alles bevestigd → gedempt grijs met vinkje, "4 opmerkingen deze week — tik
+  voor details".
+
+Dat de week schoon is blijkt al uit de kleur en het vinkje; de tekst kan zich
+dan beter richten op wat je ermee kunt. Het sluit ook aan bij de
+validatiebalken erboven, die allemaal op dezelfde manier eindigen.
+
+De ondertitel bínnen het geopende paneel blijft wel "N opmerkingen — alle
+gelezen": daar ben je al, dus een uitnodiging om te tikken heeft geen zin.
+
+### Deploy
+Alleen een app-upload.
+
+---
+
 ## v3.32.2 — Excel krijgt een eigen tab in Beheer
 
 Excel-export en -import zaten weggestopt achter **Control → Overige

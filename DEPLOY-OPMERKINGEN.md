@@ -72,8 +72,8 @@ Gewijzigde bestanden in deze release:
 In de testomgeving, ingelogd als beheerder:
 
 1. Ga naar **Overzicht** en zet een opmerking op een dag in de huidige week.
-   Sla op. → De balk toont een **grijze** regel "1 opmerking deze week — alle
-   gelezen": wat je zelf schrijft is meteen gelezen.
+   Sla op. → De balk toont een **grijze** regel met vinkje, "1 opmerking deze
+   week — tik voor details": wat je zelf schrijft is meteen gelezen.
 2. Log in als een andere gebruiker (of gebruik een tweede browser). → De balk
    is daar **blauw** ("1 van 1 opmerkingen niet gelezen") en het driehoekje bij
    die dag is groter en knippert.
