@@ -1,0 +1,6 @@
+node_modules/
+package-lock.json
+firebase-debug.log
+firestore-debug.log
+# lokale kopie, gemaakt door de CI-kopieerstap (bron: /firestore.rules)
+firestore.rules

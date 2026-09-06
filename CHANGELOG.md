@@ -1,3 +1,14 @@
+## v3.32.5 — Uitrollen met één commando
+
+Uitrollen gaat nu met `bash uitrollen.sh test` en `bash uitrollen.sh live`
+vanuit de map met de zips. Het script controleert het versienummer, draait de
+unit-tests, pusht naar de juiste repo en meet na afloop na welke versie de
+site echt serveert. Geen wijziging aan de app zelf.
+
+`Rooster-functions/firebase.json` kent nu ook de Firestore-databases
+`(default)` en `test`, zodat de regels vanaf de opdrachtregel gepubliceerd
+kunnen worden in plaats van met de hand in de console.
+
 ## v3.32.4 — Helppagina's kloppend gemaakt
 
 Beide handleidingen waren blijven staan op de situatie van rond v3.27 en

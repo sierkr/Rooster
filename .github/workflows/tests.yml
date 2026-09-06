@@ -1,5 +1,8 @@
 # CI-workflow (v3.31.0, fase 4).
 # Draait automatisch bij elke push (dus ook bij upload via de GitHub-website).
+# Resultaat zichtbaar onder het tabblad "Actions" van de repo:
+#   groen vinkje  = alles gedraagt zich nog zoals vastgelegd
+#   rood kruis    = een test faalt; NIET naar productie uploaden
 name: Tests
 
 on:
@@ -16,12 +19,14 @@ jobs:
         with:
           node-version: 22
       - name: Draai unit-tests
+        # Let op: glob-vorm gebruiken; "node --test tests/unit/" werkt niet.
         run: node --test tests/unit/*.test.mjs
 
   rules-tests:
     name: Firestore rules-tests (emulator)
     runs-on: ubuntu-latest
-    continue-on-error: true
+    # v3.31.1: blokkerend gemaakt (continue-on-error verwijderd) nadat de
+    # job op 19-07-2026 aantoonbaar groen draaide in de test-repo.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +41,10 @@ jobs:
       - name: Installeer test-afhankelijkheden
         run: npm install
         working-directory: tests/rules
+      # v3.31.1: firebase-tools accepteert geen rules-pad buiten de eigen
+      # map; daarom wordt het bestand vooraf de testmap in gekopieerd.
+      - name: Kopieer firestore.rules naar de testmap
+        run: cp firestore.rules tests/rules/firestore.rules
       - name: Draai rules-tests tegen de emulator
         run: npm test
         working-directory: tests/rules
