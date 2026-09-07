@@ -11,6 +11,9 @@ import { db, IS_TEST_DB } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, vandaagIso, plusDagen, kolomNaarRadId, wensMatcht, hoofdLetterCode } from './helpers.js';
 import { maakClientBackup } from './backup-client.js';
+// v3.32.8: eigen dialoogvensters i.p.v. native alert/confirm — die worden door
+// sommige browsers onderdrukt, waardoor de import geruisloos niets deed.
+import { meld, bevestig } from './dialoog.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
 const NABIJ_DAGEN = 30;
@@ -295,11 +298,26 @@ export async function actImportFile(input, renderGebView) {
     // preview met een knop die niets doet.
     let gefilterdWeg = 0;
     const jarenInBestand = new Set();
+    // v3.32.7: een datumcel zonder viercijferig jaartal (bv. de tekst "1-1" of
+    // "01-01") levert geen datum op en werd stilzwijgend overgeslagen. Nu
+    // tellen we die regels, zodat de preview ze kan melden. Volledig lege
+    // datumcellen tellen niet mee — dat zijn gewoon lege regels onder de tabel.
+    let geenDatumAantal = 0;
+    const geenDatumVoorbeelden = [];
 
     for (let r = headerRij + 1; r <= range.e.r; r++) {
       const datumCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
       const isoDatum = _parseDatumCel(datumCel?.v);
-      if (!isoDatum) continue;
+      if (!isoDatum) {
+        const rauw = _celStr(datumCel);
+        if (rauw) {
+          geenDatumAantal++;
+          if (geenDatumVoorbeelden.length < 5) {
+            geenDatumVoorbeelden.push(`rij ${r + 1}: "${rauw}"`);
+          }
+        }
+        continue;
+      }
       jarenInBestand.add(isoDatum.slice(0, 4));
       if (state.importJaar && !isoDatum.startsWith(state.importJaar + '-')) { gefilterdWeg++; continue; }
 
@@ -419,6 +437,16 @@ export async function actImportFile(input, renderGebView) {
       filterJaar: state.importJaar || '',
       gefilterdWeg,
       jarenInBestand: [...jarenInBestand].sort(),
+      // v3.32.7: regels met een onleesbare datum (geen jaartal) expliciet melden.
+      geenDatumAantal,
+      geenDatumVoorbeelden,
+      // v3.32.7: aantal dagen per jaar — de bevestiging vóór het wegschrijven
+      // noemt hiermee precies welke jaren er vervangen worden.
+      dagenPerJaar: dagen.reduce((acc, d) => {
+        const j = d.datum.slice(0, 4);
+        acc[j] = (acc[j] || 0) + 1;
+        return acc;
+      }, {}),
       celOpmsAantal, dagOpmsAantal, dienstAantal, besprAantal, intervAantal,
       waarschuwingen: waarschuwingen.slice(0, 25),
       waarschuwingenTotaal: waarschuwingen.length,
@@ -434,7 +462,7 @@ export async function actImportFile(input, renderGebView) {
     };
   } catch (e) {
     console.error('actImportFile', e);
-    alert('Bestand inlezen mislukt:\n\n' + (e.message || e));
+    await meld('Bestand inlezen mislukt', String(e.message || e));
   } finally {
     state.importBezig = false;
     renderGebView();
@@ -517,7 +545,7 @@ export async function actImportSchrijven(renderGebView) {
   // mag_gebruikers-permissie zou anders halverwege de batch stranden met een
   // half geïmporteerde staat.
   if (state.profiel?.rol !== 'beheerder') {
-    alert('Alleen een beheerder kan een import wegschrijven (Firestore-rechten).');
+    await meld('Geen rechten', 'Alleen een beheerder kan een import wegschrijven (Firestore-rechten).');
     return;
   }
   // Tel wijzigingen binnen de 30-dagengrens vóór bevestiging
@@ -537,6 +565,18 @@ export async function actImportSchrijven(renderGebView) {
     }
   }
 
+  // v3.32.7: noem de jaren en aantallen die daadwerkelijk vervangen worden.
+  // Zo zie je een ongewenst jaar op het laatste moment nog, ook als het
+  // jaarfilter uit staat. Dit is de rem die het filter zelf nooit was.
+  const perJaar = p.dagenPerJaar || p.dagen.reduce((acc, d) => {
+    const j = d.datum.slice(0, 4);
+    acc[j] = (acc[j] || 0) + 1;
+    return acc;
+  }, {});
+  const jaarRegels = Object.keys(perJaar).sort()
+    .map(j => `${perJaar[j]} dagen in ${j}`)
+    .join('\n');
+
   const jaarDeel = state.importJaar ? `alle ${state.importJaar}-dagen` : `alle dagen in het bestand`;
   const nabijWaarschuwing = nabijeCellen > 0
     ? `\n\n⚠ LET OP: ${nabijeCellen} toewijzing${nabijeCellen === 1 ? '' : 'en'} worden gewijzigd binnen ${NABIJ_DAGEN} dagen (${nabijeDatums.size} dag${nabijeDatums.size === 1 ? '' : 'en'}). Betrokken radiologen krijgen een notificatie.`
@@ -547,13 +587,16 @@ export async function actImportSchrijven(renderGebView) {
     ? `\n\n⛔ ${p.regelBlokkadesTotaal} BLOKKEREND regelconflict${p.regelBlokkadesTotaal === 1 ? '' : 'en'} in dit bestand (zie de rode lijst in de preview). Importeren negeert deze regels.`
     : '';
 
-  const ok = confirm(
+  const ok = await bevestig(
+    'Import bevestigen',
     `OVERSCHRIJVEN — ${jaarDeel} worden in Firestore vervangen door wat in '${p.bestandnaam}' staat.\n\n` +
+    `Je vervangt:\n${jaarRegels}\n\n` +
     `${p.dagen.length} dagen, ${p.celOpmsAantal} cel-opmerkingen, ${p.dagOpmsAantal} dag-opmerkingen.\n\n` +
     `Wens-statussen worden automatisch bijgewerkt.` +
     nabijWaarschuwing +
     blokkadeWaarschuwing +
-    `\n\nBestaande data in Firestore wordt vervangen. Doorgaan?`
+    `\n\nBestaande data in Firestore wordt vervangen. Doorgaan?`,
+    'Importeer', 'Annuleren'
   );
   if (!ok) return;
 
@@ -568,12 +611,17 @@ export async function actImportSchrijven(renderGebView) {
         const backupResultaat = await maakClientBackup('voor-import');
         if (backupResultaat === null) {
           // Gebruiker heeft wachtwoord-prompt geannuleerd — geen backup gemaakt
-          const doorgaan = confirm(
+          const doorgaan = await bevestig(
+            'Geen backup gemaakt',
             'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.\n\n' +
             'Zonder backup kun je de import niet terugdraaien als er iets misgaat.\n\n' +
-            'Wil je toch doorgaan zonder backup?'
+            'Wil je toch doorgaan zonder backup?',
+            'Doorgaan zonder backup', 'Stoppen'
           );
           if (!doorgaan) {
+            // v3.32.7: eerder keerde de import hier zonder één woord terug —
+            // niet te onderscheiden van een import die wél had gewerkt.
+            await meld('Import afgebroken', 'Er is niets gewijzigd.');
             state.importBezig = false;
             renderGebView();
             return;
@@ -651,12 +699,12 @@ export async function actImportSchrijven(renderGebView) {
     if (wijzigingenGeschreven > 0) berichtDelen.push(`${wijzigingenGeschreven} cel${wijzigingenGeschreven === 1 ? '' : 'len'} gemarkeerd als ongelezen voor betrokken radiologen.`);
     if (verwerkt > 0)  berichtDelen.push(`${verwerkt} wens${verwerkt === 1 ? '' : 'en'} automatisch verwerkt.`);
     if (heropend > 0)  berichtDelen.push(`${heropend} wens${heropend === 1 ? '' : 'en'} teruggezet naar 'open' (indeling klopt niet meer).`);
-    alert('Klaar. ' + berichtDelen.join('\n'));
+    await meld('Import klaar', berichtDelen.join('\n'));
 
     state.importPreview = null;
   } catch (e) {
     console.error('actImportSchrijven', e);
-    alert('Schrijven mislukt:\n\n' + (e.message || e));
+    await meld('Schrijven mislukt', String(e.message || e));
   } finally {
     state.importBezig = false;
     renderGebView();

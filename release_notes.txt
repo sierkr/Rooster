@@ -1,3 +1,72 @@
+Rooster v3.32.8 — Release notes
+==================================
+
+DE IMPORT HANGT NIET MEER AAN BROWSER-POPUPS
+----------------------------------------------------------------------------
+De import gebruikte de ingebouwde popups van de browser (confirm, alert,
+prompt) voor de bevestiging, de backup-vraag en de eindmelding. Dat is niet
+betrouwbaar: sommige browsers onderdrukken die popups volledig, en Chrome en
+Firefox bieden de gebruiker zelf een vinkje aan ("voorkom dat deze pagina
+extra dialoogvensters maakt") zodra er meerdere achter elkaar komen. Staat dat
+aan, dan geeft confirm() voortaan zonder melding "nee" terug en prompt()
+niets.
+
+Het gevolg was een import die geruisloos niets deed: je klikte op Importeer
+en er gebeurde niets, hoe vaak je het ook probeerde.
+
+- Nieuw bestand app/dialoog.js met drie vensters (mededeling, ja/nee,
+  tekstinvoer) die gewone pagina-elementen zijn. Geen browser kan die
+  onderdrukken. Ze volgen de stijl van de app inclusief donkere modus,
+  reageren op Enter en Escape, en sluiten bij een klik ernaast.
+
+- De hele import loopt er nu doorheen: bevestiging, "geen rechten", "import
+  afgebroken", de eindmelding en de foutmeldingen.
+
+- De backup ook. Die vroeg het wachtwoord met prompt(). Werd die onderdrukt,
+  dan zag de app dat als "gebruiker annuleerde", vroeg met een tweede (ook
+  onderdrukte) popup of je zonder backup wilde doorgaan, kreeg "nee" terug en
+  stopte. Twee stille stappen achter elkaar.
+
+- Het terugzetten van een backup gebruikt dezelfde vensters, inclusief de
+  keuze tussen volledig terugzetten en aanvullen.
+
+Rooster v3.32.7 — Release notes
+==================================
+
+BEHEER-TAB BLEEF SOMS BLANCO
+----------------------------------------------------------------------------
+De Beheer-tab is de enige tab die tijdens het tekenen zelf nog gegevens
+ophaalt (de app-gebruikers). Die ophaalactie had geen vangnet: mislukte hij
+een keer, dan stopte het tekenen halverwege en bleef het tabblad leeg, zonder
+melding en zonder nieuwe poging. Vlak na een nieuwe versie is zo'n hapering
+het waarschijnlijkst, want dan haalt de app al zijn bestanden opnieuw op.
+
+- Mislukt de ophaalactie, dan blijven de vorige gegevens staan en verschijnt
+  een strook met een knop "Opnieuw proberen".
+
+- De tab toont meteen "Bezig met laden..." en bij een echte fout een korte
+  melding met een knop, in plaats van een leeg scherm.
+
+IMPORT: GEEN STILLE AFLOOP MEER
+----------------------------------------------------------------------------
+- De preview meldt nu dat er nog niets is opgeslagen en dat pas de knop
+  "Importeer" wegschrijft. Het overzicht zag eruit als een afgeronde import.
+
+- De bevestiging noemt de jaren en aantallen die vervangen worden, zoals
+  "je vervangt 365 dagen in 2027". Een ongewenst jaar valt zo op het laatste
+  moment nog op, ook als het jaarfilter uit staat.
+
+- Regels met een datum zonder jaartal worden geteld en gemeld, met
+  rijnummers en voorbeelden. Voorheen verdwenen ze geruisloos.
+
+- Weiger je de backup, dan meldt de app "Import afgebroken - er is niets
+  gewijzigd." in plaats van zonder een woord terug te keren.
+
+EXPORT
+----------------------------------------------------------------------------
+- De exportknop toont het gekozen jaar ("Exporteer 2027"), zodat je niet per
+  ongeluk het huidige jaar exporteert terwijl je een ander jaar bedoelt.
+
 Rooster v3.32.6 — Release notes
 ==================================
 

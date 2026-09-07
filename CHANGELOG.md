@@ -1,3 +1,64 @@
+## v3.32.8 — De import hangt niet meer aan browser-popups
+
+De import gebruikte de ingebouwde popups van de browser (`confirm`, `alert`,
+`prompt`) voor de bevestiging, de backup-vraag en de eindmelding. Dat is niet
+betrouwbaar:
+
+- sommige browsers en ingebouwde browservensters onderdrukken die popups
+  helemaal;
+- Chrome en Firefox bieden de gebruiker zélf een vinkje aan — "voorkom dat
+  deze pagina extra dialoogvensters maakt" — zodra er meerdere achter elkaar
+  komen. Staat dat aan, dan geeft `confirm()` voortaan zonder melding "nee"
+  terug en `prompt()` niets.
+
+Het gevolg was een import die geruisloos niets deed: je klikte op Importeer
+en er gebeurde niets, hoe vaak je het ook probeerde. Precies het beeld dat
+zich in de praktijk voordeed.
+
+- **Nieuw bestand `app/dialoog.js`** met drie vensters (mededeling, ja/nee,
+  tekstinvoer) die gewone pagina-elementen zijn. Geen enkele browser kan die
+  onderdrukken. Ze volgen de stijl van de app, inclusief donkere modus,
+  reageren op Enter en Escape, en sluiten bij een klik ernaast.
+- **De hele import loopt er nu doorheen**: bevestiging, "geen rechten",
+  "import afgebroken", de eindmelding en de foutmeldingen.
+- **De backup ook** — die vroeg het wachtwoord met `prompt()`. Werd die
+  onderdrukt, dan zag de app dat als "gebruiker annuleerde", vroeg met een
+  tweede (ook onderdrukte) popup of je zonder backup wilde doorgaan, kreeg
+  "nee" terug en stopte. Twee stille stappen achter elkaar.
+- **Het terugzetten van een backup** gebruikt dezelfde vensters, inclusief de
+  keuze tussen volledig terugzetten en aanvullen.
+
+## v3.32.7 — Beheer-tab, en de import zwijgt niet meer
+
+### Beheer-tab bleef soms blanco
+De Beheer-tab is de enige tab die tijdens het tekenen zelf nog gegevens
+ophaalt (de app-gebruikers). Die ophaalactie had geen vangnet: mislukte hij
+één keer — vlak na een nieuwe versie waarschijnlijk, want dan haalt de app al
+zijn bestanden opnieuw op — dan stopte het tekenen halverwege en bleef het
+tabblad leeg. Zonder melding en zonder nieuwe poging, dus pas na een paar keer
+verversen verscheen de inhoud.
+
+- De ophaalactie faalt niet langer hard: lukt hij niet, dan blijven de vorige
+  gegevens staan en verschijnt er een strook met "Opnieuw proberen".
+- De tab toont meteen "Bezig met laden…" en bij een echte fout een melding met
+  een knop, in plaats van een leeg scherm.
+
+### Import: geen stille afloop meer
+- **De preview zegt nu dat er nog niets is opgeslagen** en dat pas de knop
+  "Importeer" wegschrijft. Het overzicht met dagen en wijzigingen zag eruit
+  als een afgeronde import, terwijl er nog niets was gebeurd.
+- **De bevestiging noemt de jaren en aantallen** die vervangen worden ("je
+  vervangt 365 dagen in 2027"). Zo zie je een ongewenst jaar op het laatste
+  moment nog, ook met het jaarfilter uit.
+- **Regels met een datum zonder jaartal worden geteld en gemeld**, met
+  voorbeelden en rijnummers. Voorheen verdwenen ze geruisloos.
+- **Weiger je de backup**, dan meldt de app "Import afgebroken — er is niets
+  gewijzigd." in plaats van zonder een woord terug te keren.
+
+### Export
+- De exportknop toont het gekozen jaar ("⬇ Exporteer 2027"), zodat je niet per
+  ongeluk het huidige jaar exporteert terwijl je een ander jaar bedoelt.
+
 ## v3.32.6 — Excel-import en -export
 
 Het jaarfilter boven de importknop gooide regels stilzwijgend weg. Stond het

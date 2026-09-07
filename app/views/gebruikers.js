@@ -26,10 +26,21 @@ import {
   impactVanaf, impactTekst,
 } from '../bezetting-mutaties.js';
 
+// v3.32.7: deze ophaalactie had als enige in de Beheer-tab geen vangnet.
+// Mislukte hij één keer — vlak na een nieuwe versie waarschijnlijk, want dan
+// haalt de app al zijn bestanden opnieuw op — dan stopte renderGebView
+// halverwege en bleef het hele tabblad leeg, zonder melding en zonder nieuwe
+// poging. Nu blijven de vorige gegevens staan en meldt de aanroeper de fout.
 export async function laadGebruikers() {
-  if (!magGebruikersBeheren()) return;
-  const snap = await getDocs(collection(db, 'gebruikers'));
-  state.gebruikers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (!magGebruikersBeheren()) return true;
+  try {
+    const snap = await getDocs(collection(db, 'gebruikers'));
+    state.gebruikers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return true;
+  } catch (e) {
+    console.warn('laadGebruikers', e && e.message);
+    return false;
+  }
 }
 
 // Onthoudt de laatst gekozen (sub-)tab binnen Beheer, zodat een her-render
@@ -67,13 +78,36 @@ function huidigeOfGeplandeBezetting(slotId) {
   };
 }
 
+// v3.32.7: schil om het tekenen van de Beheer-tab. Deze tab is de enige die
+// tijdens het tekenen zelf nog gegevens ophaalt; ging daar iets mis, dan bleef
+// het tabblad leeg achter zonder melding en zonder nieuwe poging. Nu staat er
+// altijd iets: eerst "Bezig met laden…", en bij een fout een melding met een
+// knop om het opnieuw te proberen.
 export async function renderGebView() {
   const container = document.getElementById('view-geb');
+  if (!container) return;
+  if (!container.innerHTML.trim()) {
+    container.innerHTML = '<div class="empty-state">Bezig met laden…</div>';
+  }
+  try {
+    await _tekenGebView(container);
+  } catch (e) {
+    console.error('renderGebView', e);
+    container.innerHTML = `
+      <div class="card">
+        <p style="font-size:17px; font-weight:500; margin:0 0 6px;">Beheer</p>
+        <p class="muted" style="margin:0 0 12px;">Deze tab kon niet geladen worden. Meestal is dat een haperende verbinding, vaak vlak na een nieuwe versie.</p>
+        <button class="btn btn-primary" style="width:100%;" onclick="window.herlaadBeheerTab()">Opnieuw proberen</button>
+      </div>`;
+  }
+}
+
+async function _tekenGebView(container) {
   const canGeb = magGebruikersBeheren();
   const canReg = magRegelsBeheren() || canGeb;
   if (!canGeb && !canReg) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
 
-  if (canGeb) await laadGebruikers();
+  const gebOk = canGeb ? await laadGebruikers() : true;
   if (canGeb) await laadBezettingMutaties();
   const rads = radiologenMap();
 
@@ -281,12 +315,13 @@ export async function renderGebView() {
       <div class="card">
         <p class="muted" style="margin: 0 0 10px;">Exporteer de Firestore-indeling van een jaar naar een <code>.xlsx</code> in hetzelfde formaat als de import.</p>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <select class="select" id="expJaar" style="width: auto; padding: 6px 8px; font-size: 13px;">
+          <select class="select" id="expJaar" style="width: auto; padding: 6px 8px; font-size: 13px;"
+            onchange="document.getElementById('btnExportJaar').textContent = '⬇ Exporteer ' + this.value">
             ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${j===new Date().getFullYear()?'selected':''}>${j}</option>`).join('')}
           </select>
           <input type="text" id="expBestandsnaam" class="input" placeholder="Bestandsnaam (optioneel)"
             style="width: 220px; padding: 6px 8px; font-size: 13px;" value="" />
-          <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value, document.getElementById('expBestandsnaam').value.trim())">⬇ Exporteer</button>
+          <button class="btn" id="btnExportJaar" onclick="window.actExportJaar(document.getElementById('expJaar').value, document.getElementById('expBestandsnaam').value.trim())">⬇ Exporteer ${new Date().getFullYear()}</button>
         </div>
         <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Laat leeg voor de standaardnaam met exportdatum (<code>Indeling_[jaar]_[dd-mm-jjjj].xlsx</code>) — elke export krijgt zo vanzelf een eigen naam.</p>
       </div>
@@ -374,10 +409,21 @@ export async function renderGebView() {
               </div>
             </details>
           ` : ''}
+          ${(p.geenDatumAantal || 0) > 0 ? `
+            <div style="background: #faeeda; color: #412402; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 10px;">
+              <b>${p.geenDatumAantal} regel${p.geenDatumAantal === 1 ? '' : 's'} zonder leesbare datum overgeslagen.</b>
+              De datum moet een jaartal bevatten (bijvoorbeeld 01-01-2027).<br>
+              ${(p.geenDatumVoorbeelden || []).map(x => `• ${String(x).replace(/</g,'&lt;')}`).join('<br>')}
+            </div>
+          ` : ''}
           <details style="margin-bottom: 10px;">
             <summary class="muted" style="cursor: pointer; font-size: 12px;">Voorbeeld eerste 3 dagen</summary>
             <pre style="font-size: 10px; overflow-x: auto; background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px; margin-top: 6px;">${(p.dagen.slice(0, 3).map(d => JSON.stringify(d, null, 2)).join('\n\n')).replace(/</g,'&lt;')}</pre>
           </details>
+          <div style="background: #eef4ff; color: #1a3a6b; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; border-left: 3px solid #4a7fd4;">
+            <b>Er is nog niets opgeslagen.</b> Dit is alleen een voorbeeld van wat er in het bestand staat.
+            Druk op <b>Importeer</b> hieronder om het echt weg te schrijven.
+          </div>
           <div style="display: flex; gap: 8px;">
             <button class="btn" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportAnnuleren()">Annuleren</button>
             <button class="btn btn-primary" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportSchrijven()">${bezig ? 'Schrijven…' : 'Importeer (vervangt Firestore)'}</button>
@@ -573,6 +619,11 @@ export async function renderGebView() {
         <span class="muted" style="font-size:11px;">v${v}</span>
       </div>
     </div>
+    ${gebOk ? '' : `
+      <div style="background:#faeeda; color:#412402; padding:8px 10px; border-radius:6px; font-size:12px; margin-bottom:8px;">
+        ⚠ De app-gebruikers konden niet opgehaald worden; je ziet mogelijk verouderde accountgegevens.
+        <button class="btn" style="margin-left:6px; padding:2px 8px; font-size:12px;" onclick="window.herlaadBeheerTab()">Opnieuw proberen</button>
+      </div>`}
     <div class="beh-tabs1">${tabs1}</div>
     ${showBez ? `<div id="behpanel-bezetting" class="behpanel" style="display:${disp('bezetting')};">${htmlBezetting}</div>` : ''}
     ${showGeb ? `<div id="behpanel-gebruikers" class="behpanel" style="display:${disp('gebruikers')};">${gebPanel}</div>` : ''}
@@ -1162,6 +1213,14 @@ window.gebruikerVerwijderen = async function(uid, email) {
 };
 
 // Excel-import handlers — delegeer naar import.js, met renderGebView als callback
+// v3.32.7: knop "Opnieuw proberen" op de Beheer-tab. Maakt het vak eerst leeg
+// zodat de schil weer "Bezig met laden…" toont en het opnieuw probeert.
+window.herlaadBeheerTab     = () => {
+  const el = document.getElementById('view-geb');
+  if (el) el.innerHTML = '';
+  renderGebView();
+};
+
 window.actImportFile        = (input) => actImportFile(input, renderGebView);
 
 window.actMaakBackup = async function() {

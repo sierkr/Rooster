@@ -12,6 +12,10 @@
 import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, IS_TEST_DB } from './firebase-init.js';
 import { state } from './state.js';
+// v3.32.8: eigen dialoogvensters i.p.v. native prompt/alert/confirm — die
+// worden door sommige browsers onderdrukt, waardoor een backup (en daarmee de
+// import die eerst een backup maakt) geruisloos afbrak.
+import { meld, bevestig, vraagTekst } from './dialoog.js';
 
 // 'wijzigingen' zit er bewust NIET in: de Firestore-rules maken dat log
 // append-only (create eist uid == eigen uid, geen updates/deletes), dus een
@@ -108,18 +112,22 @@ async function ontsleutel(obj, wachtwoord) {
 
 // ---- Wachtwoord opvragen ----------------------------------------------------
 
-function vraagWachtwoord(titel, bevestig = false) {
-  const ww = prompt(titel + '\n\nLET OP: bij vergeten wachtwoord is de backup niet terug te zetten.');
+async function vraagWachtwoord(titel, herhaal = false) {
+  const ww = await vraagTekst(
+    'Wachtwoord voor de backup',
+    titel + '\n\nLET OP: bij een vergeten wachtwoord is de backup niet terug te zetten.',
+    { wachtwoord: true }
+  );
   if (!ww) return null;
-  if (bevestig) {
-    const ww2 = prompt('Bevestig het wachtwoord:');
+  if (herhaal) {
+    const ww2 = await vraagTekst('Bevestig het wachtwoord', 'Typ hetzelfde wachtwoord nog een keer.', { wachtwoord: true });
     if (ww !== ww2) {
-      alert('Wachtwoorden komen niet overeen. Backup geannuleerd.');
+      await meld('Wachtwoorden komen niet overeen', 'De backup is geannuleerd.');
       return null;
     }
   }
   if (ww.length < 6) {
-    alert('Wachtwoord moet minimaal 6 tekens zijn.');
+    await meld('Wachtwoord te kort', 'Het wachtwoord moet minimaal 6 tekens zijn.');
     return null;
   }
   return ww;
@@ -139,7 +147,7 @@ export async function maakClientBackup(reden = 'handmatig') {
     return { geblokkeerd: true, reden: 'test' };
   }
   // Wachtwoord opvragen (bij automatische voor-import backup ook)
-  const wachtwoord = vraagWachtwoord(
+  const wachtwoord = await vraagWachtwoord(
     `Kies een wachtwoord voor deze backup (reden: ${reden}).`,
     true
   );
@@ -221,7 +229,11 @@ export async function herstelClientBackup(file, onVoortgang = () => {}) {
   if (!envelop.encrypted) {
     throw new Error('Dit bestand is niet versleuteld of heeft een onbekend formaat.');
   }
-  const wachtwoord = prompt('Voer het wachtwoord in voor deze backup:');
+  const wachtwoord = await vraagTekst(
+    'Wachtwoord van de backup',
+    'Voer het wachtwoord in waarmee deze backup is versleuteld.',
+    { wachtwoord: true }
+  );
   if (!wachtwoord) throw new Error('Geen wachtwoord ingevoerd.');
 
   onVoortgang('Ontsleutelen…');
@@ -235,14 +247,15 @@ export async function herstelClientBackup(file, onVoortgang = () => {}) {
   // De oude restore was altijd een merge: documenten die ná de backup zijn
   // ontstaan bleven staan, met een inconsistente mengstaat als risico
   // (bv. een import terugdraaien terwijl de import ook nieuwe dagen aanmaakte).
-  const volledig = confirm(
-    'Volledige terugzetting?\n\n' +
-    'OK — de database wordt exact gelijkgemaakt aan de backup: documenten ' +
+  const volledig = await bevestig(
+    'Volledige terugzetting?',
+    'Volledig — de database wordt exact gelijkgemaakt aan de backup: documenten ' +
     'die NA de backup zijn ontstaan worden verwijderd. Aanbevolen bij het ' +
     'terugdraaien van een mislukte import of wijziging.\n\n' +
-    'Annuleren — alleen overschrijven/aanvullen: documenten van na de ' +
+    'Aanvullen — alleen overschrijven/aanvullen: documenten van na de ' +
     'backup blijven staan (oude gedrag).\n\n' +
-    '(Het wijzigingen- en audit-log wordt in beide gevallen nooit aangeraakt.)'
+    '(Het wijzigingen- en audit-log wordt in beide gevallen nooit aangeraakt.)',
+    'Volledig', 'Aanvullen'
   );
 
   const collecties = meta.collecties || BACKUP_COLLECTIES;
