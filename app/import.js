@@ -14,6 +14,8 @@ import { maakClientBackup } from './backup-client.js';
 // v3.32.8: eigen dialoogvensters i.p.v. native alert/confirm — die worden door
 // sommige browsers onderdrukt, waardoor de import geruisloos niets deed.
 import { meld, bevestig } from './dialoog.js';
+// v3.33.0: elke import laat voortaan een spoor na in het logboek.
+import { legVast, tel } from './logboek.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
 const NABIJ_DAGEN = 30;
@@ -694,6 +696,24 @@ export async function actImportSchrijven(renderGebView) {
       p.dagen,
       state.user?.uid || 'import'
     );
+
+    // v3.33.0: import vastleggen in het logboek — wie, wanneer, welk bestand,
+    // hoeveel dagen en gevulde cellen erin zaten en hoeveel er echt wijzigde.
+    {
+      const telling = tel(p.dagen);
+      await legVast({
+        soort: 'import',
+        bestandsnaam: p.bestandnaam,
+        jaar: Object.keys(telling.jaren).sort().join(', '),
+        dagen: telling.dagen,
+        gevulde_cellen: telling.gevuldeCellen,
+        gevulde_dagen: telling.gevuldeDagen,
+        per_kolom: telling.perKolom,
+        dagen_per_jaar: telling.jaren,
+        gewijzigde_cellen: p.totaalGewijzigd || 0,
+        jaarfilter: p.filterJaar || '',
+      });
+    }
 
     let berichtDelen = [`${geschreven} dagen weggeschreven.`];
     if (wijzigingenGeschreven > 0) berichtDelen.push(`${wijzigingenGeschreven} cel${wijzigingenGeschreven === 1 ? '' : 'len'} gemarkeerd als ongelezen voor betrokken radiologen.`);

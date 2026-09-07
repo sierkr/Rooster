@@ -23,6 +23,8 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { db } from './firebase-init.js';
 import { state, HOOFD_FUNCTIES, SLOTS } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM } from './import.js';
+// v3.33.0: elke export laat voortaan een spoor na in het logboek.
+import { legVast, tel } from './logboek.js';
 import {
   isHoofd, functieFlags, hoofdLetterCode, plusDagen, vandaagIso, huidigKalenderJaar,
   bezettingOpDatum, bezettingenInRange, alleVasteStoelIds,
@@ -942,6 +944,21 @@ export async function actExportJaar(jaar, naamParam) {
       ? (naamParam.trim().endsWith('.xlsx') ? naamParam.trim() : naamParam.trim() + '.xlsx')
       : defaultNaam;
     downloadBlob(buffer, bestandsnaam);
+
+    // v3.33.0: vastleggen wát er in dit bestand zat. Een export is een foto van
+    // de database; zonder deze telling was achteraf niet vast te stellen of een
+    // bestand vol of nagenoeg leeg was.
+    const telling = tel(dagen);
+    await legVast({
+      soort: 'export',
+      jaar: String(jaar),
+      bestandsnaam,
+      dagen: telling.dagen,
+      gevulde_cellen: telling.gevuldeCellen,
+      gevulde_dagen: telling.gevuldeDagen,
+      per_kolom: telling.perKolom,
+      kolommen: radKolommen,
+    });
 
   } catch (e) {
     console.error('actExportJaar', e);

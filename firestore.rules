@@ -268,6 +268,24 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
+    // export_log/ - v3.33.0: logboek van Excel-exports en -imports.
+    //
+    // Legt per export/import vast wie het deed, wanneer, welk jaar en hoeveel
+    // dagen/gevulde cellen erin zaten. Zonder dit spoor was achteraf niet te
+    // zien wat er in een geexporteerd bestand stond.
+    //
+    // Anders dan audit_log wordt dit door de app zelf geschreven, dus het is
+    // niet onvervalsbaar. Schrijven mag alleen wie ook mag beheren (dat is
+    // precies wie bij de Excel-tab kan); lezen alleen een beheerder.
+    // Wijzigen en verwijderen kan niemand: een logregel staat vast.
+    // -----------------------------------------------------------------------
+    match /export_log/{id} {
+      allow read:   if isBeheerder();
+      allow create: if isBeheerder() || heeftMagBeheer();
+      allow update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
     // bezetting_mutaties/ - logboek van stoel-ingrepen (voor terugdraaien)
     // -----------------------------------------------------------------------
     match /bezetting_mutaties/{id} {

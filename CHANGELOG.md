@@ -1,3 +1,41 @@
+## v3.33.0 — Logboek: wie werkte wanneer, en wat zat er in dat Excel-bestand
+
+Nieuw scherm onder **Beheer → Control → Logboek**, met twee tabbladen.
+
+### "Wie deed wat" — een venster op wat er al lag
+Sinds v3.28.0 schrijft de Cloud Function `auditIndeling` bij élke wijziging aan
+een roosterdag een regel naar `audit_log`: wie, welke dag, welk veld, van →
+naar, servertijd. Onvervalsbaar — alleen de server schrijft erin. Er was alleen
+nooit een scherm om het te bekijken; de gegevens lagen er maanden ongezien.
+
+- Nieuwste bovenaan, te filteren op roosterjaar en op persoon.
+- Per regel: roosterdag, naam, tijdstip en wat er veranderde (van → naar).
+- Bovenaan een telling per persoon over de getoonde periode.
+- Wordt pas opgehaald als je het tabblad opent.
+
+Twee beperkingen, in het scherm zelf ook vermeld: de trigger draait alleen op
+de live-database (in test blijft dit leeg) en het log begint bij v3.28.0.
+
+### "Exports en imports" — nieuw
+Export en import lieten geen enkel spoor na. Achteraf was daardoor niet vast te
+stellen wát er in een geëxporteerd bestand zat — precies de vraag die ontstond
+toen een 2027-export leeg bleek te zijn.
+
+Nieuwe collectie `export_log`. Per export en per import wordt vastgelegd: wie,
+wanneer, welk jaar, de bestandsnaam, het aantal dagen, het **aantal gevulde
+cellen**, het aantal gevulde dagen en de telling per stoel. Bij een import
+bovendien het aantal daadwerkelijk gewijzigde cellen en de stand van het
+jaarfilter. Een bestand zonder enkele gevulde cel wordt rood gemarkeerd als
+"leeg bestand".
+
+Anders dan `audit_log` schrijft de app dit zelf. Het is dus compleet, maar niet
+onvervalsbaar. Ook dat staat in het scherm vermeld.
+
+### Rechten
+Alleen een beheerder kan het logboek lezen. Schrijven mag wie ook mag beheren —
+dat is precies wie bij de Excel-tab kan. Wijzigen en verwijderen kan niemand:
+een logregel ligt vast.
+
 ## v3.32.8 — De import hangt niet meer aan browser-popups
 
 De import gebruikte de ingebouwde popups van de browser (`confirm`, `alert`,

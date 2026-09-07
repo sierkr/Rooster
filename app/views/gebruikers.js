@@ -21,6 +21,8 @@ import { openSheet, closeSheet } from '../sheets.js';
 import { IMPORT_SHEET, actImportFile, actImportSchrijven, actImportAnnuleren, actZetImportJaar } from '../import.js';
 import { actExportJaar } from '../export.js';
 import { maakClientBackup, herstelClientBackup } from '../backup-client.js';
+// v3.33.0: logboek-scherm (audit_log + export_log).
+import { renderLogboek } from './logboek.js';
 import {
   laadBezettingMutaties, snapshotStoelen, registreerMutatie, renderRecenteMutaties,
   impactVanaf, impactTekst,
@@ -604,9 +606,11 @@ async function _tekenGebView(container) {
     <div class="beh-tabs2">
       ${canReg ? tab2('ctl','regels','Regels',true) : ''}
       ${canGeb ? tab2('ctl','overig','Overige instellingen',!regelsDefault) : ''}
+      ${canGeb ? tab2('ctl','logboek','Logboek',false) : ''}
     </div>
     ${canReg ? `<div id="ctlsub-regels" class="ctlsub"><div id="view-reg" class="view"></div></div>` : ''}
     ${canGeb ? `<div id="ctlsub-overig" class="ctlsub" style="${regelsDefault?'display:none;':''}">${htmlOverig}</div>` : ''}
+    ${canGeb ? `<div id="ctlsub-logboek" class="ctlsub" style="display:none;"><div id="view-logboek"></div></div>` : ''}
   `;
 
   container.innerHTML = `
@@ -661,12 +665,15 @@ window.gebTab1 = function(id) {
 window.gebTab2 = function(scope, id) {
   _behTab2[scope] = id;
   const prefix = scope === 'geb' ? 'gebsub-' : 'ctlsub-';
-  const keys = scope === 'geb' ? ['rad','tech','sec'] : ['regels','overig'];
+  const keys = scope === 'geb' ? ['rad','tech','sec'] : ['regels','overig','logboek'];
   keys.forEach(k => {
     const el = document.getElementById(prefix + k);
     if (el) el.style.display = (k === id) ? 'block' : 'none';
   });
   document.querySelectorAll('.beh-tab2[data-scope="' + scope + '"]').forEach(b => b.classList.toggle('active', b.dataset.t === id));
+  // v3.33.0: het logboek pas ophalen als je het opent — het zijn losse
+  // Firestore-leesacties die niemand hoeft te betalen zolang het dicht is.
+  if (scope === 'ctl' && id === 'logboek') renderLogboek();
 };
 
 // ==== Handlers ===============================================================

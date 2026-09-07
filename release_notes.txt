@@ -1,3 +1,40 @@
+Rooster v3.33.0 — Release notes
+==================================
+
+NIEUW: LOGBOEK (Beheer > Control > Logboek)
+----------------------------------------------------------------------------
+
+TABBLAD "WIE DEED WAT"
+Sinds v3.28.0 schrijft de server bij elke wijziging aan een roosterdag een
+regel weg: wie, welke dag, welk veld, van naar wat, en het tijdstip. Dat log
+was onvervalsbaar maar nergens te zien. Nu wel.
+
+- Nieuwste bovenaan, te filteren op roosterjaar en op persoon.
+- Per regel: roosterdag, naam, tijdstip en wat er veranderde.
+- Bovenaan een telling per persoon.
+- Wordt pas opgehaald als je het tabblad opent.
+
+Let op: dit log wordt alleen op de live-omgeving gevuld (in test blijft het
+leeg) en het begint bij versie 3.28.0.
+
+TABBLAD "EXPORTS EN IMPORTS"
+Export en import lieten geen spoor na. Achteraf was niet vast te stellen wat
+er in een geexporteerd bestand zat.
+
+- Per export en import: wie, wanneer, welk jaar, bestandsnaam, aantal dagen,
+  aantal gevulde cellen, aantal gevulde dagen en de telling per stoel.
+- Bij een import ook het aantal daadwerkelijk gewijzigde cellen en de stand
+  van het jaarfilter.
+- Een bestand zonder een enkele gevulde cel wordt rood gemarkeerd als "leeg
+  bestand".
+
+Dit tabblad wordt door de app zelf geschreven: compleet, maar niet
+onvervalsbaar zoals het eerste tabblad. Het begint bij versie 3.33.0.
+
+RECHTEN
+Alleen een beheerder kan het logboek lezen. Wijzigen of verwijderen van een
+logregel kan niemand.
+
 Rooster v3.32.8 — Release notes
 ==================================
 
