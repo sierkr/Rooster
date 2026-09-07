@@ -23,6 +23,13 @@ import { actExportJaar } from '../export.js';
 import { maakClientBackup, herstelClientBackup } from '../backup-client.js';
 // v3.33.0: logboek-scherm (audit_log + export_log).
 import { renderLogboek } from './logboek.js';
+// v3.33.2: de terugdraai-knop hoort bij de import, niet in het logboek — wie
+// zich vergist heeft staat op de Excel-tab.
+import {
+  laatsteTerugdraaiPunt, laadTerugdraaiPunt, draaiTerug, tijdTekst,
+  schrijfactieBezig, zetSchrijfactie, vergeetLaatstePunt, laadExportLog,
+} from '../logboek.js';
+import { meld as dlgMeld, bevestig as dlgBevestig } from '../dialoog.js';
 import {
   laadBezettingMutaties, snapshotStoelen, registreerMutatie, renderRecenteMutaties,
   impactVanaf, impactTekst,
@@ -110,6 +117,7 @@ async function _tekenGebView(container) {
   if (!canGeb && !canReg) { container.innerHTML = '<div class="empty-state">Geen toegang</div>'; return; }
 
   const gebOk = canGeb ? await laadGebruikers() : true;
+  const terugPunt = canGeb ? await laatsteTerugdraaiPunt() : null;
   if (canGeb) await laadBezettingMutaties();
   const rads = radiologenMap();
 
@@ -430,6 +438,40 @@ async function _tekenGebView(container) {
             <button class="btn" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportAnnuleren()">Annuleren</button>
             <button class="btn btn-primary" style="flex: 1;" ${bezig?'disabled':''} onclick="window.actImportSchrijven()">${bezig ? 'Schrijven…' : 'Importeer (vervangt Firestore)'}</button>
           </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  // v3.33.2: terugdraai-blok, direct onder de import. Er is precies één punt —
+  // dat van de laatste import — dus er valt niets te kiezen en er kan niet per
+  // ongeluk verder terug gegrepen worden dan die ene import.
+  htmlExcel += `
+    <div style="margin-top: 1.5rem;">
+      <div class="summary-label" style="margin-bottom: 6px;">Laatste import terugdraaien</div>
+      <div class="card">
+        ${!terugPunt ? `
+          <p class="muted" style="margin:0; font-size:12px;">
+            Er is nog geen import om terug te draaien. Bij elke import bewaart de app
+            de vorige inhoud van de betrokken dagen; alleen de laatste import kan
+            teruggedraaid worden.
+          </p>
+        ` : terugPunt.teruggedraaid ? `
+          <p style="margin:0 0 4px; font-size:13px;">
+            <b>${esc(terugPunt.bestandsnaam || 'onbekend bestand')}</b> · ${esc(terugPunt.jaren || '')} · ${terugPunt.aantal_dagen || 0} dagen
+          </p>
+          <p class="muted" style="margin:0; font-size:12px;">
+            Al teruggedraaid op ${esc(tijdTekst(terugPunt.teruggedraaid_op))}${terugPunt.teruggedraaid_door ? ' door ' + esc(terugPunt.teruggedraaid_door) : ''}.
+          </p>
+        ` : `
+          <p style="margin:0 0 4px; font-size:13px;">
+            <b>${esc(terugPunt.bestandsnaam || 'onbekend bestand')}</b> · ${esc(terugPunt.jaren || '')} · ${terugPunt.aantal_dagen || 0} dagen
+          </p>
+          <p class="muted" style="margin:0 0 10px; font-size:12px;">
+            Geïmporteerd op ${esc(tijdTekst(terugPunt.wanneer || terugPunt.wanneer_lokaal))}${terugPunt.naam || terugPunt.email ? ' door ' + esc(terugPunt.naam || terugPunt.email) : ''}.
+            Terugdraaien zet precies deze dagen terug naar hoe ze vlak vóór die import waren.
+          </p>
+          <button class="btn" style="width:100%;" onclick="window.draaiLaatsteImportTerug()">↩ Deze import terugdraaien</button>
         `}
       </div>
     </div>
@@ -1226,6 +1268,44 @@ window.herlaadBeheerTab     = () => {
   const el = document.getElementById('view-geb');
   if (el) el.innerHTML = '';
   renderGebView();
+};
+
+// v3.33.2: de laatste import terugdraaien. Het venster verschijnt meteen uit de
+// gegevens die al op het scherm staan; de database wordt pas aangeraakt nadat
+// je bevestigt. Voorheen werd er eerst gelezen en gebeurde er ondertussen
+// zichtbaar niets.
+window.draaiLaatsteImportTerug = async () => {
+  const punt = await laatsteTerugdraaiPunt();
+  if (!punt) { await dlgMeld('Niets om terug te draaien', 'Er is geen terugdraai-punt bewaard.'); return; }
+  if (punt.teruggedraaid) { await dlgMeld('Al teruggedraaid', 'Deze import is al teruggedraaid.'); return; }
+  if (schrijfactieBezig()) {
+    await dlgMeld('Even wachten', 'Er loopt al een import of terugdraaiing. Wacht tot die klaar is.');
+    return;
+  }
+
+  const ok = await dlgBevestig(
+    'Import terugdraaien',
+    `Je zet ${punt.aantal_dagen || 0} dagen (${punt.jaren || '?'}) terug naar hoe ze waren vlak vóór de import van '${punt.bestandsnaam || 'onbekend bestand'}' van ${tijdTekst(punt.wanneer || punt.wanneer_lokaal)}.\n\n` +
+    `Alles wat sinds die import op déze dagen is gewijzigd, gaat daarmee verloren. Dagen die vóór de import niet bestonden worden verwijderd.\n\n` +
+    `Andere dagen en de rest van de database blijven onaangeroerd.`,
+    'Terugdraaien', 'Annuleren'
+  );
+  if (!ok) return;
+
+  zetSchrijfactie(true);
+  const knop = document.querySelector('[onclick="window.draaiLaatsteImportTerug()"]');
+  if (knop) { knop.disabled = true; knop.textContent = 'Bezig met terugdraaien…'; }
+  try {
+    const { hersteld, verwijderd } = await draaiTerug(punt.id);
+    await dlgMeld('Teruggedraaid', `${hersteld} dagen hersteld, ${verwijderd} dagen verwijderd.`);
+  } catch (e) {
+    console.error('draaiLaatsteImportTerug', e);
+    await dlgMeld('Terugdraaien mislukt', String(e.message || e));
+  } finally {
+    zetSchrijfactie(false);
+    vergeetLaatstePunt();
+    renderGebView();
+  }
 };
 
 window.actImportFile        = (input) => actImportFile(input, renderGebView);

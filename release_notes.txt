@@ -1,3 +1,58 @@
+Rooster v3.33.2 — Release notes
+==================================
+
+TERUGDRAAIEN: EEN PUNT, EEN PLEK
+----------------------------------------------------------------------------
+- Er blijft nog maar EEN terugdraai-punt bewaard: dat van de laatste import.
+  Een nieuwe import vervangt het. Verder terug grijpen dan de laatste import
+  kan daarmee niet meer.
+
+- De knop staat nu op de Excel-tab, direct onder de import, met welk bestand
+  als laatste is ingelezen, wanneer, door wie en hoeveel dagen. Uit het
+  logboek is de knop verdwenen; daar staat alleen nog of een import is
+  teruggedraaid.
+
+- Het venster verschijnt meteen in plaats van na een onzichtbare wachttijd.
+  De database wordt pas aangeraakt nadat je bevestigt. Tijdens het
+  terugdraaien staat er "Bezig met terugdraaien..." en is de knop uit.
+
+- Een import en een terugdraaiing kunnen niet meer tegelijk lopen.
+
+De backup-knop onder Overige instellingen blijft ongewijzigd: dat is de hele
+database terugzetten, een ander gereedschap op een andere plek.
+
+Rooster v3.33.1 — Release notes
+==================================
+
+EEN IMPORT TERUGDRAAIEN IS NU EEN KNOP
+----------------------------------------------------------------------------
+Herstel na een verkeerde import hing aan twee dingen die bij een persoon
+lagen: een backupbestand op hun computer en een wachtwoord in hun hoofd.
+Bovendien is een volledige database-backup een moker voor wat er in de
+praktijk misgaat: een import.
+
+- Vlak voor het wegschrijven bewaart de app de huidige inhoud van precies de
+  dagen die de import overschrijft, in de database zelf.
+
+- In het logboek staat bij elke import de knop "Deze import terugdraaien".
+  Geen bestand, geen wachtwoord: elke beheerder kan het, vanaf elk apparaat.
+
+- Het raakt alleen de dagen van die import. Dagen die er voor de import nog
+  niet waren, worden weer verwijderd, zodat de stand exact terugkomt.
+
+- De vijf nieuwste punten blijven bewaard; oudere worden automatisch
+  opgeruimd. Een heel jaar kost enkele tientallen kilobytes.
+
+MISLUKTE BACKUP LOOPT NIET MEER STILZWIJGEND DOOR
+----------------------------------------------------------------------------
+Ging er tijdens de backup iets fout, dan liep de import gewoon door met alleen
+een regel in de console. Zo kon een import zonder backup gebeuren zonder dat
+iemand het merkte.
+
+De app stelt nu altijd de vraag, met de foutmelding erbij en met de stand van
+het terugdraai-punt. De backup blijft bestaan als breed vangnet, maar is niet
+langer de enige weg terug.
+
 Rooster v3.33.0 — Release notes
 ==================================
 

@@ -15,7 +15,10 @@ import { maakClientBackup } from './backup-client.js';
 // sommige browsers onderdrukt, waardoor de import geruisloos niets deed.
 import { meld, bevestig } from './dialoog.js';
 // v3.33.0: elke import laat voortaan een spoor na in het logboek.
-import { legVast, tel } from './logboek.js';
+import {
+  legVast, tel, maakTerugdraaiPunt,
+  schrijfactieBezig, zetSchrijfactie, vergeetLaatstePunt,
+} from './logboek.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
 const NABIJ_DAGEN = 30;
@@ -550,6 +553,13 @@ export async function actImportSchrijven(renderGebView) {
     await meld('Geen rechten', 'Alleen een beheerder kan een import wegschrijven (Firestore-rechten).');
     return;
   }
+  // v3.33.2: één schrijfactie tegelijk. Voorheen kon een import starten terwijl
+  // een terugdraaiing nog liep — beide schreven dan over dezelfde dagen en won
+  // degene die toevallig als laatste klaar was.
+  if (schrijfactieBezig()) {
+    await meld('Even wachten', 'Er loopt al een import of terugdraaiing. Wacht tot die klaar is.');
+    return;
+  }
   // Tel wijzigingen binnen de 30-dagengrens vóór bevestiging
   const vandaag = vandaagIso();
   const grens   = plusDagen(vandaag, NABIJ_DAGEN);
@@ -603,34 +613,65 @@ export async function actImportSchrijven(renderGebView) {
   if (!ok) return;
 
   state.importBezig = true;
+  zetSchrijfactie(true);
   renderGebView();
   try {
-    // 0. Backup vóór schrijven — download JSON zodat altijd teruggedraaid kan worden.
-    //    In de testomgeving is een backup geblokkeerd; dan slaan we deze stap
-    //    over (testdata hoeft niet veiliggesteld te worden).
+    // 0a. Terugdraai-punt (v3.33.1). Bewaart de huidige inhoud van precies de
+    //     dagen die deze import overschrijft, in de database zelf. Daarmee is
+    //     terugdraaien later een knop in het logboek in plaats van een bestand
+    //     met een wachtwoord op de computer van wie toevallig importeerde.
+    //     Dit gebeurt vóór de backup, zodat het punt er ook is als de backup
+    //     niet lukt.
+    const terugdraaiId = await maakTerugdraaiPunt(p.dagen, p.bestandnaam);
+    if (!terugdraaiId) {
+      const doorgaan = await bevestig(
+        'Terugdraai-punt niet gemaakt',
+        'Het lukte niet om de huidige inhoud van deze dagen te bewaren.\n\n' +
+        'Je kunt deze import dan later niet met één knop terugdraaien.\n\n' +
+        'Wil je toch doorgaan?',
+        'Toch doorgaan', 'Stoppen'
+      );
+      if (!doorgaan) {
+        await meld('Import afgebroken', 'Er is niets gewijzigd.');
+        return; // het slot en importBezig worden in de finally hersteld
+      }
+    }
+
+    // 0b. Backup vóór schrijven — download JSON als breed vangnet voor het
+    //     grovere geval. In de testomgeving is een backup geblokkeerd; dan
+    //     slaan we deze stap over (testdata hoeft niet veiliggesteld te worden).
+    //
+    //     v3.33.1: een MISLUKTE backup liep hier stilzwijgend door — alleen een
+    //     regel in de console, niets op het scherm. Zo kon een import zonder
+    //     backup gebeuren zonder dat iemand het merkte. Nu wordt de vraag altijd
+    //     gesteld, met de fout erbij en met de stand van het terugdraai-punt.
     if (!IS_TEST_DB) {
+      const vangnet = terugdraaiId
+        ? 'Het terugdraai-punt van deze import is er wél, dus je kunt hem via het logboek terugdraaien.'
+        : 'Er is ook géén terugdraai-punt; deze import is straks niet met één knop ongedaan te maken.';
+      let backupFout = null;
+      let backupResultaat;
       try {
-        const backupResultaat = await maakClientBackup('voor-import');
-        if (backupResultaat === null) {
-          // Gebruiker heeft wachtwoord-prompt geannuleerd — geen backup gemaakt
-          const doorgaan = await bevestig(
-            'Geen backup gemaakt',
-            'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.\n\n' +
-            'Zonder backup kun je de import niet terugdraaien als er iets misgaat.\n\n' +
-            'Wil je toch doorgaan zonder backup?',
-            'Doorgaan zonder backup', 'Stoppen'
-          );
-          if (!doorgaan) {
-            // v3.32.7: eerder keerde de import hier zonder één woord terug —
-            // niet te onderscheiden van een import die wél had gewerkt.
-            await meld('Import afgebroken', 'Er is niets gewijzigd.');
-            state.importBezig = false;
-            renderGebView();
-            return;
-          }
-        }
+        backupResultaat = await maakClientBackup('voor-import');
       } catch (backupErr) {
-        console.warn('Backup mislukt (import gaat wel door):', backupErr);
+        backupFout = backupErr;
+        console.warn('Backup mislukt:', backupErr);
+      }
+      if (backupFout || backupResultaat === null) {
+        const reden = backupFout
+          ? `De backup is mislukt: ${backupFout.message || backupFout}`
+          : 'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.';
+        const doorgaan = await bevestig(
+          'Geen backup gemaakt',
+          `${reden}\n\n${vangnet}\n\nWil je doorgaan met de import?`,
+          'Doorgaan', 'Stoppen'
+        );
+        if (!doorgaan) {
+          // v3.32.7: eerder keerde de import hier zonder één woord terug —
+          // niet te onderscheiden van een import die wél had gewerkt.
+          await meld('Import afgebroken', 'Er is niets gewijzigd.');
+          return; // het slot en importBezig worden in de finally hersteld
+        }
       }
     }
 
@@ -712,6 +753,7 @@ export async function actImportSchrijven(renderGebView) {
         dagen_per_jaar: telling.jaren,
         gewijzigde_cellen: p.totaalGewijzigd || 0,
         jaarfilter: p.filterJaar || '',
+        snapshot_id: terugdraaiId || null,
       });
     }
 
@@ -722,11 +764,13 @@ export async function actImportSchrijven(renderGebView) {
     await meld('Import klaar', berichtDelen.join('\n'));
 
     state.importPreview = null;
+    vergeetLaatstePunt();
   } catch (e) {
     console.error('actImportSchrijven', e);
     await meld('Schrijven mislukt', String(e.message || e));
   } finally {
     state.importBezig = false;
+    zetSchrijfactie(false);
     renderGebView();
   }
 }

@@ -19,12 +19,28 @@
 
 import {
   collection, addDoc, getDocs, query, orderBy, limit, where, serverTimestamp,
+  doc, setDoc, getDoc, updateDoc, deleteDoc, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
 import { state } from './state.js';
 
 export const EXPORT_LOG = 'export_log';
 export const AUDIT_LOG  = 'audit_log';
+export const SNAPSHOTS  = 'import_snapshots';
+
+// v3.33.2: er blijft er precies ÉÉN bewaard — dat van de laatste import.
+// Terugdraaien is een noodgreep voor de import die je net verkeerd inschatte;
+// die gebruik je binnen minuten, niet drie imports later. Meer punten bewaren
+// maakte een oude knop mogelijk die stilletjes recent werk opruimt. Met één
+// punt kan dat niet: verder terug dan de laatste import bestaat gewoon niet.
+const BEWAAR_PUNTEN = 1;
+
+// Eén slot voor schrijfacties die over dezelfde roosterdagen gaan. Zonder dit
+// konden een import en een terugdraaiing tegelijk lopen en won degene die
+// toevallig als laatste klaar was.
+let _bezig = false;
+export function schrijfactieBezig() { return _bezig; }
+export function zetSchrijfactie(aan) { _bezig = !!aan; }
 
 // ---- Schrijven --------------------------------------------------------------
 
@@ -139,4 +155,170 @@ export function diffTekst(velden) {
     }
   }
   return delen.join(' · ');
+}
+
+
+// ---- Terugdraai-punten (v3.33.1) -------------------------------------------
+//
+// Vóór een import bewaren we de HUIDIGE inhoud van precies de dagen die de
+// import gaat overschrijven. Niet als bestand met een wachtwoord — dat belandt
+// op de computer van degene die toevallig importeerde — maar in de database
+// zelf. Zo kan elke beheerder een import later met één knop terugdraaien,
+// vanaf elk apparaat.
+//
+// Opslag: één meta-document per punt, plus per kalendermaand één document met
+// de dagen erin. Die opsplitsing houdt elk document ruim onder de limiet van
+// Firestore (1 MB) en maakt terugdraaien in behapbare brokken mogelijk.
+// Een dag die vóór de import nog niet bestond wordt als null bewaard; bij
+// terugdraaien wordt zo'n dag weer verwijderd.
+
+function _maandVan(datum) { return String(datum).slice(0, 7); }
+
+// Maakt het terugdraai-punt. `dagen` is de lijst uit de import-preview; de
+// vorige inhoud komt uit state.indelingMap, dat door actImportFile al voor het
+// volledige datumbereik van het bestand is bijgeladen.
+// Geeft het id van het punt terug, of null als het niet lukte (een import mag
+// hier nooit op stuklopen).
+export async function maakTerugdraaiPunt(dagen, bestandsnaam) {
+  try {
+    const perMaand = {};
+    const jaren = {};
+    (dagen || []).forEach(d => {
+      const m = _maandVan(d.datum);
+      if (!perMaand[m]) perMaand[m] = {};
+      const bestaand = state.indelingMap[d.datum];
+      if (bestaand) {
+        const { id: _id, ...rest } = bestaand;
+        perMaand[m][d.datum] = rest;
+      } else {
+        perMaand[m][d.datum] = null; // bestond niet → bij terugdraaien weghalen
+      }
+      const j = String(d.datum).slice(0, 4);
+      jaren[j] = (jaren[j] || 0) + 1;
+    });
+
+    const maanden = Object.keys(perMaand).sort();
+    const metaRef = doc(collection(db, SNAPSHOTS));
+
+    for (const m of maanden) {
+      await setDoc(doc(db, SNAPSHOTS, metaRef.id, 'maanden', m), { dagen: perMaand[m] });
+    }
+
+    await setDoc(metaRef, {
+      wanneer: serverTimestamp(),
+      wanneer_lokaal: new Date().toISOString(),
+      uid: state.user?.uid || null,
+      email: state.profiel?.email || null,
+      naam: state.profiel?.naam || null,
+      bestandsnaam: bestandsnaam || '',
+      jaren: Object.keys(jaren).sort().join(', '),
+      aantal_dagen: (dagen || []).length,
+      maanden,
+      teruggedraaid: false,
+    });
+
+    await _ruimOudePuntenOp();
+    vergeetLaatstePunt();
+    return metaRef.id;
+  } catch (e) {
+    console.warn('maakTerugdraaiPunt mislukt', e && e.message);
+    return null;
+  }
+}
+
+// Ruimt alles op behalve de BEWAAR_PUNTEN nieuwste (sinds v3.33.2: één).
+async function _ruimOudePuntenOp() {
+  try {
+    const snap = await getDocs(query(collection(db, SNAPSHOTS), orderBy('wanneer_lokaal', 'desc')));
+    const teOud = snap.docs.slice(BEWAAR_PUNTEN);
+    for (const d of teOud) {
+      const maanden = (d.data().maanden) || [];
+      for (const m of maanden) {
+        await deleteDoc(doc(db, SNAPSHOTS, d.id, 'maanden', m)).catch(() => null);
+      }
+      await deleteDoc(doc(db, SNAPSHOTS, d.id)).catch(() => null);
+    }
+  } catch (e) {
+    console.warn('opruimen terugdraai-punten mislukt', e && e.message);
+  }
+}
+
+// Onthoudt het laatste punt zodat de Excel-tab het kan tonen zonder bij elke
+// hertekening opnieuw te lezen. Na een import of terugdraaiing vergeten we het.
+let _laatste = null;
+let _laatsteGeladen = false;
+
+export function vergeetLaatstePunt() { _laatste = null; _laatsteGeladen = false; }
+
+export async function laatsteTerugdraaiPunt() {
+  if (_laatsteGeladen) return _laatste;
+  try {
+    const snap = await getDocs(
+      query(collection(db, SNAPSHOTS), orderBy('wanneer_lokaal', 'desc'), limit(1))
+    );
+    _laatste = snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+  } catch (e) {
+    console.warn('laatsteTerugdraaiPunt mislukt', e && e.message);
+    _laatste = null;
+  }
+  _laatsteGeladen = true;
+  return _laatste;
+}
+
+export async function laadTerugdraaiPunt(id) {
+  const d = await getDoc(doc(db, SNAPSHOTS, id));
+  return d.exists() ? { id: d.id, ...d.data() } : null;
+}
+
+// Zet de bewaarde dagen terug. Geeft { hersteld, verwijderd } terug.
+// onVoortgang(tekst) wordt per maand aangeroepen.
+export async function draaiTerug(id, onVoortgang = () => {}) {
+  const meta = await laadTerugdraaiPunt(id);
+  if (!meta) throw new Error('Dit terugdraai-punt bestaat niet meer.');
+  if (meta.teruggedraaid) throw new Error('Deze import is al teruggedraaid.');
+
+  let hersteld = 0, verwijderd = 0;
+  for (const m of (meta.maanden || [])) {
+    const mSnap = await getDoc(doc(db, SNAPSHOTS, id, 'maanden', m));
+    if (!mSnap.exists()) continue;
+    const dagen = mSnap.data().dagen || {};
+    const datums = Object.keys(dagen).sort();
+    for (let i = 0; i < datums.length; i += 400) {
+      const batch = writeBatch(db);
+      datums.slice(i, i + 400).forEach(datum => {
+        const vorige = dagen[datum];
+        if (vorige === null || vorige === undefined) {
+          batch.delete(doc(db, 'indeling', datum));
+          verwijderd++;
+        } else {
+          batch.set(doc(db, 'indeling', datum), vorige);
+          hersteld++;
+        }
+      });
+      await batch.commit();
+    }
+    onVoortgang(`${m} teruggezet`);
+  }
+
+  await updateDoc(doc(db, SNAPSHOTS, id), {
+    teruggedraaid: true,
+    teruggedraaid_op: serverTimestamp(),
+    teruggedraaid_door: state.profiel?.naam || state.profiel?.email || state.user?.uid || null,
+  });
+
+  vergeetLaatstePunt();
+
+  await legVast({
+    soort: 'terugdraaien',
+    jaar: meta.jaren || '',
+    bestandsnaam: meta.bestandsnaam || '',
+    dagen: hersteld + verwijderd,
+    gevulde_cellen: 0,
+    gevulde_dagen: 0,
+    hersteld,
+    verwijderd,
+    snapshot_id: id,
+  });
+
+  return { hersteld, verwijderd };
 }

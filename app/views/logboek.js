@@ -1,4 +1,8 @@
-// Logboek-scherm (v3.33.0) — Beheer → Control → Logboek.
+// Logboek-scherm — Beheer → Control → Logboek.
+//
+// v3.33.2: dit scherm rapporteert alleen. De terugdraai-knop stond hier eerst,
+// maar hoort bij de import: wie zich vergist heeft staat op de Excel-tab, niet
+// in het logboek. Hier staat nog wél of een import is teruggedraaid.
 //
 // Twee tabbladen:
 //   "Wie deed wat"       — venster op de bestaande collectie audit_log, die
@@ -102,20 +106,27 @@ function _exportHtml() {
       </div>`;
   }
 
+  // v3.33.2: welke imports zijn teruggedraaid? Dat staat als eigen regel in
+  // ditzelfde logboek, dus dat kost geen extra leesactie.
+  const teruggedraaideIds = new Set(
+    rijen.filter(x => x.soort === 'terugdraaien' && x.snapshot_id).map(x => x.snapshot_id)
+  );
+
   const lijst = rijen.map(r => {
     const isImport = r.soort === 'import';
-    const kleur = isImport ? '#6b3a00' : '#1a4a2a';
-    const achtergrond = isImport ? '#fff4e0' : '#eefaf2';
+    const kleur = r.soort === 'terugdraaien' ? '#6b1414' : (isImport ? '#6b3a00' : '#1a4a2a');
+    const achtergrond = r.soort === 'terugdraaien' ? '#fbe9e9' : (isImport ? '#fff4e0' : '#eefaf2');
     const perKolom = Object.entries(r.per_kolom || {})
       .sort((a, b) => b[1] - a[1])
       .map(([k, v]) => `${esc(k)} ${v}`)
       .join(' · ');
     const leeg = (r.gevulde_cellen || 0) === 0;
+    const isTerug = r.soort === 'terugdraaien';
     return `
       <div style="padding:8px; border-bottom:1px solid rgba(0,0,0,0.06); font-size:12px;">
         <div>
           <span style="background:${achtergrond}; color:${kleur}; padding:1px 6px; border-radius:4px; font-weight:600;">
-            ${isImport ? 'IMPORT' : 'EXPORT'}
+            ${r.soort === 'terugdraaien' ? 'TERUGGEDRAAID' : (isImport ? 'IMPORT' : 'EXPORT')}
           </span>
           <b style="margin-left:6px;">${esc(r.jaar || '')}</b>
           <span class="muted"> · ${esc(tijdTekst(r.wanneer || r.wanneer_lokaal))}</span>
@@ -131,6 +142,10 @@ function _exportHtml() {
         </div>
         ${perKolom ? `<div class="muted" style="font-size:11px; margin-top:2px;">per stoel: ${perKolom}</div>` : ''}
         ${isImport && r.jaarfilter ? `<div class="muted" style="font-size:11px;">jaarfilter stond op ${esc(r.jaarfilter)}</div>` : ''}
+        ${isImport && teruggedraaideIds.has(r.snapshot_id) ? `
+          <div style="margin-top:4px; color:#6b1414;"><b>Teruggedraaid.</b></div>
+        ` : ''}
+        ${isTerug ? `<div style="margin-top:3px;">${r.hersteld || 0} dagen hersteld, ${r.verwijderd || 0} verwijderd.</div>` : ''}
       </div>`;
   }).join('');
 
@@ -234,3 +249,4 @@ window.logboekLaad = async () => {
     renderLogboek();
   }
 };
+

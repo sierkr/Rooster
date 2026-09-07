@@ -286,6 +286,29 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
+    // import_snapshots/ - v3.33.1: terugdraai-punten van imports.
+    //
+    // Vlak voor een import wordt de HUIDIGE inhoud van precies de dagen die de
+    // import overschrijft hier bewaard: een meta-document plus per kalender-
+    // maand een document met de dagen erin. Daarmee is terugdraaien een knop
+    // in het logboek, in plaats van een backupbestand met een wachtwoord op de
+    // computer van wie toevallig importeerde.
+    //
+    // Schrijven mag wie ook mag importeren; het terugdraaien zelf schrijft naar
+    // indeling/ en dat is al aan een beheerder voorbehouden. Verwijderen mag,
+    // want oude punten worden automatisch opgeruimd (de vijf nieuwste blijven).
+    // -----------------------------------------------------------------------
+    match /import_snapshots/{id} {
+      allow read:   if isBeheerder() || heeftMagBeheer();
+      allow create, update, delete: if isBeheerder() || heeftMagBeheer();
+
+      match /maanden/{maand} {
+        allow read:   if isBeheerder() || heeftMagBeheer();
+        allow create, update, delete: if isBeheerder() || heeftMagBeheer();
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // bezetting_mutaties/ - logboek van stoel-ingrepen (voor terugdraaien)
     // -----------------------------------------------------------------------
     match /bezetting_mutaties/{id} {
