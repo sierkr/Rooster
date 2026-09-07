@@ -177,7 +177,7 @@ async function _tekenGebView(container) {
       <div class="summary-label" style="margin-bottom: 6px;">Vaste radiologen — parttime &amp; vakantierecht</div>
       <div class="card">
         <p class="muted" style="margin: 0 0 10px;">Parttime: percentage van fulltime (default 100%). Vakantierecht: aantal V-dagen per jaar (default 40). Tik <b>Wissel</b> om een NIEUWE persoon (zonder eigen indeling) op deze stoel te zetten vanaf een datum. Nieuwe radioloog, nog geen stoel of waarnemer-plek? Gebruik <b>+ Nieuwe stoel aanmaken</b> hieronder. Bestaande waarnemer vast in dienst nemen mét behoud van diens indeling? Gebruik <b>→ Vast</b> bij die waarnemer.</p>
-        <div style="display: grid; grid-template-columns: 50px 1fr 120px 56px 56px 120px; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); font-size: 11px; font-weight: 600; color: #5f5e5a;">
+        <div class="bez-kop">
           <div>Code</div>
           <div>Naam</div>
           <div style="text-align: center;">In dienst</div>
@@ -204,7 +204,7 @@ async function _tekenGebView(container) {
           // Dan is het geen "vertrek" maar een overname — niet als vertrek tonen.
           const opvolger = geplandVertrek ? hist.find(e => e.van === geplandVertrek) : null;
           return `
-            <div style="display: grid; grid-template-columns: 50px 1fr 120px 56px 56px 120px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+            <div class="bez-rij">
               <div style="font-weight: 500;">${r.code}</div>
               <div style="min-width: 0;">
                 <div class="muted" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(r.achternaam || '')}</div>
@@ -212,24 +212,31 @@ async function _tekenGebView(container) {
                   ? `<div style="font-size: 10px; color: #9c5700;">opgevolgd door ${(opvolger.code || '').replace(/"/g, '&quot;')} per ${formatDatum(geplandVertrek, 'kort')}</div>`
                   : `<div style="font-size: 10px; color: #b3261e;">vertrekt per ${formatDatum(geplandVertrek, 'kort')}</div>`) : ''}
               </div>
+              <div class="bez-velden">
               <div>
+                <span class="bez-veldkop">In dienst</span>
                 <input type="date" class="input" id="id_${r.id}" value="${indienstWaarde}" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 12px; width: 100%;">
               </div>
-              <div style="display: flex; align-items: center; gap: 2px;">
-                <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 13px; text-align: right;">
-                <span class="muted" style="font-size: 11px;">%</span>
+              <div>
+                <span class="bez-veldkop">Parttime</span>
+                <div style="display: flex; align-items: center; gap: 2px;">
+                  <input type="number" class="input" id="pf_${r.id}" value="${pct}" min="10" max="100" step="1" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 13px; text-align: right;">
+                  <span class="muted" style="font-size: 11px;">%</span>
+                </div>
               </div>
               <div>
+                <span class="bez-veldkop">Vakantie</span>
                 <input type="number" class="input" id="vr_${r.id}" value="${vrecht}" min="0" max="100" step="1" oninput="window.gebMarkDirty('vast')" style="padding: 6px 4px; font-size: 13px; text-align: right; width: 100%;">
               </div>
-              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.openWisselSheet('${r.id}')">Wissel</button>
-                <button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.toonStoelTijdlijn('${r.id}')" title="Tijdlijn van deze stoel">Tijdlijn</button>
+              </div>
+              <div class="bez-knoppen">
+                <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openWisselSheet('${r.id}')">Wissel</button>
+                <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.toonStoelTijdlijn('${r.id}')" title="Tijdlijn van deze stoel">Tijdlijn</button>
                 ${geplandVertrek
                   ? (opvolger
                       ? ''
-                      : `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.vertrekIntrekken('${r.id}')" title="Gepland vertrek intrekken">Intrekken</button>`)
-                  : `<button class="btn" style="font-size: 11px; padding: 6px 4px; flex: 1;" onclick="window.openVertrekSheet('${r.id}')" title="Stoel laten vertrekken per datum">Vertrek</button>`}
+                      : `<button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.vertrekIntrekken('${r.id}')" title="Gepland vertrek intrekken">Intrekken</button>`)
+                  : `<button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openVertrekSheet('${r.id}')" title="Stoel laten vertrekken per datum">Vertrek</button>`}
               </div>
             </div>
           `;
@@ -296,13 +303,17 @@ async function _tekenGebView(container) {
                 : (bez.tot ? ` <span class="muted" style="font-size:11px;">(t/m ${formatDatum(bez.tot, 'kort')})</span>` : ''))
             : '';
           return `
-            <div style="display: grid; grid-template-columns: 32px 1fr 1fr 38px 60px 60px; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
+            <div class="wnr-rij">
               <div style="font-weight: 500; color: #5f5e5a;">${slotId}${datumInfo}</div>
-              <input type="text" class="input" id="inv_code_${slotId}" placeholder="Code" maxlength="4" value="${code.replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
-              <input type="text" class="input" id="inv_naam_${slotId}" placeholder="Achternaam" value="${naam.replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
+              <div class="wnr-velden">
+                <input type="text" class="input" id="inv_code_${slotId}" placeholder="Code" maxlength="4" value="${code.replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
+                <input type="text" class="input" id="inv_naam_${slotId}" placeholder="Achternaam" value="${naam.replace(/"/g,'&quot;')}" oninput="window.gebMarkDirty('wnr')" style="padding: 6px 8px; font-size: 13px;">
+              </div>
               <span class="toggle-switch ${isActief ? 'aan' : ''}" id="inv_act_${slotId}" onclick="window.wnrToggle('${slotId}')" title="${isActief ? 'Waarnemer laten stoppen per datum' : 'Waarnemer activeren per datum'}"></span>
-              <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openWisselSheet('${slotId}')">Wissel</button>
-              <button class="btn" style="font-size: 11px; padding: 6px 4px; ${isLeeg ? 'opacity:0.4; cursor:not-allowed;' : ''}" ${isLeeg ? 'disabled' : ''} onclick="window.openMaakVastSheet('${slotId}')" title="Maak vast in een vaste-stoel">→ Vast</button>
+              <div class="wnr-knoppen">
+                <button class="btn" style="font-size: 11px; padding: 6px 4px;" onclick="window.openWisselSheet('${slotId}')">Wissel</button>
+                <button class="btn" style="font-size: 11px; padding: 6px 4px; ${isLeeg ? 'opacity:0.4; cursor:not-allowed;' : ''}" ${isLeeg ? 'disabled' : ''} onclick="window.openMaakVastSheet('${slotId}')" title="Maak vast in een vaste-stoel">→ Vast</button>
+              </div>
             </div>
           `;
         }).join('')}

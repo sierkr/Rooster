@@ -1,3 +1,31 @@
+## v3.33.3 — Stoel bezetting past weer op een telefoon
+
+De tabellen "Vaste radiologen" en "Waarnemers" onder Beheer → Stoel bezetting
+hadden zes kolommen met vaste breedtes: ruim 430 pixels, terwijl een iPhone
+staand zo'n 340 beschikbaar heeft. De naamkolom was de enige die mocht krimpen
+en werd platgedrukt — "opgevolgd door …" kwam letter voor letter onder elkaar.
+Wat er niet bij paste viel buiten beeld: de codekolom links, de knoppen Wissel,
+Tijdlijn, Intrekken en Vertrek rechts. Liggend ging het wel goed; staand was de
+helft van de bediening onbereikbaar.
+
+Staand wordt de rij nu gestapeld:
+
+- code en naam bovenaan, met de vertrek- of opvolgingsregel op volle breedte
+  eronder, zodat die weer als zin leest;
+- daaronder de drie velden naast elkaar met kleine kopjes erboven (de koprij
+  vervalt bij gestapelde weergave);
+- daaronder de knoppen op volle breedte, gelijk verdeeld.
+
+Vanaf 600 pixels — elke telefoon in liggende stand is minstens 667 pixels breed
+— blijft alles exact zoals het was, koprij incluis. Het schakelt direct bij het
+kantelen.
+
+De waarnemer-rij eronder had dezelfde constructie en is op dezelfde manier
+meegenomen.
+
+De opmaak van beide rijen staat nu in `index.html` in plaats van los in de code,
+zodat ze niet meer uit elkaar kunnen lopen.
+
 ## v3.33.2 — Terugdraaien: één punt, één plek
 
 Twee ontwerpfouten uit 3.33.1 rechtgezet.

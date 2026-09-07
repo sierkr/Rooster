@@ -342,7 +342,7 @@
     .beh-tab1.active { background: #2a2a2a; color: #e5e5e5; }
     .beh-tab2 { background: #2a2a2a; border-color: rgba(255,255,255,0.12); color: #bbb; }
     .beh-tab2.active { background: rgba(55,138,221,0.22); border-color: rgba(120,170,240,0.4); color: #cfe0ff; }
-    .muted, .afd-item-sub, .grid-head, .grid-day, .note, .sheet-sub, .summary-label, .legend-label, .picker-label, .empty-state, .form-label, .login-sub { color: #999; }
+    .muted, .afd-item-sub, .grid-head, .grid-day, .note, .sheet-sub, .summary-label, .legend-label, .picker-label, .empty-state, .form-label, .login-sub, .bez-veldkop { color: #999; }
     .summary, .legend, .empty-state-icon, .user-chip { background: rgba(255,255,255,0.04); color: #aaa; }
     .info-box { background: rgba(55,138,221,0.15); }
     .info-text { color: #85b7eb; }
@@ -390,9 +390,75 @@
     position: relative;
     z-index: 1;
   }
+  /* Beheer > Stoel bezetting (v3.33.3) — rijen van de tabellen "Vaste
+     radiologen" en "Waarnemers".
+
+     Deze rijen hadden zes kolommen met vaste breedtes: ruim 430 pixels, terwijl
+     een iPhone staand zo'n 340 beschikbaar heeft. De naamkolom was de enige die
+     mocht krimpen en werd platgedrukt (tekst letter voor letter onder elkaar),
+     en de code links en de knoppen rechts vielen buiten beeld.
+
+     Staand stapelen we daarom: naam boven, velden eronder, knoppen onderaan.
+     Vanaf 600px (elke telefoon in liggende stand is minstens 667px breed)
+     geldt de oorspronkelijke tabelopmaak, ongewijzigd. */
+  .bez-kop { display: none; }
+  .bez-rij {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    gap: 6px 8px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  .bez-velden {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 78px 78px;
+    gap: 6px;
+    align-items: end;
+  }
+  .bez-knoppen { grid-column: 1 / -1; display: flex; gap: 6px; }
+  .bez-knoppen .btn { flex: 1; }
+  .bez-veldkop { font-size: 10px; color: #5f5e5a; display: block; margin-bottom: 2px; }
+
+  /* Waarnemer-rij: zelfde principe, andere velden. */
+  .wnr-rij {
+    display: grid;
+    grid-template-columns: 46px 1fr auto;
+    gap: 6px 8px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  .wnr-velden { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .wnr-knoppen { grid-column: 1 / -1; display: flex; gap: 6px; }
+  .wnr-knoppen .btn { flex: 1; }
+
   @media (min-width: 600px) {
     .app { max-width: 780px; }
     .sheet { max-width: 780px; max-height: 90vh; }
+
+    /* Vanaf hier weer één regel per stoel, zoals het altijd was. */
+    .bez-kop, .bez-rij {
+      display: grid;
+      grid-template-columns: 50px 1fr 120px 56px 56px 130px;
+      gap: 6px;
+      align-items: center;
+    }
+    .bez-kop {
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(0,0,0,0.1);
+      font-size: 11px;
+      font-weight: 600;
+      color: #5f5e5a;
+    }
+    .bez-rij { padding: 8px 0; }
+    /* display:contents laat de drie velden zelf meedoen in de rij-grid. */
+    .bez-velden, .wnr-velden { display: contents; }
+    .bez-knoppen, .wnr-knoppen { grid-column: auto; }
+    .bez-veldkop { display: none; }
+
+    .wnr-rij { grid-template-columns: 32px 1fr 1fr 38px 60px 60px; gap: 6px; padding: 8px 0; }
   }
   </style>
 </head>

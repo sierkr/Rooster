@@ -1,3 +1,25 @@
+Rooster v3.33.3 — Release notes
+==================================
+
+STOEL BEZETTING PAST WEER OP EEN TELEFOON
+----------------------------------------------------------------------------
+De tabellen "Vaste radiologen" en "Waarnemers" hadden zes kolommen met vaste
+breedtes: ruim 430 pixels, terwijl een iPhone staand zo'n 340 beschikbaar
+heeft. De naamkolom werd platgedrukt en de codekolom en de knoppen vielen
+buiten beeld. Liggend ging het goed, staand was de helft van de bediening
+onbereikbaar.
+
+Staand wordt de rij nu gestapeld: code en naam bovenaan met de vertrek- of
+opvolgingsregel op volle breedte eronder, daaronder de drie velden naast
+elkaar met kleine kopjes, en daaronder de knoppen op volle breedte.
+
+Vanaf 600 pixels blijft alles exact zoals het was, koprij incluis. Elke
+telefoon in liggende stand is minstens 667 pixels breed, dus daar verandert
+niets. Het schakelt direct bij het kantelen.
+
+De waarnemer-rij is op dezelfde manier meegenomen. De opmaak van beide rijen
+staat nu in index.html in plaats van los in de code.
+
 Rooster v3.33.2 — Release notes
 ==================================
 
