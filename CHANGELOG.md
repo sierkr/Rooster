@@ -1,3 +1,32 @@
+## v3.32.6 — Excel-import en -export
+
+Het jaarfilter boven de importknop gooide regels stilzwijgend weg. Stond het
+op een ander jaar dan het bestand bevatte, dan bleef de preview op 0 dagen
+staan en deed de knop "Importeer" niets — zonder melding. Het leek dan alsof
+de import mislukte, terwijl het bestand gewoon goed was.
+
+- **Filtert het filter álles weg, dan volgt nu een duidelijke melding** die
+  zegt op welk jaar het filter staat, welke jaren het bestand bevat en wat je
+  moet doen. Er ontstaat geen lege preview meer.
+- **Vallen er alleen sommige regels buiten het filter**, dan staat dat als
+  oranje waarschuwing in de preview, met het aantal overgeslagen regels.
+- **Het jaarfilter blijft zichtbaar** zolang een preview openstaat (grijs, met
+  de hint dat je moet annuleren om het te wijzigen). Voorheen verdween het uit
+  beeld zodra het bestand was ingelezen, dus je kon niet meer zien waarop
+  gefilterd was.
+- **De preview noemt de filterstand en de jaren in het bestand.**
+
+### Excel-export: elke export een eigen naam
+
+De standaardnaam is nu `Indeling_[jaar]_[dd-mm-jjjj].xlsx` in plaats van
+`Indeling_[jaar].xlsx`. Een tweede export van hetzelfde jaar botst daardoor
+niet meer met de vorige, en niemand hoeft nog zelf een naam te verzinnen om
+dat te voorkomen.
+
+Het veld "Bestandsnaam" onthoudt bovendien niet langer wat je de vorige keer
+intypte. Dat onthouden was juist de reden dat je bij een volgende export een
+naam moest aanpassen.
+
 ## v3.32.5 — Uitrollen met één commando
 
 Uitrollen gaat nu met `bash uitrollen.sh test` en `bash uitrollen.sh live`

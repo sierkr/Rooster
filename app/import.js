@@ -289,11 +289,19 @@ export async function actImportFile(input, renderGebView) {
     const dagen = [];
     let celOpmsAantal = 0, dagOpmsAantal = 0, dienstAantal = 0, besprAantal = 0, intervAantal = 0;
 
+    // v3.32.6: het jaarfilter gooide regels stilzwijgend weg. Nu tellen we mee
+    // hoeveel regels het filter overslaat en welke jaren er in het bestand
+    // staan, zodat de gebruiker ziet wat er gebeurt in plaats van een lege
+    // preview met een knop die niets doet.
+    let gefilterdWeg = 0;
+    const jarenInBestand = new Set();
+
     for (let r = headerRij + 1; r <= range.e.r; r++) {
       const datumCel = ws[XLSX.utils.encode_cell({ c: 1, r })];
       const isoDatum = _parseDatumCel(datumCel?.v);
       if (!isoDatum) continue;
-      if (state.importJaar && !isoDatum.startsWith(state.importJaar + '-')) continue;
+      jarenInBestand.add(isoDatum.slice(0, 4));
+      if (state.importJaar && !isoDatum.startsWith(state.importJaar + '-')) { gefilterdWeg++; continue; }
 
       const d = new Date(isoDatum + 'T12:00:00');
       const dagNlIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
@@ -344,6 +352,20 @@ export async function actImportFile(input, renderGebView) {
       dagen.push(docData);
     }
 
+    // v3.32.6: filterde het jaarfilter álles weg, stop dan hier met een
+    // duidelijke uitleg. Voorheen ontstond een preview met 0 dagen, waarna de
+    // knop "Importeer" zonder melding niets deed (actImportSchrijven keert bij
+    // een lege lijst meteen terug) — het leek dan alsof de import mislukte.
+    if (dagen.length === 0 && gefilterdWeg > 0) {
+      const jaren = [...jarenInBestand].sort().join(', ');
+      throw new Error(
+        `Er is niets ingelezen: het jaarfilter staat op ${state.importJaar}, ` +
+        `maar het bestand bevat alleen datums in ${jaren} ` +
+        `(${gefilterdWeg} regel${gefilterdWeg === 1 ? '' : 's'} overgeslagen).\n\n` +
+        `Zet "Filter jaar" op (alle jaren) of op ${jaren.split(', ')[0]} en kies het bestand opnieuw.`
+      );
+    }
+
     // v3.29.0 (H2): zorg dat het datumvenster van de indeling-listener het
     // volledige bereik van het bestand dekt, anders vergelijkt de diff
     // hieronder tegen een onvolledige cache en lijkt álles gewijzigd.
@@ -392,6 +414,11 @@ export async function actImportFile(input, renderGebView) {
     state.importPreview = {
       bestandnaam: file.name,
       dagen,
+      // v3.32.6: filterstand meesturen zodat de preview kan tonen waarop
+      // gefilterd is en hoeveel regels daardoor buiten de import vallen.
+      filterJaar: state.importJaar || '',
+      gefilterdWeg,
+      jarenInBestand: [...jarenInBestand].sort(),
       celOpmsAantal, dagOpmsAantal, dienstAantal, besprAantal, intervAantal,
       waarschuwingen: waarschuwingen.slice(0, 25),
       waarschuwingenTotaal: waarschuwingen.length,

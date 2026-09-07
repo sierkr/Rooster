@@ -1,3 +1,35 @@
+Rooster v3.32.6 — Release notes
+==================================
+
+EXCEL-IMPORT: GEEN STILLE MISLUKKING MEER
+----------------------------------------------------------------------------
+Het jaarfilter boven de importknop gooide regels stilzwijgend weg. Stond het
+op een ander jaar dan het bestand bevatte, dan bleef de preview op 0 dagen
+staan en deed de knop "Importeer" niets, zonder enige melding. Het leek dan
+alsof de import mislukte, terwijl er niets mis was met het bestand.
+
+- Filtert het jaarfilter alle regels weg, dan volgt nu een duidelijke
+  melding: op welk jaar het filter staat, welke jaren het bestand bevat en
+  wat je moet doen. Er ontstaat geen lege preview meer.
+
+- Vallen alleen sommige regels buiten het filter, dan staat dat als oranje
+  waarschuwing in de preview, met het aantal overgeslagen regels.
+
+- Het jaarfilter blijft zichtbaar zolang een preview openstaat (grijs, met
+  de hint dat je moet annuleren om het te wijzigen). Voorheen verdween het
+  uit beeld zodra het bestand was ingelezen.
+
+- De preview noemt de filterstand en de jaren die in het bestand zitten.
+
+EXCEL-EXPORT: ELKE EXPORT EEN EIGEN NAAM
+----------------------------------------------------------------------------
+- De standaardnaam is nu Indeling_[jaar]_[dd-mm-jjjj].xlsx. Een tweede
+  export van hetzelfde jaar botst daardoor niet meer met de vorige.
+
+- Het veld "Bestandsnaam" onthoudt niet langer wat je de vorige keer
+  intypte. Dat onthouden was juist de reden dat je bij een volgende export
+  zelf een naam moest verzinnen.
+
 Rooster v3.32.4 — Release notes
 ==================================
 

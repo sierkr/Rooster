@@ -285,12 +285,10 @@ export async function renderGebView() {
             ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${j===new Date().getFullYear()?'selected':''}>${j}</option>`).join('')}
           </select>
           <input type="text" id="expBestandsnaam" class="input" placeholder="Bestandsnaam (optioneel)"
-            style="width: 220px; padding: 6px 8px; font-size: 13px;"
-            value="${(localStorage.getItem('rooster_export_naam') || '')}"
-            oninput="localStorage.setItem('rooster_export_naam', this.value.trim())" />
+            style="width: 220px; padding: 6px 8px; font-size: 13px;" value="" />
           <button class="btn" onclick="window.actExportJaar(document.getElementById('expJaar').value, document.getElementById('expBestandsnaam').value.trim())">⬇ Exporteer</button>
         </div>
-        <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Laat leeg voor de standaardnaam (<code>Indeling_[jaar].xlsx</code>).</p>
+        <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Laat leeg voor de standaardnaam met exportdatum (<code>Indeling_[jaar]_[dd-mm-jjjj].xlsx</code>) — elke export krijgt zo vanzelf een eigen naam.</p>
       </div>
     </div>
   `;
@@ -303,22 +301,30 @@ export async function renderGebView() {
       <div class="summary-label" style="margin-bottom: 6px;">Excel-import</div>
       <div class="card">
         <p class="muted" style="margin: 0 0 10px;">Lees een <code>.xlsm</code>/<code>.xlsx</code>-bestand en zet de inhoud van het sheet '${IMPORT_SHEET}' over naar Firestore. <b>Excel = waarheid</b> — bestaande dagen in Firestore worden vervangen.</p>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+          <label class="muted" style="font-size: 12px;">Filter jaar:</label>
+          <select class="select" id="impJaar" onchange="window.actZetImportJaar(this.value)" ${p?'disabled':''} style="width: auto; padding: 6px 8px; font-size: 13px;">
+            <option value="" ${!state.importJaar?'selected':''}>(alle jaren)</option>
+            ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${state.importJaar==String(j)?'selected':''}>${j}</option>`).join('')}
+          </select>
+          ${p ? '<span class="muted" style="font-size: 11px;">Annuleer hieronder om het filter te wijzigen.</span>' : ''}
+        </div>
         ${!p ? `
-          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-            <label class="muted" style="font-size: 12px;">Filter jaar:</label>
-            <select class="select" id="impJaar" onchange="window.actZetImportJaar(this.value)" style="width: auto; padding: 6px 8px; font-size: 13px;">
-              <option value="" ${!state.importJaar?'selected':''}>(alle jaren)</option>
-              ${[2024,2025,2026,2027,2028,2029,2030].map(j => `<option value="${j}" ${state.importJaar==String(j)?'selected':''}>${j}</option>`).join('')}
-            </select>
-          </div>
           <input type="file" accept=".xlsx,.xlsm,.xls" id="impFile" onchange="window.actImportFile(this)" ${bezig?'disabled':''} style="font-size: 13px;">
           ${bezig ? '<div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;"><span class="loader"></span><span class="muted">Bezig met inlezen…</span></div>' : ''}
         ` : `
           <div class="form-info" style="margin-bottom: 10px; font-size: 12px;">
             <b>${p.bestandnaam}</b><br>
             ${p.dagen.length} dagen · ${p.celOpmsAantal} cel-opmerkingen · ${p.dagOpmsAantal} dag-opmerkingen<br>
-            ${p.dienstAantal} dienst-toewijzingen · ${p.besprAantal} besprekingen · ${p.intervAantal} interventies
+            ${p.dienstAantal} dienst-toewijzingen · ${p.besprAantal} besprekingen · ${p.intervAantal} interventies<br>
+            Jaarfilter: <b>${p.filterJaar || 'alle jaren'}</b>${(p.jarenInBestand && p.jarenInBestand.length) ? ` · in het bestand: ${p.jarenInBestand.join(', ')}` : ''}
           </div>
+          ${(p.gefilterdWeg || 0) > 0 ? `
+            <div style="background: #fff4e0; color: #6b3a00; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; border-left: 3px solid #f0a020;">
+              ⚠ Het jaarfilter staat op <b>${p.filterJaar}</b>: <b>${p.gefilterdWeg} regel${p.gefilterdWeg === 1 ? '' : 's'}</b> uit het bestand valt buiten deze import.
+              Wil je het hele bestand? Annuleer, zet het filter op (alle jaren) en kies het bestand opnieuw.
+            </div>
+          ` : ''}
           ${p.totaalGewijzigd > 0 ? `
             <div style="background: #eef4ff; color: #1a3a6b; padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px;">
               📝 <b>${p.totaalGewijzigd} toewijzing${p.totaalGewijzigd === 1 ? '' : 'en'}</b> gewijzigd t.o.v. huidige Firestore-data

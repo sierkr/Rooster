@@ -927,7 +927,17 @@ export async function actExportJaar(jaar, naamParam) {
 
     // ---- Downloaden ---------------------------------------------------------
     const buffer = await wb.xlsx.writeBuffer();
-    const defaultNaam = `Indeling_${jaar}.xlsx`;
+    // v3.32.6: de standaardnaam bevat de exportdatum, zodat een tweede export
+    // van hetzelfde jaar niet dezelfde naam krijgt. Voorheen moest je zelf een
+    // naam verzinnen ("2027A") om te voorkomen dat de browser er "(1)" van
+    // maakte of het vorige bestand overschreef.
+    const nu = new Date();
+    const stempel = [
+      String(nu.getDate()).padStart(2, '0'),
+      String(nu.getMonth() + 1).padStart(2, '0'),
+      nu.getFullYear(),
+    ].join('-');
+    const defaultNaam = `Indeling_${jaar}_${stempel}.xlsx`;
     const bestandsnaam = (naamParam && naamParam.trim())
       ? (naamParam.trim().endsWith('.xlsx') ? naamParam.trim() : naamParam.trim() + '.xlsx')
       : defaultNaam;
