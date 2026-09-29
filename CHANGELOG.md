@@ -1,3 +1,47 @@
+## v3.33.4 — De app start nu ook zonder internet op
+
+De app bewaarde 36 eigen bestanden op het toestel, maar de Firebase-motor
+(inloggen en databank) niet: die vier bestanden komen van `www.gstatic.com` en
+werden geleend uit de tijdelijke cache van de browser. Safari op iOS ruimt die
+cache op. Daarna kwam `index.html` nog wél uit onze eigen voorraad, maar kon
+`app/main.js` zijn imports niet laden — en juist dat bestand haalt het
+laadsymbool weg. Resultaat op de iPhone: een lege pagina met een eeuwig
+draaiend bolletje, terwijl het complete rooster nog op het toestel stond.
+
+Gemeten en gereproduceerd op 29 september 2026: van de 36 bewaarde bestanden
+waren er 0 van Firebase; met de Google-bestanden geblokkeerd bleef het
+laadsymbool staan en kwamen inlogscherm noch app in beeld.
+
+- **De service worker bewaart nu ook de vier Firebase-bestanden** (±700 kB,
+  eenmalig bij de installatie). Cachen mag: gstatic stuurt
+  `access-control-allow-origin: *`, en het versienummer staat in het adres, dus
+  ze verouderen nooit. Lukt het ophalen niet, dan mag de installatie niet
+  falen — de app werkt dan online precies als voorheen.
+- **Alleen die vier adressen gaan via de voorraad.** Al het andere verkeer naar
+  Google — Firestore, Auth en Functions op `*.googleapis.com` en
+  `*.cloudfunctions.net` — blijft ongemoeid rechtstreeks gaan. Daar mag de
+  service worker niet tussen gaan zitten, anders breekt de realtime verbinding.
+- **`ignoreVary` bij het opzoeken.** gstatic stuurt `vary: Accept-Encoding`;
+  zonder die vlag kan het opzoeken mislukken terwijl het bestand er wel staat.
+
+### Een verbindingsfout logt je niet meer uit
+
+Bij het opstarten haalt de app je profiel op. Mislukte dat, dan volgde een
+`signOut()`. Offline is dat onherstelbaar: opnieuw inloggen kan alleen met de
+server erbij. Eén hapering en de app was onbruikbaar tot er weer internet was —
+terwijl het rooster gewoon op het toestel stond.
+
+Bij een verbindingsfout (of als het toestel offline is) blijf je nu ingelogd en
+verschijnt het scherm **Geen verbinding** met een knop *Opnieuw proberen*. Komt
+de verbinding vanzelf terug, dan gaat de app verder zonder dat iemand iets hoeft
+te doen. Uitloggen gebeurt nog steeds bij een echt accountprobleem, zoals een
+ontbrekend profiel.
+
+Niet veranderd: databank, toegangsregels, cloud functions, het rooster,
+import en export, en alle bestaande teksten en knoppen.
+
+---
+
 ## v3.33.3 — Stoel bezetting past weer op een telefoon
 
 De tabellen "Vaste radiologen" en "Waarnemers" onder Beheer → Stoel bezetting

@@ -573,19 +573,56 @@ document.getElementById('versieLabel').textContent = window.APP_VERSIE;
 // Versielabel ook in het change-password scherm
 document.querySelectorAll('.versieLabel2').forEach(el => el.textContent = window.APP_VERSIE);
 
-onAuthStateChanged(auth, async (user) => {
-  document.getElementById('loading').style.display = 'none';
-  if (!user) {
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('change-password').style.display = 'none';
-    document.getElementById('login').style.display = 'flex';
-    return;
-  }
+// ==== Opstarten na aanmelding (v3.33.4) ======================================
+// Een verbindingsfout bij het opstarten is GEEN reden om uit te loggen. Offline
+// kan er niet opnieuw ingelogd worden — daarvoor is de server nodig — dus een
+// signOut() hier maakt de app onbruikbaar tot er weer internet is, terwijl het
+// rooster nog op het toestel staat. Uitloggen doen we alleen als er echt iets
+// met het account aan de hand is (bijvoorbeeld: geen profiel).
+function isVerbindingsFout(e) {
+  const code  = (e && e.code)    ? String(e.code) : '';
+  const tekst = (e && e.message) ? String(e.message).toLowerCase() : '';
+  return code === 'unavailable'
+      || code === 'auth/network-request-failed'
+      || tekst.includes('offline')
+      || tekst.includes('network error')
+      || tekst.includes('failed to fetch');
+}
 
+let _opstartUser = null;
+let _wachtOpVerbinding = false;
+
+function toonGeenVerbinding(user) {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('change-password').style.display = 'none';
+  document.getElementById('geen-verbinding').style.display = 'flex';
+
+  // Komt de verbinding terug, dan gaat de app zelf verder — zonder dat iemand
+  // op een knop hoeft te drukken.
+  if (!_wachtOpVerbinding) {
+    _wachtOpVerbinding = true;
+    window.addEventListener('online', () => {
+      _wachtOpVerbinding = false;
+      if (_opstartUser) opstarten(_opstartUser);
+    }, { once: true });
+  }
+}
+
+window.gvOpnieuw = async () => {
+  document.getElementById('geen-verbinding').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  if (_opstartUser) await opstarten(_opstartUser);
+  document.getElementById('loading').style.display = 'none';
+};
+
+async function opstarten(user) {
+  _opstartUser = user;
   try {
     const profiel = await laadProfiel(user.uid);
     state.user = user;
     state.profiel = profiel;
+    document.getElementById('geen-verbinding').style.display = 'none';
 
     if (profiel.wachtwoord_gewijzigd === false) {
       // Eerste aanmelding: wachtwoord wijzigen + akkoord
@@ -597,9 +634,25 @@ onAuthStateChanged(auth, async (user) => {
       startApp();
     }
   } catch (e) {
+    if (isVerbindingsFout(e) || !navigator.onLine) {
+      toonGeenVerbinding(user);
+      return;
+    }
     const err = document.getElementById('loginError');
     err.textContent = e.message;
     err.style.display = 'block';
     await signOut(auth);
   }
+}
+
+onAuthStateChanged(auth, async (user) => {
+  document.getElementById('loading').style.display = 'none';
+  if (!user) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('change-password').style.display = 'none';
+    document.getElementById('geen-verbinding').style.display = 'none';
+    document.getElementById('login').style.display = 'flex';
+    return;
+  }
+  await opstarten(user);
 });
