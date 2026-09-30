@@ -2,7 +2,7 @@
 // Cache-naam bevat versienummer. Bij een nieuwe versie worden oude caches
 // automatisch verwijderd en alle bestanden opnieuw gecached.
 
-const VERSION = '3.33.14';
+const VERSION = '3.33.15';
 const CACHE = `rooster-${VERSION}`;
 
 const PRECACHE = [

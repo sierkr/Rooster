@@ -693,12 +693,24 @@ function toonGeenGegevensMelding() {
   const zetOpslag = () => {
     opslag.textContent = 'opslag op dit toestel: '
       + (typeof window.__idbProef === 'undefined' ? 'onbekend' : window.__idbProef);
-    if (window.__idbProefKlaar === false && document.body.contains(opslag)) {
+    // Niet controleren of de regel al in beeld staat: bij de eerste keer is
+    // hij nog niet toegevoegd, en dan zou het bijwerken meteen stoppen.
+    if (window.__idbProefKlaar === false) {
       setTimeout(zetOpslag, 500);
     }
   };
   zetOpslag();
   blok.appendChild(opslag);
+
+  // v3.33.15: wat Firebase zelf deed bij het opstarten, bijgewerkt zolang de
+  // melding staat. Dit is de meting die de volgende stap bepaalt.
+  if (typeof window.__spoorTekst === 'function') {
+    const spoor = document.createElement('div');
+    spoor.className = 'muted';
+    spoor.style.cssText = 'margin-top:6px;word-break:break-word;';
+    blok.appendChild(spoor);
+    window.__houdBij(spoor, () => 'spoor: ' + window.__spoorTekst());
+  }
 
   // v3.33.13: welke inlogverzoeken zijn afgebroken? Blijft het rooster ondanks
   // die maatregel leeg, dan zegt deze regel of de maatregel überhaupt heeft

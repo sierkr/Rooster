@@ -1,3 +1,28 @@
+## v3.33.15 — Kijken wat Firebase zelf doet
+
+Meetversie, geen reparatie. De proef uit v3.33.14 gaf op Sierks iPhone in
+vliegtuigstand: `auth-opslag: geopend (3 ms), geteld: 1 (6 ms) · rooster-opslag:
+geopend (4 ms), geteld: 0 (1 ms) · schrijfproef: gelukt (8 ms)`. **De opslag
+werkt dus, ook bij een echte bewerking.** Het vermoeden uit de handover (§6) is
+daarmee weerlegd; de bijbehorende reparatie (`browserLocalPersistence`) is niet
+gebouwd. ⚠ "geteld: 0" bij de roosteropslag telt alleen de eerste tabel
+(alfabetisch, een hulptabel) en zegt niets over het rooster zelf.
+
+Nieuw: een **spoor** van wat Firebase zelf doet bij het opstarten, onder de
+melding en op het scherm "Geen verbinding", 30 seconden lang bijgewerkt:
+
+- elke open-, lees-, schrijf- en wisopdracht van Firebase op
+  `firebaseLocalStorageDb`, met of die afkomt of **HANGT**;
+- elk `fetch`-verzoek naar `*.googleapis.com` (alleen de servernaam) en wat er
+  mee gebeurde;
+- wat het toestel meldt over verbinding, bij de start en nu, plus wissels;
+- of de service worker binnen 2 s klaarstaat en of hij de pagina aanstuurt.
+
+⚠ Alleen meekijken: elke handeling gaat ongewijzigd door, er hangt alleen een
+luisteraar aan. Handelingen van de eigen proef worden niet meegeteld.
+⚠ Ook gerepareerd: de regel "opslag op dit toestel" in de app werd in 3.33.14
+niet bijgewerkt (de controle "staat hij in beeld" viel vóór het toevoegen).
+
 ## v3.33.14 — Openen is nog geen bewerking
 
 Meetversie, geen reparatie. v3.33.13 brak geen enkel inlogverzoek af: het
