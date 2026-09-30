@@ -640,6 +640,41 @@
   // ⚠ Een opslag die niet bestaat wordt door indexedDB.open aangemaakt. Daarom
   // wordt 'bestond niet' apart gemeld en de zojuist aangemaakte weer verwijderd
   // — anders leest 'geopend' als bewijs terwijl er niets geopend is.
+  // v3.33.13: zonder verbinding blijven verzoeken aan de inlogservers van
+  // Google op iOS-Safari eeuwig openstaan in plaats van te mislukken. Firebase
+  // wacht daarop, Firestore wacht op Firebase, en zo bleef het rooster leeg
+  // terwijl de gegevens gewoon op het toestel stonden (gemeten 30 september
+  // 2026: opslag in orde, aanmeldcontrole zwijgt, Firestore doet niets).
+  // Meteen laten mislukken is geen omweg maar het juiste antwoord: zonder
+  // verbinding kán zo'n verzoek toch niet slagen, en Firebase behandelt een
+  // mislukking als een gewone netwerkfout en gaat door met de opgeslagen
+  // sessie.
+  // ⚠ Alleen als het toestel meldt geen verbinding te hebben, en alleen voor
+  // deze twee adressen. Mét verbinding grijpt dit nooit in. Bewust alleen
+  // `fetch` — het verkeer van Firestore zelf loopt over XMLHttpRequest en daar
+  // mag niets aan veranderen.
+  window.__afgebroken = [];
+  (function laatInlogverzoekenFalen() {
+    if (typeof window.fetch !== 'function') return;
+    var ADRESSEN = ['identitytoolkit.googleapis.com', 'securetoken.googleapis.com'];
+    var origFetch = window.fetch.bind(window);
+    window.fetch = function (bron, opties) {
+      var url = (bron && bron.url) ? bron.url : bron;
+      var tekst = String(url || '');
+      if (!navigator.onLine) {
+        for (var i = 0; i < ADRESSEN.length; i++) {
+          if (tekst.indexOf(ADRESSEN[i]) !== -1) {
+            if (window.__afgebroken.indexOf(ADRESSEN[i]) === -1) {
+              window.__afgebroken.push(ADRESSEN[i]);
+            }
+            return Promise.reject(new TypeError('Geen verbinding'));
+          }
+        }
+      }
+      return origFetch(bron, opties);
+    };
+  })();
+
   window.__idbProef = 'nog bezig';
   (function proefOpslag() {
     if (!window.indexedDB) { window.__idbProef = 'niet beschikbaar'; return; }

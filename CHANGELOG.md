@@ -1,3 +1,47 @@
+## v3.33.13 — Een inlogverzoek dat niet kan slagen, moet mislukken
+
+Na v3.33.12 lag de laatste puzzel op tafel. Gemeten op de iPhone:
+`auth-opslag: geopend (3 ms) · rooster-opslag: geopend (9 ms)` — de opslag is
+dus kerngezond. Gemeten via de stempels: de aanmeldcontrole geeft nooit
+antwoord. Gemeten in de emulator-opstelling: zolang die zwijgt doet Firestore
+helemaal niets, ook zijn eigen voorraad niet lezen.
+
+Wat overblijft: bij het opstarten vraagt Firebase een vers inlogbewijs aan de
+servers van Google, want het oude is na een uur verlopen. Zonder verbinding kan
+dat niet. Op Chromium en op de Safari-motor van Playwright mislukt dat verzoek
+meteen en gaat Firebase door met de opgeslagen sessie. **Op iOS-Safari mislukt
+het niet — het blijft eeuwig openstaan.** Daar wacht vervolgens alles op.
+
+- **Meldt het toestel geen verbinding, dan mislukken verzoeken aan
+  `identitytoolkit.googleapis.com` en `securetoken.googleapis.com`
+  onmiddellijk.** Zonder verbinding kan zo'n verzoek toch niet slagen; meteen
+  falen is het juiste antwoord, geen omweg. Firebase behandelt het als een
+  gewone netwerkfout, gaat door met de opgeslagen sessie, en Firestore krijgt
+  eindelijk groen licht om de voorraad te lezen.
+- ⚠ **Alleen bij geen verbinding en alleen voor die twee adressen.** Mét
+  verbinding grijpt dit nooit in.
+- ⚠ **Bewust alleen `fetch`.** Het verkeer van Firestore zelf loopt over
+  `XMLHttpRequest`; daar wordt niets aan veranderd.
+- Het zit in het vangnet in `index.html`, vóór Firebase geladen wordt — later
+  is te laat.
+- **De maatregel meet zichzelf:** afgebroken verzoeken komen in de melding te
+  staan als het rooster tóch leeg blijft.
+
+Nagemeten in de Safari-motor (89 tests groen):
+
+| Proef | Uitkomst |
+|---|---|
+| Online, verzoek aan de inlogserver | gaat gewoon het net op; niets afgebroken |
+| Offline, met een hangend netwerk eronder | inlogserver direct geweigerd; een ander adres blijft onaangeroerd hangen |
+| Volledig verloop | geen paginafouten; Firebase houdt het laatste woord |
+
+⚠ **Wat níet is aangetoond:** dat het rooster hierna op een iPhone verschijnt.
+In de opstelling is er geen opgeslagen Firebase-sessie, dus wordt er nooit een
+vers inlogbewijs aangevraagd en slaat de maatregel nooit aan. Het mechanisme is
+bewezen, het effect op het toestel niet.
+
+---
+
 ## v3.33.12 — De juiste opslag meten
 
 De proef uit v3.33.10 opende een **nieuwe, lege** opslag. Op de iPhone meldde

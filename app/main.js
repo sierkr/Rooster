@@ -692,6 +692,17 @@ function toonGeenGegevensMelding() {
     + (typeof window.__idbProef === 'undefined' ? 'onbekend' : window.__idbProef);
   blok.appendChild(opslag);
 
+  // v3.33.13: welke inlogverzoeken zijn afgebroken? Blijft het rooster ondanks
+  // die maatregel leeg, dan zegt deze regel of de maatregel überhaupt heeft
+  // ingegrepen — zonder dat is de volgende stap weer gissen.
+  if (window.__afgebroken && window.__afgebroken.length) {
+    const afg = document.createElement('div');
+    afg.className = 'muted';
+    afg.style.cssText = 'margin-top:6px;';
+    afg.textContent = 'afgebroken inlogverzoeken: ' + window.__afgebroken.join(', ');
+    blok.appendChild(afg);
+  }
+
   app.insertBefore(blok, app.firstChild);
 }
 
