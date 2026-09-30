@@ -1,3 +1,27 @@
+## v3.33.16 — Een opstartcontrole mag niet eeuwig wachten
+
+**De oorzaak, gemeten** met het spoor uit v3.33.15 op Sierks iPhone in
+vliegtuigstand (30 september 2026):
+
+- `verbinding bij start: online, nu: online` — **iOS meldt "online" terwijl er
+  geen verbinding is.** Daarom greep de maatregel uit v3.33.13 (alleen bij
+  "offline") nooit in.
+- `netwerk identitytoolkit @0.1s: HANGT al 14.5 s` — de accountcontrole die
+  Firebase bij elke start doet (`accounts:lookup`) mislukt niet maar blijft
+  openstaan. Firebase wacht, Firestore wacht op Firebase: geen rooster.
+- Alle opslagopdrachten van Firebase lukten in 1–5 ms. De opslag was het niet.
+
+**Reparatie:** `accounts:lookup` en het vernieuwen van het inlogbewijs
+(`securetoken`) krijgen een tijdslimiet van 5 s, ongeacht wat het toestel over
+verbinding zegt. Daarna telt het als netwerkfout (`network-request-failed`);
+Firebase houdt dan de opgeslagen sessie aan en probeert het later opnieuw.
+
+- ⚠ Inloggen en wachtwoord wijzigen krijgen **geen** limiet.
+- ⚠ De maatregel uit v3.33.13 blijft staan.
+- Het spoor meldt `tijdslimiet na 5 s` als de limiet ingreep.
+- Niet gemeten: of dit het rooster op de iPhone binnen ~5 s laat verschijnen.
+  Dat is Sierks meting.
+
 ## v3.33.15 — Kijken wat Firebase zelf doet
 
 Meetversie, geen reparatie. De proef uit v3.33.14 gaf op Sierks iPhone in

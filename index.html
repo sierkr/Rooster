@@ -794,15 +794,48 @@
           }
         }
       }
+      // v3.33.16: tijdslimiet op de twee verzoeken die Firebase bij het
+      // opstarten doet. Gemeten op 30 september 2026 (spoor uit v3.33.15): de
+      // iPhone meldt in vliegtuigstand "online", zodat de maatregel hierboven
+      // niet ingrijpt, en de accountcontrole (accounts:lookup) bleef hangen —
+      // "HANGT al 14.5 s". Firebase wacht daarop, het rooster op Firebase.
+      // Na 5 s telt zo'n verzoek als netwerkfout; Firebase gaat dan door met
+      // de sessie op het toestel en probeert het later opnieuw.
+      // ⚠ Alleen accounts:lookup en het vernieuwen van het inlogbewijs.
+      // Inloggen en wachtwoord wijzigen krijgen bewust géén limiet: die moeten
+      // op een traag netwerk gewoon kunnen slagen.
+      var limiet = (tekst.indexOf('identitytoolkit.googleapis.com') !== -1
+                    && tekst.indexOf('accounts:lookup') !== -1)
+                || tekst.indexOf('securetoken.googleapis.com') !== -1;
+      var ctrl = null;
+      if (limiet && typeof AbortController === 'function'
+          && typeof bron === 'string' && !(opties && opties.signal)) {
+        ctrl = new AbortController();
+        var kopie = {};
+        for (var k in (opties || {})) kopie[k] = opties[k];
+        kopie.signal = ctrl.signal;
+        opties = kopie;
+      }
       var p = origFetch(bron, opties);
+      var it = null;
       if (volg) {
         try {
-          var it = window.__spoorItem('netwerk ' + server);
+          it = window.__spoorItem('netwerk ' + server);
           p.then(function (r) { window.__spoorAf(it, 'antwoord ' + r.status); },
                  function ()  { window.__spoorAf(it, 'mislukt'); });
         } catch (e) {}
       }
-      return p;
+      if (!limiet) return p;
+      var klok;
+      var grens = new Promise(function (_, weiger) {
+        klok = setTimeout(function () {
+          if (it) window.__spoorAf(it, 'tijdslimiet na 5 s');
+          weiger(new TypeError('Geen antwoord binnen 5 s'));
+          if (ctrl) { try { ctrl.abort(); } catch (e) {} }
+        }, 5000);
+      });
+      p.then(function () { clearTimeout(klok); }, function () { clearTimeout(klok); });
+      return Promise.race([p, grens]);
     };
   })();
 
