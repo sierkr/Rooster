@@ -633,22 +633,82 @@
   // inlogsessie van Firebase en de roostervoorraad — staat in IndexedDB. Als
   // dat tweede opslagsysteem niet antwoordt, verklaart dat beide storingen in
   // één keer, en heeft sleutelen aan Firebase geen zin. Dit meet het.
+  // v3.33.12: de proef van v3.33.10 opende een nieuwe, lege opslag. Dat die in
+  // 11 ms opengaat (gemeten op de iPhone) zegt niets over de bestaande opslag
+  // van Firebase, en juist die is groot en oud. Deze proef kijkt naar de echte
+  // opslagen: die van de aanmeldcontrole en die van de roostervoorraad.
+  // ⚠ Een opslag die niet bestaat wordt door indexedDB.open aangemaakt. Daarom
+  // wordt 'bestond niet' apart gemeld en de zojuist aangemaakte weer verwijderd
+  // — anders leest 'geopend' als bewijs terwijl er niets geopend is.
   window.__idbProef = 'nog bezig';
   (function proefOpslag() {
     if (!window.indexedDB) { window.__idbProef = 'niet beschikbaar'; return; }
-    var t0 = Date.now(), klaar = false;
-    function af(uitkomst) {
-      if (klaar) return;
-      klaar = true;
-      window.__idbProef = uitkomst + ' (' + (Date.now() - t0) + ' ms)';
+    var delen = [];
+    function zet(tekst) { delen.push(tekst); window.__idbProef = delen.join(' · '); }
+
+    function openMetLimiet(naam, etiket, daarna) {
+      var t0 = Date.now(), af = false, bestondNiet = false;
+      function meld(tekst) {
+        if (af) return;
+        af = true;
+        zet(etiket + ': ' + tekst);
+        if (daarna) daarna();
+      }
+      setTimeout(function () { meld('GEEN ANTWOORD binnen 2 s'); }, 2000);
+      try {
+        var v = indexedDB.open(naam);
+        v.onupgradeneeded = function () { bestondNiet = true; };
+        v.onsuccess = function () {
+          var ms = Date.now() - t0;
+          try { v.result.close(); } catch (e) {}
+          if (bestondNiet) {
+            try { indexedDB.deleteDatabase(naam); } catch (e) {}
+            meld('bestond niet');
+          } else {
+            meld('geopend (' + ms + ' ms)');
+          }
+        };
+        v.onerror   = function () { meld('geweigerd'); };
+        v.onblocked = function () { meld('geblokkeerd'); };
+      } catch (e) { meld('fout'); }
     }
-    setTimeout(function () { af('GEEN ANTWOORD binnen 2 s'); }, 2000);
-    try {
-      var v = indexedDB.open('rooster_opslagproef');
-      v.onsuccess = function () { af('geopend'); try { v.result.close(); } catch (e) {} };
-      v.onerror   = function () { af('geweigerd'); };
-      v.onblocked = function () { af('geblokkeerd'); };
-    } catch (e) { af('fout: ' + (e && e.message ? e.message : e)); }
+
+    function onderzoek(namen) {
+      var rooster = null;
+      for (var i = 0; i < namen.length; i++) {
+        if (String(namen[i]).indexOf('firestore') !== -1) { rooster = namen[i]; break; }
+      }
+      if (!rooster && window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.projectId) {
+        rooster = 'firestore/[DEFAULT]/' + window.FIREBASE_CONFIG.projectId + '/main';
+      }
+      openMetLimiet('firebaseLocalStorageDb', 'auth-opslag', function () {
+        if (rooster) openMetLimiet(rooster, 'rooster-opslag');
+        else zet('rooster-opslag: naam onbekend');
+      });
+    }
+
+    if (typeof indexedDB.databases === 'function') {
+      var af = false;
+      function lijstKlaar(namen, hoe) {
+        if (af) return;
+        af = true;
+        zet('lijst: ' + hoe);
+        onderzoek(namen);
+      }
+      setTimeout(function () { lijstKlaar([], 'GEEN ANTWOORD binnen 2 s'); }, 2000);
+      try {
+        indexedDB.databases().then(function (lijst) {
+          var namen = [];
+          for (var i = 0; i < (lijst || []).length; i++) {
+            if (lijst[i] && lijst[i].name) namen.push(lijst[i].name);
+          }
+          lijstKlaar(namen, namen.length + ' opslagen');
+        }, function () { lijstKlaar([], 'fout'); });
+      } catch (e) { lijstKlaar([], 'fout'); }
+    } else {
+      zet('lijst: niet ondersteund');
+      onderzoek([]);
+    }
   })();
 
   window.__schermGetoond = false;

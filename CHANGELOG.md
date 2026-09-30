@@ -1,3 +1,31 @@
+## v3.33.12 — De juiste opslag meten
+
+De proef uit v3.33.10 opende een **nieuwe, lege** opslag. Op de iPhone meldde
+die "geopend (11 ms)" — en daar heb ik uit afgeleid dat de opslag in orde was.
+Dat was te snel: het zegt niets over de bestáánde opslag van Firebase, en juist
+die is groot en oud. De proef was zwakker dan hij oogde.
+
+- **De proef kijkt nu naar de echte opslagen**: eerst welke er op het toestel
+  staan, dan die van de aanmeldcontrole (`firebaseLocalStorageDb`), dan die van
+  de roostervoorraad. Elk met een limiet van 2 seconden.
+- ⚠ **`indexedDB.open` maakt een opslag aan die nog niet bestaat.** Daarom wordt
+  "bestond niet" apart gemeld en wordt de zojuist aangemaakte weer verwijderd —
+  anders leest "geopend" als bewijs terwijl er niets geopend is.
+- De naam van de roostervoorraad komt uit de lijst; is die er niet, dan wordt
+  hij afgeleid uit het project-id.
+
+Nagemeten in de Safari-motor (89 tests groen):
+
+| Situatie | Wat er op het scherm komt |
+|---|---|
+| Verse browser | *lijst: 0 opslagen · auth-opslag: bestond niet · rooster-opslag: bestond niet* |
+| Auth-opslag hangt | *auth-opslag: GEEN ANTWOORD binnen 2 s · rooster-opslag: bestond niet* |
+| Na inloggen, opslagen bestaan echt | *lijst: 3 opslagen · auth-opslag: geopend (4 ms) · rooster-opslag: geopend (0 ms)* |
+
+Deze versie repareert niets; ze beslist welke reparatie de juiste is.
+
+---
+
 ## v3.33.11 — De opslagproef op de plek waar je hem ziet
 
 De uitkomst van de opslagproef uit v3.33.10 stond alleen op het scherm "Geen
