@@ -1,3 +1,233 @@
+## v3.33.10 — Meten welke opslag het laat afweten
+
+Op de iPhone startte de app offline wél op (v3.33.9) maar bleef het rooster
+leeg. Nagemeten met de aanmeldcontrole tot zwijgen gebracht: **zolang die zwijgt
+doet Firestore helemaal niets.** Niet alleen de luisteraars leveren niets — ook
+een rechtstreekse leesopdracht op de eigen voorraad geeft nooit antwoord, zelfs
+geen foutmelding. Dat verklaart het lege Overzicht: de tabbladen tekent de app
+zelf, de inhoud moet uit Firestore komen.
+
+Wat daarachter zit is nog een vermoeden, en dit is precies wat dat vermoeden
+toetst: alles wat op dat toestel wél werkt staat in **localStorage** (de
+aantekening uit v3.33.8), alles wat níet werkt staat in **IndexedDB** (de
+inlogsessie van Firebase en de roostervoorraad). Klopt dat, dan heeft sleutelen
+aan Firebase geen zin en moet de app zijn eigen kopie gaan bewaren.
+
+- **Een opslagproef bij het opstarten.** De app probeert IndexedDB te openen met
+  een limiet van 2 seconden en zet de uitkomst op het scherm "Geen verbinding",
+  onder de laatst bereikte stap. De proef staat in het vangnet in `index.html`,
+  dus vóór `app/main.js` — hij werkt ook als die niet start.
+- **Een melding als het rooster leeg blijft.** Draait de app op de aantekening
+  en komt er binnen 4 seconden niets uit de voorraad, dan verschijnt bovenaan:
+  *"Geen verbinding, en de opgeslagen gegevens op dit toestel zijn niet
+  bereikbaar."* Die melding verdwijnt zodra er alsnog gegevens binnenkomen. Een
+  scherm dat niets doet moet dat zeggen.
+
+Nagemeten in de Safari-motor (89 tests groen):
+
+| Proef | Uitkomst |
+|---|---|
+| Gewone start | opslagproef: *geopend (66 ms)* |
+| IndexedDB zonder antwoord, mét aantekening | app en balk komen op; na de limiet de melding, stempel *op de aantekening gestart, maar geen gegevens uit de voorraad* |
+| IndexedDB zonder antwoord, onbekend toestel | scherm "Geen verbinding" met *opslag op dit toestel: GEEN ANTWOORD binnen 2 s* |
+
+Deze versie repareert het lege rooster niet. Ze beslist welke van de twee
+reparaties de juiste is.
+
+---
+
+## v3.33.9 — Eerst het rooster, dan pas de verbinding
+
+v3.33.8 bracht de app voorbij de zwijgende aanmeldcontrole, maar op een iPhone
+gaf dat één keer een rooster en de keer erna niets. Twee gaten in het ontwerp:
+
+- **Er werd 6 seconden gewacht.** Onnodig: nagemeten komen de gegevens er in
+  ongeveer 20 milliseconden uit de voorraad (drie keer achter elkaar offline
+  opnieuw geopend: 23, 22 en 22 ms). Er valt niets te wachten.
+- **De app deed níets als het toestel zei dat het verbinding had** terwijl er in
+  werkelijkheid niets doorkwam. Dan bleef hij wachten op een antwoord dat nooit
+  kwam. Dat verklaart waarom het de tweede keer wegbleef.
+
+- **Meldt het toestel geen verbinding, dan start de app meteen** op de
+  aantekening van dit toestel en toont het laatst bekende rooster. Geen
+  wachttijd.
+- **Meldt het toestel wél verbinding maar zwijgt de aanmeldcontrole langer dan
+  3 seconden, dan gebeurt hetzelfde.** Normaal antwoordt Firebase binnen een
+  halve seconde. ⚠ Bewust geen keuze op apparaatsoort: een iPad meldt zich als
+  desktop en "toon desktopversie" doet hetzelfde op een telefoon.
+- **Een smalle balk bovenin zolang de app op de aantekening draait:** *Geen
+  verbinding — laatst bekende rooster*. Zonder die balk is niet te zien of je
+  naar actuele gegevens kijkt, en bij een rooster is dat geen detail. De balk
+  hangt aan de verbinding, niet aan Firebase: ook als Firebase alsnog
+  antwoordt, is er dan nog steeds geen verbinding. Hij verdwijnt bij het
+  `online`-signaal van de browser.
+
+Ongewijzigd uit v3.33.8: Firebase houdt het laatste woord, en uitloggen wist de
+aantekening vóór het uitloggen zelf.
+
+Nagemeten in de Safari-motor van Playwright, met de Firebase-emulators en de
+aanmeldcontrole kunstmatig tot zwijgen gebracht (89 tests groen):
+
+| Proef | Uitkomst |
+|---|---|
+| Online ingelogd | app normaal, geen balk |
+| Geen verbinding, 3× opnieuw openen | app in beeld na 265, 132 en 231 ms — elke keer, mét balk |
+| Zegt online maar zwijgt | app in beeld na 3,5 seconde |
+| Verbinding terug | balk verdwijnt |
+| Uitloggen | aantekening weg |
+
+---
+
+## v3.33.8 — De app wacht niet eindeloos op een antwoord dat niet komt
+
+De stempels uit v3.33.7 wezen het aan op het toestel zelf:
+
+    laatste stap: aanmeldcontrole gestart
+
+De app was dus volledig opgestart — Firebase geladen, de aanmeldcontrole
+aangezet — en daarna kwam Firebase nooit meer terug. Geen fout, geen weigering:
+de vraag "wie is er ingelogd?" bleef zonder verbinding onbeantwoord, en alles
+daarna (profiel, rooster) kwam nooit aan de beurt. Het was dus nooit de databank
+en nooit het inlogbewijs, maar de stap ervóór.
+
+Nagebootst op de Mint door de opslag die Firebase Auth leest
+(`firebaseLocalStorageDb`) nooit te laten antwoorden: dat geeft exact hetzelfde
+scherm, in zowel Chromium als de Safari-motor.
+
+### De aantekening van dit toestel
+
+Idee van Sierk: laat de app zelf onthouden wie er op dit toestel inlogde, dan is
+Firebase daar niet meer voor nodig.
+
+- **Bij elke geslaagde start legt de app vast wie er inlogde** (gebruikersnummer,
+  e-mail en het profiel), in de opslag van de browser.
+- **Zwijgt de aanmeldcontrole langer dan 6 seconden én meldt het toestel dat het
+  geen verbinding heeft**, dan gaat de app op die aantekening verder en toont het
+  rooster uit de voorraad. Normaal antwoordt Firebase binnen een halve seconde.
+- **Twee voorwaarden, allebei nodig.** Op een computer mét verbinding kan dit
+  daardoor nooit in werking treden, ook niet op een gedeelde pc. ⚠ Bewust géén
+  keuze op apparaatsoort: een iPad meldt zich als desktop en "toon
+  desktopversie" doet hetzelfde op een telefoon — dat zou juist misgaan op het
+  apparaat waar het om draait. Verkeerde verbindingsmelding? Dan treedt de
+  noodvoorziening niet in werking en zit je in de situatie van vóór v3.33.8.
+  Nooit andersom.
+- **Firebase heeft het laatste woord.** Antwoordt hij alsnog met dezelfde
+  persoon, dan neemt de app de echte gebruiker over zonder opnieuw op te
+  starten. Zegt hij "niemand ingelogd", dan komt het inlogscherm en wordt de
+  aantekening gewist.
+- **Uitloggen wist de aantekening**, vóór het uitloggen zelf. Anders zou
+  uitloggen zonder verbinding niets betekenen.
+- ⚠ **De sleutel bevat de omgeving.** `/Rooster/` en `/Rooster-test/` staan op
+  hetzelfde webadres en delen hun opslag; zonder dat onderscheid kon een
+  aantekening uit de testomgeving in live gebruikt worden.
+
+De aantekening bepaalt alleen wat er op het scherm staat, niet wat de server
+accepteert: er hoort geen inlogbewijs bij, en elke wijziging wordt pas
+doorgevoerd als hij bij de server aankomt, waar de toegangsregels onverkort
+gelden.
+
+Nagemeten (89 tests groen, gemeten in de Safari-motor):
+
+| Proef | Uitkomst |
+|---|---|
+| Na inloggen | aantekening staat onder `rooster_toestel_gebruiker_prod` |
+| Storing nagebootst, toestel kent een gebruiker | na 3 s nog *aanmeldcontrole gestart*, na de limiet *app gestart* |
+| Storing nagebootst, onbekend toestel | *dit toestel kent geen eerdere gebruiker*, app blijft dicht |
+| Uitloggen | aantekening weg, inlogscherm terug |
+| Online, niet ingelogd, 12 seconden | inlogscherm, noodvoorziening gaat niet af |
+
+⚠ **Wat níet is aangetoond:** dat het rooster op een echte iPhone ook echt in
+beeld komt. Die gegevens komen uit dezelfde voorraad op het toestel, en of die
+daar wél antwoordt is niet gemeten.
+
+---
+
+## v3.33.7 — De app vertelt hoe ver hij komt
+
+Deze versie repareert niets. Ze maakt zichtbaar waar het opstarten blijft
+steken, want daar liep het onderzoek op vast.
+
+v3.33.6 haalde `apis.google.com` weg — dat werkte, die foutmelding is van het
+toestel verdwenen. Maar de app start offline nog steeds niet op, en het scherm
+"Geen verbinding" meldde alleen "De app kreeg binnen 15 seconden geen antwoord".
+Er gaat dus niets kapot; er komt ergens nooit een antwoord. Wáár, zei het scherm
+niet.
+
+- **Stempels onderweg.** De app zet bij elke stap een stempel, en de laatst
+  bereikte stap komt op het scherm "Geen verbinding" te staan: *Firebase
+  geladen* → *aanmeldcontrole gestart* → *gebruiker bekend* (of *niemand
+  ingelogd*) → *profiel opvragen* → *profiel binnen* → *app gestart*.
+  De beginwaarde staat in het vangnet in `index.html`, dus vóór `app/main.js`:
+  komt die niet op gang, dan leest het scherm "pagina geladen, app/main.js nog
+  niet begonnen".
+
+Nagemeten (89 tests groen):
+
+- gewone start, niet ingelogd → laatste stap *niemand ingelogd*;
+- motor onbereikbaar → *pagina geladen, app/main.js nog niet begonnen*, met
+  daaronder `Kon niet laden: …/app/main.js`;
+- volledige keten met een echte inlogsessie (Firebase-emulators op de Mint,
+  gemeten in zowel Chromium als de Safari-motor van Playwright) → *app gestart*.
+
+### Wat in deze ronde is wéggestreept
+
+Met die emulator-opstelling zijn vier verklaringen weerlegd in plaats van
+beredeneerd: een vastlopende profielopvraag (Firestore weigert offline binnen
+120 ms), een verlopen inlogbewijs (app start dan nog steeds binnen 2 seconden),
+de Safari-motor als zodanig (WebKit start net zo goed op), en "er gaat iets
+kapot" (er wordt geen enkele fout gemeld). Wat overblijft is het verschil tussen
+die opstelling en een echt toestel: iOS-Safari, de echte servers van Google, en
+de app uit de voorraad van de service worker.
+
+Niet veranderd: alles wat de app doet.
+
+---
+
+## v3.33.6 — De app hangt niet langer aan een inlogvenster dat niet gebruikt wordt
+
+Het vangnet uit v3.33.5 wees de oorzaak aan op het toestel zelf:
+
+    Kon niet laden: https://apis.google.com/js/api.js?onload=__iframefcb153860
+
+`getAuth()` — de standaardmanier om Firebase-inloggen op te starten — zet er
+ongevraagd `popupRedirectResolver` bij, het onderdeel voor inloggen via een
+Google-venster. Uit de software zelf gelezen:
+`initializeAuth(e,{popupRedirectResolver:z,persistence:[...]})`. Dat onderdeel
+is het enige in `firebase-auth.js` dat `apis.google.com/js/api.js` ophaalt: bij
+het opstarten kijkt het of de gebruiker net via zo'n venster binnenkwam. Dat
+gebeurt alléén als er al iemand ingelogd is — vandaar dat het bij het testen
+zonder account nooit zichtbaar werd. Zonder internet blijft het opstarten erop
+staan en kwam de app nooit verder.
+
+Drie feiten die dit extra wrang maken:
+
+- deze app gebruikt dat venster nergens (geen `signInWithPopup` of
+  `signInWithRedirect` — inloggen gaat met naam en wachtwoord);
+- het eigen veiligheidsbeleid in `index.html` staat `apis.google.com` niet toe
+  en heeft `frame-src 'none'`, dus het kón nooit werken, ook niet mét internet;
+- het hield daarmee de hele app tegen voor iets wat nergens voor dient.
+
+- **`initializeAuth()` in plaats van `getAuth()`**, zonder
+  `popupRedirectResolver`. De manier van sessies bewaren is bewust dezelfde
+  (`indexedDBLocalPersistence`, `browserLocalPersistence`,
+  `browserSessionPersistence`), zodat ingelogd blijven na afsluiten onveranderd
+  werkt. ⚠ Niet terugzetten naar `getAuth()`.
+
+Nagemeten: 89 tests groen, inloggen krijgt gewoon antwoord van de server
+("E-mail of wachtwoord onjuist"), geen paginafouten, en offline met de motor in
+de voorraad komt het inlogscherm op zonder vals alarm van het vangnet.
+
+⚠ **Wat níet is aangetoond:** dat dit de hangende boel wegneemt. Dat bestand
+wordt alleen opgehaald als er iemand ingelogd is, en bij het bouwen was er geen
+account om mee te meten. Het bewijs moet van een toestel met een echte sessie
+komen.
+
+Niet veranderd: inloggen met naam en wachtwoord, ingelogd blijven, wachtwoord
+wijzigen, databank, toegangsregels, cloud functions, het rooster, import en
+export, en alle schermen en teksten.
+
+---
+
 ## v3.33.5 — Een wit scherm kan niet meer
 
 v3.33.4 haalde de Firebase-motor binnen boord, en op de iPhone stopte het

@@ -2,7 +2,9 @@
 // db / auth / fnX uit dit bestand. SDK-helpers (doc, collection, setDoc, ...)
 // worden direct uit de Firebase modules geïmporteerd in de modules die ze nodig hebben.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence,
+         browserSessionPersistence, reauthenticateWithCredential, EmailAuthProvider }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
@@ -30,7 +32,25 @@ if (typeof window !== 'undefined' && window.APPCHECK_SITE_KEY) {
   })();
 }
 
-export const auth = getAuth(firebaseApp);
+// v3.33.6: bewust initializeAuth in plaats van getAuth. getAuth zet er
+// ongevraagd `popupRedirectResolver` bij — het onderdeel voor inloggen via een
+// Google-venster. Dat onderdeel haalt bij het opstarten
+// `https://apis.google.com/js/api.js` op om te kijken of je net via zo'n
+// venster binnenkwam. Dat gebeurt alleen als er al iemand ingelogd is, en
+// zonder internet blijft het opstarten daarop staan: op 30 september 2026 was
+// dat op een iPhone zonder verbinding de reden dat de app nooit verder kwam.
+//
+// Deze app gebruikt dat venster nergens (geen signInWithPopup of
+// signInWithRedirect — alleen naam en wachtwoord), en het eigen
+// veiligheidsbeleid in index.html staat `apis.google.com` niet eens toe
+// (`frame-src 'none'`). Het werd dus opgehaald voor iets wat niet gebruikt
+// wordt en niet kán werken. ⚠ Niet terugzetten naar getAuth.
+//
+// De manier van sessies bewaren is bewust dezelfde als die getAuth gebruikt,
+// zodat ingelogd blijven na afsluiten onveranderd werkt.
+export const auth = initializeAuth(firebaseApp, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+});
 
 // ----------------------------------------------------------------------------
 // Database-selectie: productie gebruikt de (default) database; de testomgeving

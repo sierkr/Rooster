@@ -491,7 +491,9 @@
   <h1 class="login-title">Geen verbinding</h1>
   <p class="login-sub">Het rooster kan nu niet geopend worden. Zodra je toestel weer verbinding heeft, gaat de app automatisch verder. Je blijft ingelogd.</p>
   <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="window.gvOpnieuw()">Opnieuw proberen</button>
-  <p class="muted" id="gvReden" style="text-align: center; margin-top: 1.5rem; word-break: break-word;"></p>
+  <p class="muted" id="gvStap" style="text-align: center; margin-top: 1.5rem;"></p>
+  <p class="muted" id="gvOpslag" style="text-align: center; margin-top: 0.5rem;"></p>
+  <p class="muted" id="gvReden" style="text-align: center; margin-top: 0.5rem; word-break: break-word;"></p>
   <p class="muted" style="text-align: center; margin-top: 0.5rem;">v<span class="versieLabel2"></span></p>
 </div>
 
@@ -616,9 +618,38 @@
   }, true);
   window.addEventListener('unhandledrejection', function (ev) { onthoud(ev && ev.reason); });
 
+  // v3.33.7: stempels onderweg. "Geen antwoord" vertelt niet wáár de app op
+  // staat te wachten; de laatst bereikte stap doet dat wel. De beginwaarde is
+  // met opzet zo geformuleerd dat je ziet dat app/main.js nooit begonnen is.
+  window.__laatsteStap = 'pagina geladen, app/main.js nog niet begonnen';
+  window.__stap = function (naam) { window.__laatsteStap = naam; };
+
   // Ook fouten die de app zélf netjes opvangt horen hier te belanden — anders
   // staat er straks "geen antwoord" terwijl de echte reden bekend was.
   window.__meldReden = onthoud;
+
+  // v3.33.10: werkt IndexedDB op dit toestel? Alles wat op de iPhone wél werkt
+  // staat in localStorage (de aantekening); alles wat níet werkt — de
+  // inlogsessie van Firebase en de roostervoorraad — staat in IndexedDB. Als
+  // dat tweede opslagsysteem niet antwoordt, verklaart dat beide storingen in
+  // één keer, en heeft sleutelen aan Firebase geen zin. Dit meet het.
+  window.__idbProef = 'nog bezig';
+  (function proefOpslag() {
+    if (!window.indexedDB) { window.__idbProef = 'niet beschikbaar'; return; }
+    var t0 = Date.now(), klaar = false;
+    function af(uitkomst) {
+      if (klaar) return;
+      klaar = true;
+      window.__idbProef = uitkomst + ' (' + (Date.now() - t0) + ' ms)';
+    }
+    setTimeout(function () { af('GEEN ANTWOORD binnen 2 s'); }, 2000);
+    try {
+      var v = indexedDB.open('rooster_opslagproef');
+      v.onsuccess = function () { af('geopend'); try { v.result.close(); } catch (e) {} };
+      v.onerror   = function () { af('geweigerd'); };
+      v.onblocked = function () { af('geblokkeerd'); };
+    } catch (e) { af('fout: ' + (e && e.message ? e.message : e)); }
+  })();
 
   window.__schermGetoond = false;
   window.__redenTekst = function () {
@@ -632,6 +663,10 @@
       var el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
+    var stap = document.getElementById('gvStap');
+    if (stap) stap.textContent = 'laatste stap: ' + window.__laatsteStap;
+    var opslag = document.getElementById('gvOpslag');
+    if (opslag) opslag.textContent = 'opslag op dit toestel: ' + window.__idbProef;
     var reden = document.getElementById('gvReden');
     if (reden) reden.textContent = window.__redenTekst();
     // Het versienummer wordt normaal door main.js ingevuld. Juist als die niet

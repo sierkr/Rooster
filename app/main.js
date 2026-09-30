@@ -24,6 +24,58 @@ import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
 
+// ==== Aantekening van dit toestel (v3.33.8) =================================
+// Gemeten op een iPhone zonder verbinding: de aanmeldcontrole van Firebase
+// antwoordt daar nooit. Geen fout, geen weigering — de vraag "wie is er
+// ingelogd?" blijft simpelweg onbeantwoord, en daardoor kwam de app nooit
+// verder dan de stap 'aanmeldcontrole gestart'. Firebase kunnen we niet
+// repareren; eindeloos wachten hoeven we niet.
+//
+// Daarom legt de app bij elke geslaagde start zelf vast wie er op dit toestel
+// inlogde. Zwijgt de aanmeldcontrole én meldt het toestel dat het geen
+// verbinding heeft, dan gaat de app op die aantekening verder.
+//
+// ⚠ De sleutel bevat de omgeving. /Rooster/ en /Rooster-test/ staan op
+// hetzelfde webadres en delen dus hun opslag; zonder dat onderscheid zou een
+// aantekening uit de testomgeving in live gebruikt kunnen worden.
+const TOESTEL_SLEUTEL = 'rooster_toestel_gebruiker_' + (window.APP_ENV || 'onbekend');
+
+function onthoudToestelGebruiker(user, profiel) {
+  try {
+    localStorage.setItem(TOESTEL_SLEUTEL, JSON.stringify({
+      uid: user.uid,
+      email: user.email || profiel.email || null,
+      profiel,
+      opgeslagen: new Date().toISOString(),
+    }));
+  } catch (e) { /* opslag vol of geweigerd: dan blijft alleen de gewone weg over */ }
+}
+
+function vergeetToestelGebruiker() {
+  try { localStorage.removeItem(TOESTEL_SLEUTEL); } catch (e) { /* niets aan te doen */ }
+}
+
+function toestelGebruiker() {
+  try {
+    const rauw = localStorage.getItem(TOESTEL_SLEUTEL);
+    if (!rauw) return null;
+    const g = JSON.parse(rauw);
+    return (g && g.uid && g.profiel) ? g : null;
+  } catch (e) { return null; }
+}
+
+// ==== Stempels onderweg (v3.33.7) ===========================================
+// Het scherm "Geen verbinding" meldde alleen "geen antwoord" en zei daarmee
+// niet wáár de app op stond te wachten. Deze stempels zetten de laatst
+// bereikte stap neer; die komt op dat scherm te staan. Het vangnet in
+// index.html houdt ze bij — dat staat er bewust vóór, zodat "app/main.js nog
+// niet begonnen" ook zichtbaar wordt.
+function stap(naam) {
+  if (typeof window.__stap === 'function') window.__stap(naam);
+}
+// Dit is de eerste regel die draait nadat álle imports gelukt zijn.
+stap('Firebase geladen');
+
 // ==== Sheet helpers op window (voor inline onclick="window.closeSheet()") ====
 
 window.openSheet  = openSheet;
@@ -67,6 +119,9 @@ window.doLogout = async function() {
   if (!confirm('Uitloggen?')) return;
   state.unsubscribers.forEach(fn => fn());
   state.unsubscribers = [];
+  // v3.33.8: eerst de aantekening weg. Bleef die staan, dan zou uitloggen
+  // zonder verbinding niets betekenen — de app zou je er zo weer inlaten.
+  vergeetToestelGebruiker();
   await signOut(auth);
 };
 
@@ -386,6 +441,8 @@ function luisterNaarData() {
   let functiesGeladen = false;
 
   state.unsubscribers.push(onSnapshot(collection(db, 'radiologen'), (snap) => {
+    _gegevensBinnen = true;
+    verbergGeenGegevensMelding();
     state.radiologen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!state.huidigeRadId) {
       state.huidigeRadId = state.profiel?.radioloog_id && isVasteStoel(state.profiel.radioloog_id)
@@ -538,6 +595,8 @@ function startApp() {
   state.huidigeView = 'beh';
   renderTabs();
   luisterNaarData();
+  _appGestart = true;
+  stap('app gestart');
 }
 
 // ==== Boot ===================================================================
@@ -589,6 +648,8 @@ function isVerbindingsFout(e) {
 
 let _opstartUser = null;
 let _wachtOpVerbinding = false;
+let _aanmeldingBeantwoord = false;
+let _appGestart = false;
 
 // v3.33.5: één plek die bepaalt wat er te zien is. Het laadsymbool verdween
 // vroeger meteen aan het begin van de aanmeldcontrole — dus vóórdat bekend was
@@ -596,6 +657,55 @@ let _wachtOpVerbinding = false;
 // scherm over zonder enige uitleg (iPhone, offline, 29 september 2026). Nu
 // blijft het laadsymbool staan tot hier een scherm gekozen wordt, en weet het
 // vangnet in index.html dat het niet meer hoeft in te grijpen.
+// v3.33.9: een smalle balk zolang de app op de aantekening draait. Zonder die
+// balk is niet te zien of je naar actuele gegevens kijkt, en bij een rooster is
+// dat geen detail. Hij hangt aan de verbinding, niet aan Firebase: ook als
+// Firebase alsnog antwoordt, is er dan nog steeds geen verbinding.
+let _aantekeningBalk = null;
+let _gegevensBinnen = false;
+
+// v3.33.10: draait de app op de aantekening en komt er niets uit de voorraad,
+// dan bleef het scherm leeg zonder uitleg. Gemeten: zolang de aanmeldcontrole
+// zwijgt doet Firestore helemaal niets — ook zijn eigen voorraad niet lezen, en
+// zelfs zonder foutmelding. Een scherm dat niets doet moet dat zeggen.
+function toonGeenGegevensMelding() {
+  if (document.getElementById('geen-gegevens')) return;
+  const app = document.getElementById('app');
+  if (!app) return;
+  const blok = document.createElement('div');
+  blok.id = 'geen-gegevens';
+  blok.className = 'empty-state';
+  blok.style.cssText = 'padding:24px 16px;text-align:center;';
+  blok.textContent = 'Geen verbinding, en de opgeslagen gegevens op dit toestel '
+    + 'zijn niet bereikbaar. Het rooster kan daardoor niet getoond worden.';
+  app.insertBefore(blok, app.firstChild);
+}
+
+function verbergGeenGegevensMelding() {
+  const blok = document.getElementById('geen-gegevens');
+  if (blok) blok.remove();
+}
+
+function toonAantekeningBalk() {
+  if (_aantekeningBalk) return;
+  const balk = document.createElement('div');
+  balk.id = 'aantekening-balk';
+  balk.textContent = 'Geen verbinding — laatst bekende rooster';
+  balk.style.cssText = 'position:sticky;top:0;z-index:9998;background:#5f5e5a;color:#fff;'
+    + 'font-family:system-ui,sans-serif;font-weight:600;font-size:13px;text-align:center;padding:6px 10px;';
+  document.body.insertBefore(balk, document.body.firstChild);
+  _aantekeningBalk = balk;
+}
+
+function verbergAantekeningBalk() {
+  if (!_aantekeningBalk) return;
+  _aantekeningBalk.remove();
+  _aantekeningBalk = null;
+}
+
+// Komt de verbinding terug, dan mag de balk weg.
+window.addEventListener('online', verbergAantekeningBalk);
+
 function toonScherm(id, weergave) {
   ['login', 'change-password', 'app', 'geen-verbinding'].forEach(s => {
     const el = document.getElementById(s);
@@ -644,9 +754,12 @@ window.gvOpnieuw = async () => {
 async function opstarten(user) {
   _opstartUser = user;
   try {
+    stap('profiel opvragen');
     const profiel = await laadProfiel(user.uid);
+    stap('profiel binnen');
     state.user = user;
     state.profiel = profiel;
+    onthoudToestelGebruiker(user, profiel);
 
     if (profiel.wachtwoord_gewijzigd === false) {
       // Eerste aanmelding: wachtwoord wijzigen + akkoord
@@ -675,10 +788,75 @@ async function opstarten(user) {
   }
 }
 
+stap('aanmeldcontrole gestart');
 onAuthStateChanged(auth, async (user) => {
+  _aanmeldingBeantwoord = true;
   if (!user) {
+    // Firebase heeft het laatste woord: zegt hij dat er niemand is, dan is er
+    // niemand — ook als de app al op de aantekening was gestart.
+    stap('niemand ingelogd');
+    vergeetToestelGebruiker();
+    verbergAantekeningBalk();
     toonScherm('login');
+    return;
+  }
+  stap('gebruiker bekend');
+  if (_appGestart && state.user && state.user.uid === user.uid) {
+    // De app draaide al op de aantekening en het is dezelfde persoon: niet
+    // opnieuw opstarten, alleen de echte gebruiker erin zetten (die heeft een
+    // geldig inlogbewijs, de aantekening niet).
+    state.user = user;
+    if (navigator.onLine) verbergAantekeningBalk();
+    stap('aanmeldcontrole alsnog beantwoord');
     return;
   }
   await opstarten(user);
 });
+
+// ==== Meteen het rooster, dan pas de verbinding (v3.33.9) ===================
+// In v3.33.8 wachtte de app eerst 6 seconden, en deed hij níets als het toestel
+// zei dat het verbinding had terwijl er in werkelijkheid niets doorkwam. Op een
+// iPhone gaf dat één keer een rooster en de keer erna niets. Beide gaten zijn
+// hier dicht: de gegevens komen in ongeveer 20 milliseconden uit de voorraad,
+// dus er valt niets te wachten.
+function startOpAantekening(hoe) {
+  if (_aanmeldingBeantwoord || _appGestart) return false;
+  const g = toestelGebruiker();
+  if (!g) {
+    stap(hoe + '; dit toestel kent geen eerdere gebruiker');
+    return false;
+  }
+  stap(hoe + '; verder op de aantekening van dit toestel');
+  // Een plaatsvervanger: de app gebruikt hiervan alleen uid en e-mail. Er is
+  // bewust géén inlogbewijs — schrijven kan pas als de server het goedkeurt,
+  // en daar gelden de toegangsregels onverkort.
+  const plaatsvervanger = { uid: g.uid, email: g.email || g.profiel.email || null };
+  state.user = plaatsvervanger;
+  state.profiel = g.profiel;
+  _opstartUser = plaatsvervanger;
+  try {
+    startApp();
+    toonAantekeningBalk();
+    setTimeout(() => {
+      if (_gegevensBinnen) return;
+      stap('op de aantekening gestart, maar geen gegevens uit de voorraad');
+      toonGeenGegevensMelding();
+    }, 4000);
+    return true;
+  } catch (e) {
+    meldReden(e);
+    toonGeenVerbinding(plaatsvervanger);
+    return false;
+  }
+}
+
+// 1. Meldt het toestel dat er geen verbinding is: meteen beginnen.
+if (!navigator.onLine) startOpAantekening('geen verbinding gemeld');
+
+// 2. Meldt het toestel wél verbinding maar zwijgt de aanmeldcontrole, dan is er
+//    iets anders mis — een telefoon die denkt online te zijn terwijl er niets
+//    doorkomt. Normaal antwoordt Firebase binnen een halve seconde, dus na drie
+//    seconden mogen we ervan uitgaan dat er geen antwoord meer komt.
+//    ⚠ Bewust geen keuze op apparaatsoort: een iPad meldt zich als desktop, en
+//    "toon desktopversie" doet hetzelfde op een telefoon.
+setTimeout(() => { startOpAantekening('aanmeldcontrole zweeg'); }, 3000);
