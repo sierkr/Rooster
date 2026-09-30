@@ -676,8 +676,22 @@ function toonGeenGegevensMelding() {
   blok.id = 'geen-gegevens';
   blok.className = 'empty-state';
   blok.style.cssText = 'padding:24px 16px;text-align:center;';
-  blok.textContent = 'Geen verbinding, en de opgeslagen gegevens op dit toestel '
+
+  const tekst = document.createElement('div');
+  tekst.textContent = 'Geen verbinding, en de opgeslagen gegevens op dit toestel '
     + 'zijn niet bereikbaar. Het rooster kan daardoor niet getoond worden.';
+  blok.appendChild(tekst);
+
+  // v3.33.11: de uitkomst van de opslagproef stond alleen op het scherm "Geen
+  // verbinding" — en juist als de app wél opstart komt niemand daar. Hij hoort
+  // hier, want dit is het scherm dat je dan te zien krijgt.
+  const opslag = document.createElement('div');
+  opslag.className = 'muted';
+  opslag.style.cssText = 'margin-top:12px;';
+  opslag.textContent = 'opslag op dit toestel: '
+    + (typeof window.__idbProef === 'undefined' ? 'onbekend' : window.__idbProef);
+  blok.appendChild(opslag);
+
   app.insertBefore(blok, app.firstChild);
 }
 

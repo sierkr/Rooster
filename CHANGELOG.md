@@ -1,3 +1,23 @@
+## v3.33.11 — De opslagproef op de plek waar je hem ziet
+
+De uitkomst van de opslagproef uit v3.33.10 stond alleen op het scherm "Geen
+verbinding" — en juist sinds v3.33.9 start de app wél op, zodat niemand daar nog
+komt. Het getal stond dus op een scherm dat de gebruiker niet meer krijgt.
+
+- **De uitkomst staat nu ook onder de melding** die verschijnt als het rooster
+  leeg blijft. Verder verandert er niets.
+
+Nagemeten in de Safari-motor (89 tests groen) — de twee mogelijkheden geven een
+verschillend antwoord, en dát is waar het om gaat:
+
+| Situatie | Wat er op het scherm komt |
+|---|---|
+| Opslag geeft geen antwoord | *opslag op dit toestel: GEEN ANTWOORD binnen 2 s (2001 ms)* |
+| Opslag werkt, aanmeldcontrole zwijgt | *opslag op dit toestel: geopend (79 ms)* |
+| Opslag werkt en gegevens komen binnen | geen melding |
+
+---
+
 ## v3.33.10 — Meten welke opslag het laat afweten
 
 Op de iPhone startte de app offline wél op (v3.33.9) maar bleef het rooster
