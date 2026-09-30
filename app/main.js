@@ -532,9 +532,7 @@ window.injecteerNieuweKleuren = function(functies) {
 
 
 function startApp() {
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('change-password').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
+  toonScherm('app', 'block');
   state.huidigeDatum = vandaagIso();
   state.weekMaandag = mandagVanIso(state.huidigeDatum);
   state.huidigeView = 'beh';
@@ -592,11 +590,35 @@ function isVerbindingsFout(e) {
 let _opstartUser = null;
 let _wachtOpVerbinding = false;
 
+// v3.33.5: één plek die bepaalt wat er te zien is. Het laadsymbool verdween
+// vroeger meteen aan het begin van de aanmeldcontrole — dus vóórdat bekend was
+// wát er getoond moest worden. Ging het daarna mis, dan bleef er een leeg wit
+// scherm over zonder enige uitleg (iPhone, offline, 29 september 2026). Nu
+// blijft het laadsymbool staan tot hier een scherm gekozen wordt, en weet het
+// vangnet in index.html dat het niet meer hoeft in te grijpen.
+function toonScherm(id, weergave) {
+  ['login', 'change-password', 'app', 'geen-verbinding'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.style.display = (s === id) ? (weergave || 'flex') : 'none';
+  });
+  const laad = document.getElementById('loading');
+  if (laad) laad.style.display = 'none';
+  window.__schermGetoond = true;
+}
+
+// Geef de reden door aan het vangnet, zodat hij onder de melding komt te staan.
+// Zonder dit zou er "geen antwoord" staan terwijl de echte oorzaak bekend was.
+function meldReden(e) {
+  if (typeof window.__meldReden === 'function') window.__meldReden(e);
+}
+
 function toonGeenVerbinding(user) {
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('change-password').style.display = 'none';
-  document.getElementById('geen-verbinding').style.display = 'flex';
+  _opstartUser = user || _opstartUser;
+  const reden = document.getElementById('gvReden');
+  if (reden && typeof window.__redenTekst === 'function') {
+    reden.textContent = window.__redenTekst();
+  }
+  toonScherm('geen-verbinding');
 
   // Komt de verbinding terug, dan gaat de app zelf verder — zonder dat iemand
   // op een knop hoeft te drukken.
@@ -609,11 +631,14 @@ function toonGeenVerbinding(user) {
   }
 }
 
+// Vervangt de eenvoudige knop uit het vangnet in index.html: opnieuw proberen
+// zonder de hele app opnieuw op te laten starten. Is er geen gebruiker bekend,
+// dan is opnieuw laden het enige zinnige.
 window.gvOpnieuw = async () => {
   document.getElementById('geen-verbinding').style.display = 'none';
   document.getElementById('loading').style.display = 'flex';
   if (_opstartUser) await opstarten(_opstartUser);
-  document.getElementById('loading').style.display = 'none';
+  else location.reload();
 };
 
 async function opstarten(user) {
@@ -622,18 +647,23 @@ async function opstarten(user) {
     const profiel = await laadProfiel(user.uid);
     state.user = user;
     state.profiel = profiel;
-    document.getElementById('geen-verbinding').style.display = 'none';
 
     if (profiel.wachtwoord_gewijzigd === false) {
       // Eerste aanmelding: wachtwoord wijzigen + akkoord
-      document.getElementById('login').style.display = 'none';
-      document.getElementById('app').style.display = 'none';
-      document.getElementById('change-password').style.display = 'flex';
+      toonScherm('change-password');
       window.cpValideer();
     } else {
-      startApp();
+      // v3.33.5: gaat het opstarten van de app zelf mis, dan verdween dat tot
+      // nu toe spoorloos — het appscherm stond al zichtbaar, maar leeg.
+      try {
+        startApp();
+      } catch (e) {
+        meldReden(e);
+        toonGeenVerbinding(user);
+      }
     }
   } catch (e) {
+    meldReden(e);
     if (isVerbindingsFout(e) || !navigator.onLine) {
       toonGeenVerbinding(user);
       return;
@@ -646,12 +676,8 @@ async function opstarten(user) {
 }
 
 onAuthStateChanged(auth, async (user) => {
-  document.getElementById('loading').style.display = 'none';
   if (!user) {
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('change-password').style.display = 'none';
-    document.getElementById('geen-verbinding').style.display = 'none';
-    document.getElementById('login').style.display = 'flex';
+    toonScherm('login');
     return;
   }
   await opstarten(user);

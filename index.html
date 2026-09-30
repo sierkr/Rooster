@@ -491,7 +491,8 @@
   <h1 class="login-title">Geen verbinding</h1>
   <p class="login-sub">Het rooster kan nu niet geopend worden. Zodra je toestel weer verbinding heeft, gaat de app automatisch verder. Je blijft ingelogd.</p>
   <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="window.gvOpnieuw()">Opnieuw proberen</button>
-  <p class="muted" style="text-align: center; margin-top: 2rem;">v<span class="versieLabel2"></span></p>
+  <p class="muted" id="gvReden" style="text-align: center; margin-top: 1.5rem; word-break: break-word;"></p>
+  <p class="muted" style="text-align: center; margin-top: 0.5rem;">v<span class="versieLabel2"></span></p>
 </div>
 
 <!-- Eerste aanmelding: wachtwoord wijzigen -->
@@ -592,6 +593,66 @@
 </div>
 
 <script src="config.js"></script>
+<script>
+// ── Vangnet tegen een wit scherm (v3.33.5) ───────────────────────────────────
+// Dit staat bewust vóór app/main.js en is bewust GEEN module: het moet ook
+// werken als main.js zelf niet laadt. Op 29 september 2026 gebeurde precies
+// dat op een iPhone zonder internet — en omdat main.js ook het laadsymbool
+// weghaalt, bleef er een leeg wit scherm over zonder enige uitleg. Wat je niet
+// kunt zien, kun je niet melden; daarom onthoudt dit blok elke fout die nergens
+// anders wordt opgevangen en zet het na 15 seconden alsnog een scherm neer.
+(function () {
+  var redenen = [];
+  function onthoud(x) {
+    if (!x) return;
+    var t = (x.code ? x.code + ' — ' : '') + (x.message || String(x));
+    t = String(t).slice(0, 160);
+    if (redenen.indexOf(t) === -1) redenen.push(t);
+  }
+  // capture=true: zo komen ook bestanden binnen die niet geladen konden worden
+  window.addEventListener('error', function (ev) {
+    onthoud((ev && ev.error) || (ev && ev.message)
+      || (ev && ev.target && ev.target.src ? 'Kon niet laden: ' + ev.target.src : null));
+  }, true);
+  window.addEventListener('unhandledrejection', function (ev) { onthoud(ev && ev.reason); });
+
+  // Ook fouten die de app zélf netjes opvangt horen hier te belanden — anders
+  // staat er straks "geen antwoord" terwijl de echte reden bekend was.
+  window.__meldReden = onthoud;
+
+  window.__schermGetoond = false;
+  window.__redenTekst = function () {
+    return redenen.length ? redenen.slice(-2).join('  |  ')
+                          : 'De app kreeg binnen 15 seconden geen antwoord.';
+  };
+  window.__toonGeenVerbinding = function () {
+    var gv = document.getElementById('geen-verbinding');
+    if (!gv) return;
+    ['login', 'change-password', 'app', 'loading'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    var reden = document.getElementById('gvReden');
+    if (reden) reden.textContent = window.__redenTekst();
+    // Het versienummer wordt normaal door main.js ingevuld. Juist als die niet
+    // laadt wil je het kunnen aflezen, en config.js weet het al.
+    if (window.APP_VERSIE) {
+      var labels = document.querySelectorAll('.versieLabel2');
+      for (var i = 0; i < labels.length; i++) labels[i].textContent = window.APP_VERSIE;
+    }
+    gv.style.display = 'flex';
+    window.__schermGetoond = true;
+  };
+  // Laadt main.js niet, dan is opnieuw laden het enige zinnige. Zodra main.js
+  // er wel is, vervangt die deze knop door een versie die niet opnieuw laadt
+  // (dat zou de app onnodig helemaal opnieuw laten opstarten).
+  window.gvOpnieuw = function () { location.reload(); };
+
+  setTimeout(function () {
+    if (!window.__schermGetoond) window.__toonGeenVerbinding();
+  }, 15000);
+})();
+</script>
 <script type="module" src="app/main.js"></script>
 
 <script>

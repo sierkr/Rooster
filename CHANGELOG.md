@@ -1,3 +1,43 @@
+## v3.33.5 — Een wit scherm kan niet meer
+
+v3.33.4 haalde de Firebase-motor binnen boord, en op de iPhone stopte het
+draaiende bolletje daardoor inderdaad. Maar daarna bleef het scherm wit en
+gebeurde er niets meer — en de app kon niet vertellen waarom. Dat laatste was
+het echte gebrek: wat je niet kunt zien, kun je ook niet melden.
+
+De oorzaak van het wit: `app/main.js` haalde het laadsymbool weg als éérste
+handeling na de aanmeldcontrole, dus vóórdat bekend was wélk scherm er moest
+komen. Ging het daarna mis op een plek waar niemand het opving, dan was er geen
+laadsymbool, geen inlogscherm, geen app en geen melding. Alleen wit.
+
+- **Het laadsymbool blijft staan tot er een scherm klaar is.** Eén functie
+  (`toonScherm`) bepaalt voortaan wat er te zien is; die haalt het laadsymbool
+  weg op het moment dat er iets anders in de plaats komt.
+- **Een vangnet in `index.html`, bewust vóór `app/main.js` en bewust geen
+  module.** Het moet juist werken als `main.js` zelf niet laadt — precies wat er
+  op 29 september gebeurde. Is er na 15 seconden nog geen scherm, dan komt
+  "Geen verbinding" er alsnog.
+- **Fouten worden onthouden en getoond.** Het vangnet luistert naar
+  `error` (met capture, zodat ook bestanden die niet laden meetellen) en naar
+  `unhandledrejection`; de app geeft fouten die hij zelf opvangt door via
+  `window.__meldReden`. De laatste twee redenen staan in kleine letters onder de
+  melding. Nagemeten: bij een onbereikbare motor staat er "Kon niet laden:
+  …/app/main.js", bij een mislukte databank-opvraag "unavailable — Failed to get
+  document because the client is offline."
+- **Het opstarten van de app zelf wordt afgevangen.** Ging `startApp()` onderuit,
+  dan verdween dat spoorloos: het appscherm stond al zichtbaar, maar leeg.
+- **Het versienummer wordt ook ingevuld als `main.js` niet laadt** — juist dan
+  wil je kunnen aflezen welke versie er draait. `config.js` weet het al.
+
+Nagemeten dat het vangnet niet in de weg loopt: bij een gewone start (online én
+offline met de motor in de voorraad) komt het inlogscherm op en blijft het na 18
+seconden gewoon staan — geen vals alarm.
+
+Niet veranderd: databank, toegangsregels, cloud functions, het rooster, import
+en export, en alle bestaande teksten en knoppen.
+
+---
+
 ## v3.33.4 — De app start nu ook zonder internet op
 
 De app bewaarde 36 eigen bestanden op het toestel, maar de Firebase-motor
