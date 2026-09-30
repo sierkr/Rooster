@@ -676,10 +676,34 @@
   })();
 
   window.__idbProef = 'nog bezig';
+  window.__idbProefKlaar = false;
   (function proefOpslag() {
-    if (!window.indexedDB) { window.__idbProef = 'niet beschikbaar'; return; }
+    if (!window.indexedDB) { window.__idbProef = 'niet beschikbaar'; window.__idbProefKlaar = true; return; }
     var delen = [];
     function zet(tekst) { delen.push(tekst); window.__idbProef = delen.join(' · '); }
+
+    // v3.33.14: openen en een bewerking zijn twee verschillende dingen. Op
+    // WebKit kan het openen lukken terwijl een lees- of schrijfbewerking blijft
+    // hangen. Daarom telt deze proef na het openen ook hoeveel er in de opslag
+    // staat — alleen tellen, niets lezen van de inhoud, niets wijzigen.
+    // ⚠ Wat dit NIET bewijst: dat Firebase zelf een bewerking kan doen terwijl
+    // het de opslag tegelijk open heeft; alleen dat een losse bewerking lukt.
+    function telMetLimiet(db, daarna) {
+      var t0 = Date.now(), af = false;
+      function klaar(tekst) { if (af) return; af = true; daarna(tekst); }
+      setTimeout(function () { klaar('tellen GEEN ANTWOORD binnen 2 s'); }, 2000);
+      try {
+        var namen = db.objectStoreNames;
+        if (!namen || !namen.length) { klaar('geen tabellen'); return; }
+        var tx = db.transaction(namen[0], 'readonly');
+        var v = tx.objectStore(namen[0]).count();
+        v.onsuccess = function () {
+          klaar('geteld: ' + v.result + ' (' + (Date.now() - t0) + ' ms)');
+        };
+        v.onerror = function () { klaar('tellen geweigerd'); };
+        tx.onabort = function () { klaar('tellen afgebroken'); };
+      } catch (e) { klaar('tellen fout'); }
+    }
 
     function openMetLimiet(naam, etiket, daarna) {
       var t0 = Date.now(), af = false, bestondNiet = false;
@@ -695,16 +719,65 @@
         v.onupgradeneeded = function () { bestondNiet = true; };
         v.onsuccess = function () {
           var ms = Date.now() - t0;
-          try { v.result.close(); } catch (e) {}
+          var db = v.result;
           if (bestondNiet) {
+            try { db.close(); } catch (e) {}
             try { indexedDB.deleteDatabase(naam); } catch (e) {}
             meld('bestond niet');
-          } else {
-            meld('geopend (' + ms + ' ms)');
+            return;
           }
+          if (af) { try { db.close(); } catch (e) {} return; }
+          telMetLimiet(db, function (uitkomst) {
+            try { db.close(); } catch (e) {}
+            meld('geopend (' + ms + ' ms), ' + uitkomst);
+          });
         };
         v.onerror   = function () { meld('geweigerd'); };
         v.onblocked = function () { meld('geblokkeerd'); };
+      } catch (e) { meld('fout'); }
+    }
+
+    // v3.33.14: een echte schrijf-, lees- en opruimbewerking, in een eigen
+    // testopslag die daarna weer verwijderd wordt. Firebase doet bij het
+    // opstarten precies zoiets om te kijken of de opslag bruikbaar is.
+    // ⚠ Wat dit NIET bewijst: dat het ook in firebaseLocalStorageDb zelf lukt;
+    // daar wordt bewust niets gewijzigd.
+    function schrijfProef(daarna) {
+      var naam = 'rooster-opslagproef', t0 = Date.now(), af = false;
+      function meld(tekst) {
+        if (af) return;
+        af = true;
+        zet('schrijfproef: ' + tekst);
+        if (daarna) daarna();
+      }
+      setTimeout(function () { meld('GEEN ANTWOORD binnen 2 s'); }, 2000);
+      try {
+        var v = indexedDB.open(naam, 1);
+        v.onupgradeneeded = function () {
+          try { v.result.createObjectStore('proef'); } catch (e) {}
+        };
+        v.onsuccess = function () {
+          var db = v.result;
+          function sluit() {
+            try { db.close(); } catch (e) {}
+            try { indexedDB.deleteDatabase(naam); } catch (e) {}
+          }
+          try {
+            var tx = db.transaction('proef', 'readwrite');
+            var st = tx.objectStore('proef');
+            st.put('1', 'sleutel');
+            var lees = st.get('sleutel');
+            lees.onsuccess = function () {
+              if (lees.result !== '1') { sluit(); meld('teruggelezen waarde klopt niet'); return; }
+              st.delete('sleutel');
+            };
+            tx.oncomplete = function () { sluit(); meld('gelukt (' + (Date.now() - t0) + ' ms)'); };
+            tx.onerror = function () { sluit(); meld('geweigerd'); };
+            tx.onabort = function () { sluit(); meld('afgebroken'); };
+          } catch (e) { sluit(); meld('fout'); }
+        };
+        v.onerror   = function () { meld('openen geweigerd'); };
+        v.onblocked = function () { meld('openen geblokkeerd'); };
       } catch (e) { meld('fout'); }
     }
 
@@ -717,8 +790,10 @@
         rooster = 'firestore/[DEFAULT]/' + window.FIREBASE_CONFIG.projectId + '/main';
       }
       openMetLimiet('firebaseLocalStorageDb', 'auth-opslag', function () {
-        if (rooster) openMetLimiet(rooster, 'rooster-opslag');
-        else zet('rooster-opslag: naam onbekend');
+        function klaar() { window.__idbProefKlaar = true; }
+        function verder() { schrijfProef(klaar); }
+        if (rooster) openMetLimiet(rooster, 'rooster-opslag', verder);
+        else { zet('rooster-opslag: naam onbekend'); verder(); }
       });
     }
 
@@ -760,8 +835,16 @@
     });
     var stap = document.getElementById('gvStap');
     if (stap) stap.textContent = 'laatste stap: ' + window.__laatsteStap;
+    // v3.33.14: de proef kan nog lopen als dit scherm verschijnt; houd de
+    // regel bij tot hij klaar is, anders blijft er een halve uitkomst staan.
     var opslag = document.getElementById('gvOpslag');
-    if (opslag) opslag.textContent = 'opslag op dit toestel: ' + window.__idbProef;
+    if (opslag) {
+      var zetOpslag = function () {
+        opslag.textContent = 'opslag op dit toestel: ' + window.__idbProef;
+        if (!window.__idbProefKlaar) setTimeout(zetOpslag, 500);
+      };
+      zetOpslag();
+    }
     var reden = document.getElementById('gvReden');
     if (reden) reden.textContent = window.__redenTekst();
     // Het versienummer wordt normaal door main.js ingevuld. Juist als die niet

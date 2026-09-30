@@ -1,3 +1,28 @@
+## v3.33.14 — Openen is nog geen bewerking
+
+Meetversie, geen reparatie. v3.33.13 brak geen enkel inlogverzoek af: het
+vastlopen zit vóór het netwerk, in de opstartfase van Firebase Auth. Wat Auth
+daar doet is controleren of de opslag bruikbaar is — iets wegschrijven,
+teruglezen en opruimen. De opslagproef deed tot nu toe alleen openen en
+sluiten, en op WebKit kan openen lukken terwijl een bewerking blijft hangen.
+
+- **Na het openen telt de proef hoeveel er in de opslag staat**, voor zowel de
+  inlogopslag als de roosteropslag. Alleen tellen: niets van de inhoud lezen,
+  niets wijzigen.
+- **Nieuwe schrijfproef** in een eigen testopslag (`rooster-opslagproef`):
+  wegschrijven, teruglezen, opruimen, daarna wordt de testopslag verwijderd.
+- Elke stap heeft een limiet van 2 seconden en meldt "GEEN ANTWOORD" als hij
+  hangt.
+- De regel "opslag op dit toestel" wordt bijgewerkt tot de proef klaar is, zowel
+  op het scherm "Geen verbinding" als in de melding in de app.
+- ⚠ **Wat dit niet bewijst:** dat een bewerking in `firebaseLocalStorageDb` lukt
+  terwijl Firebase die tegelijk open heeft, en of schrijven in díe opslag lukt
+  (daar wordt bewust niets gewijzigd).
+
+**Uitkomst bepaalt de volgende stap.** Hangt een bewerking: Firebase de sessie
+in `browserLocalPersistence` laten bewaren, alleen op toestellen waar de proef
+hangt (kost daar één keer opnieuw inloggen). Komt alles door: verder meten.
+
 ## v3.33.13 — Een inlogverzoek dat niet kan slagen, moet mislukken
 
 Na v3.33.12 lag de laatste puzzel op tafel. Gemeten op de iPhone:

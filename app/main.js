@@ -688,8 +688,16 @@ function toonGeenGegevensMelding() {
   const opslag = document.createElement('div');
   opslag.className = 'muted';
   opslag.style.cssText = 'margin-top:12px;';
-  opslag.textContent = 'opslag op dit toestel: '
-    + (typeof window.__idbProef === 'undefined' ? 'onbekend' : window.__idbProef);
+  // v3.33.14: de proef heeft nu meer stappen en kan nog lopen als deze melding
+  // verschijnt. Bijwerken tot hij klaar is, anders blijft er een halve uitkomst.
+  const zetOpslag = () => {
+    opslag.textContent = 'opslag op dit toestel: '
+      + (typeof window.__idbProef === 'undefined' ? 'onbekend' : window.__idbProef);
+    if (window.__idbProefKlaar === false && document.body.contains(opslag)) {
+      setTimeout(zetOpslag, 500);
+    }
+  };
+  zetOpslag();
   blok.appendChild(opslag);
 
   // v3.33.13: welke inlogverzoeken zijn afgebroken? Blijft het rooster ondanks
