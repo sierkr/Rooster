@@ -7,7 +7,9 @@ import {
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { auth, db, reauthenticateWithCredential, EmailAuthProvider } from '../firebase-init.js';
-import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { setDoc } from '../schrijven.js';
+import { meld, bevestig } from '../dialoog.js';
 
 export function renderRadView() {
   const container = document.getElementById('view-rad');
@@ -225,17 +227,17 @@ window.agendaLinkMaken = async function(uid) {
       <button class="btn" style="width:100%; margin-top: 8px;" onclick="window.closeSheet()">Sluiten</button>
     `;
   } catch (e) {
-    alert('Genereren mislukt: ' + e.message);
+    await meld('Genereren mislukt', e.message);
   }
 };
 
 window.agendaLinkIntrekken = async function(uid) {
-  if (!confirm('Huidige agenda-link ongeldig maken?\n\nAgenda-apps die de link gebruiken zullen geen updates meer ontvangen.')) return;
+  if (!(await bevestig('Agenda-link intrekken', 'Huidige agenda-link ongeldig maken?\n\nAgenda-apps die de link gebruiken zullen geen updates meer ontvangen.', 'Intrekken'))) return;
   try {
     await setDoc(doc(db, 'gebruikers', uid), { agenda_token: null }, { merge: true });
-    alert('Link ingetrokken. Genereer een nieuwe link als je de koppeling wilt herstellen.');
+    await meld('Link ingetrokken', 'Genereer een nieuwe link als je de koppeling wilt herstellen.');
     closeSheet();
   } catch (e) {
-    alert('Intrekken mislukt: ' + e.message);
+    await meld('Intrekken mislukt', e.message);
   }
 };

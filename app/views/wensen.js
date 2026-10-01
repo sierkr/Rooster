@@ -1,6 +1,7 @@
 // Wensen-view: radiologen dienen vakantie/niet-beschikbaar/voorkeur in;
 // beheerders verwerken/wijzen af.
-import { collection, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { addDoc, updateDoc, deleteDoc } from '../schrijven.js';
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
 import {

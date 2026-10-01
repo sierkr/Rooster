@@ -1,5 +1,6 @@
 // Regels-view: validatieregels aan/uit, ernst, en functies-matrix.
-import { doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { setDoc, updateDoc, deleteDoc } from '../schrijven.js';
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
 import { esc, functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags } from '../helpers.js';

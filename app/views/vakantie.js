@@ -9,9 +9,8 @@
 //   indeling/{datum}.vakantie_geaccordeerd bool
 //   vakantie_rankings/{naam} { naam, label, kleur, anker_jaar, anker_volgorde[8] }
 
-import {
-  setDoc, updateDoc, doc, deleteDoc, writeBatch, deleteField
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { doc, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { setDoc, updateDoc, deleteDoc, writeBatch } from '../schrijven.js';
 import { db } from '../firebase-init.js';
 import { state, DAGEN_NL, MAANDEN } from '../state.js';
 import { esc,

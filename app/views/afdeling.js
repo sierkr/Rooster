@@ -1,5 +1,6 @@
 // Afdeling-view: per dag wie wat doet, gesorteerd op functie/aanwezigheid.
 import { state, SLOTS, DAGEN_LANG, DAGEN_NL } from '../state.js';
+import { meld } from '../dialoog.js';
 import {
   vasteRads, vasteRadsOpDatum, functiesMap, vandaagIso, formatDatum, functieNaam,
   toewijzingVoor, huidigKalenderJaar, magBeheerLezen, hoofdLetterCode,
@@ -189,7 +190,7 @@ window.printAfdWeek = function() {
 </html>`;
 
   const w = window.open('', '_blank');
-  if (!w) { alert('Pop-up geblokkeerd. Sta pop-ups toe en probeer opnieuw.'); return; }
+  if (!w) { meld('Pop-up geblokkeerd', 'Sta pop-ups toe en probeer opnieuw.'); return; }
   w.document.open();
   w.document.write(printDoc);
   w.document.close();
@@ -221,7 +222,7 @@ function _laadXLSXStyle() {
 window.exportAfdWeek = async function() {
   let XLSX;
   try { XLSX = await _laadXLSXStyle(); }
-  catch (e) { alert(e.message); return; }
+  catch (e) { await meld('Exporteren niet mogelijk', e.message); return; }
 
   const datum = state.huidigeDatum || vandaagIso();
   const wkMa1 = mandagVanIso(datum);

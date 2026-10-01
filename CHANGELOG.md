@@ -1,3 +1,77 @@
+## v3.34.1 — Opnieuw inloggen bleef hangen
+
+Bestaande fout, gevonden tijdens het testen van v3.34.0: wie uitlogde en
+meteen opnieuw inlogde in hetzelfde venster, bleef op het inlogscherm hangen
+tot de app helemaal werd afgesloten. Sinds v3.33.8. Gemeten op v3.33.16 in de
+oefendatabank; stempel: *aanmeldcontrole alsnog beantwoord*.
+
+Oorzaak: bij "niemand ingelogd" bleven `_appGestart` en `state.user` staan.
+Het opnieuw inloggen zag daardoor "zelfde gebruiker, app draait al" — de tak
+voor de aantekening — en sloeg het opstarten over. Nu zet "niemand
+ingelogd" ook `_appGestart`, `_opstartUser`, `state.user` en
+`state.profiel` terug.
+
+De offline-proef kreeg stap H (uitloggen en meteen opnieuw inloggen). Op
+v3.34.0 faalt die, op v3.34.1 drie keer achter elkaar geslaagd. 89/89 groen.
+Niet gemeten: op een iPhone. v3.34.0 is nooit uitgerold.
+
+## v3.34.0 — Zonder verbinding niet wijzigen, en geen stille fouten meer
+
+Uit een doorlichting op robuustheid (1 oktober 2026). Het opstarten zonder
+verbinding werkte; de zwakke plekken zaten ná het opstarten. Gemeten met de
+nieuwe offline-proef op v3.33.16: een wijziging zonder verbinding stond meteen
+op het scherm en belandde ná terugkeer van de verbinding **alsnog** in de
+databank — terwijl er niets van te zien was.
+
+**Wijzigen zonder verbinding is geblokkeerd** (besluit Sierk, keuze B).
+- Nieuw: `app/schrijven.js`. Alle schrijfopdrachten lopen erdoorheen. Zonder
+  verbinding, of zolang de app op de aantekening draait (Firebase heeft de
+  aanmelding nog niet bevestigd), komt er een venster "Geen verbinding" en
+  wordt er niets verstuurd.
+- ⚠ Bewust rechtstreeks, dus ook offline: wegklikken van dag-opmerkingen,
+  "wijziging gezien", logboekregels van export/import, registratie van de
+  laatste backup. Dat zijn geen roosterwijzigingen.
+- Blijft een wijziging na 10 seconden onbevestigd (toestel zegt online, er
+  komt niets door), dan verschijnt een oranje balk "Wijziging nog niet
+  opgeslagen". Die verdwijnt zodra alles is aangekomen.
+
+**De grijze balk verschijnt nu ook tijdens gebruik.** Tot nu toe alleen als
+de app via de aantekening opstartte. Valt de verbinding weg terwijl de app
+openstaat, of start hij gewoon op zonder verbinding, dan staat er nu
+"Geen verbinding — laatst bekende rooster. Wijzigen kan even niet."
+Alle balken staan in het nieuwe `app/statusbalk.js`.
+
+**Afgebroken luisteraars melden zich.** Negen van de tien realtime
+verbindingen met de databank hadden geen foutafhandeling: bij een weigering
+(rechten gewijzigd, account uitgezet) bleef een oud rooster staan dat er
+actueel uitzag. Nu verschijnt een rode balk "Het rooster wordt niet meer
+bijgewerkt" met een knop Herladen. Het datumvenster van de indeling wordt
+bij zo'n fout afgewezen in plaats van eeuwig open te blijven — de import
+vergelijkt dan niet tegen een onvolledig rooster. Bij "niemand ingelogd"
+gaan de luisteraars eerst dicht, zodat dit niet op het inlogscherm afgaat.
+
+**Browservensters op de roosterroutes vervangen** door de eigen vensters uit
+`app/dialoog.js` (29 stuks in main, save, bezetting-mutaties, export,
+afdeling, radioloog). Zelfde tekst; de code wacht nu op het venster, zodat
+een waarschuwing midden in een handeling niet door de volgende melding wordt
+weggedrukt. De overige ~124 (Beheer en Wensen) volgen in v3.35.0.
+
+**Bewaking bij uitrollen** (`uitrollen.sh`, buiten de zip):
+- stopt als een bestand in `app/` niet in de offline-voorraad van `sw.js`
+  staat, of als de Firebase-versie niet overal gelijk is;
+- draait de nieuwe offline-proef (`offline-proef/`, ~50 s): inloggen in de
+  Firebase-oefendatabank op de Mint, verbinding eruit, wijzigen proberen,
+  opnieuw openen, databank onbereikbaar, databank weigert. Mislukt = niet
+  uitrollen; oefendatabank kwam niet op = waarschuwing, geen stop.
+- ⚠ De proef speelt iOS-Safari niet na. Hij bewaakt dat het opstarten niet
+  opnieuw stukgaat; de proef op een echte iPhone blijft nodig.
+
+Gemeten: offline-proef op v3.33.16 faalt op 6 van 7 stappen, op v3.34.0 drie
+keer achter elkaar geslaagd. 89/89 unit-tests groen. Vensterroutes
+(uitloggen, vakje wijzigen, link kopiëren, export, terugdraaien, agenda-link)
+doorgeklikt in de oefendatabank: geen gewone browservensters, geen fouten.
+Niet gemeten: gedrag op een iPhone.
+
 ## v3.33.16 — Een opstartcontrole mag niet eeuwig wachten
 
 **De oorzaak, gemeten** met het spoor uit v3.33.15 op Sierks iPhone in

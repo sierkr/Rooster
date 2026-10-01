@@ -7,6 +7,7 @@ import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence,
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+import { metVerbindingsControle } from './schrijven.js';
 
 export const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
 
@@ -66,7 +67,8 @@ export const IS_TEST_DB = FIRESTORE_DB !== '(default)';
 // v3.29.0 (Fase 2, offline): persistente lokale cache met multi-tab-support.
 // Data die eenmaal geladen is blijft in IndexedDB beschikbaar, ook zonder
 // netwerk: bij een netwerkstoring toont de app het laatst bekende rooster
-// (alleen-lezen tot de verbinding terug is; writes worden dan gequeued).
+// (alleen-lezen tot de verbinding terug is; sinds v3.34.0 worden wijzigingen
+// zonder verbinding tegengehouden in schrijven.js).
 // Als IndexedDB niet beschikbaar is (bv. private browsing) valt de SDK
 // automatisch terug op geheugen-cache — zelfde gedrag als vóór v3.29.0.
 const CACHE_INSTELLING = {
@@ -89,7 +91,8 @@ export const functions = getFunctions(firebaseApp, 'europe-west1');
 // ----------------------------------------------------------------------------
 function accountFunctie(naam) {
   const callable = httpsCallable(functions, naam);
-  if (!IS_TEST_DB) return callable;
+  // v3.34.0: zonder verbinding meteen een duidelijke melding (schrijven.js).
+  if (!IS_TEST_DB) return metVerbindingsControle(callable);
   return async () => {
     throw new Error('Gebruikersbeheer is uitgeschakeld in de testomgeving — dit zou de live database raken.');
   };

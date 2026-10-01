@@ -12,7 +12,8 @@
 //    logregel kan dus niet meer ontstaan.
 //  - Onafhankelijk hiervan schrijft de server-side Cloud Function
 //    (auditIndeling) een onvervalsbaar audit_log-record bij elke wijziging.
-import { collection, doc, setDoc, updateDoc, writeBatch, deleteField, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, deleteField, serverTimestamp, setDoc as setDocDirect } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { setDoc, updateDoc, writeBatch } from './schrijven.js';
 import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import {
@@ -20,6 +21,7 @@ import {
   dagOpmerkingTekst, snoeiGelezen,
 } from './helpers.js';
 import { checkCelConflict } from './validatie.js';
+import { meld, bevestig } from './dialoog.js';
 
 // Basis-metadata voor een indeling-doc (idempotent, mag bij elke merge mee)
 function _dagMeta(datum) {
@@ -57,10 +59,11 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
   const conflicten = checkCelConflict(datum, radId, codesArr);
   const blokkades = conflicten.filter(c => c.ernst === 'blokkeren');
   if (blokkades.length > 0) {
-    const ok = confirm(
+    const ok = await bevestig('Blokkerend conflict',
       `Deze wijziging veroorzaakt ${blokkades.length} blokkerend conflict:\n\n` +
       blokkades.map(c => '• ' + c.bericht).join('\n') +
-      '\n\nToch doorgaan?'
+      '\n\nToch doorgaan?',
+      'Toch doorgaan'
     );
     if (!ok) return;
   }
@@ -78,10 +81,12 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
       const regel = state.validatieRegels.find(r => r.id === 'wijziging-na-verwerkte-wens');
       const ernst = regel ? (regel.actief !== false ? regel.ernst : null) : 'waarschuwing';
       if (ernst === 'blokkeren') {
-        alert(`Geblokkeerd: deze cel hoort bij een verwerkte wens. Heropen de wens via de Wensen-tab eerst.`);
+        await meld('Geblokkeerd', 'Deze cel hoort bij een verwerkte wens. Heropen de wens via de Wensen-tab eerst.');
         return;
       } else if (ernst === 'waarschuwing') {
-        const ok = confirm(`Let op: voor deze cel is een verwerkte wens. Door deze wijziging klopt de wens niet meer.\n\nToch doorgaan?\n(De wens-status wordt teruggezet naar 'open'.)`);
+        const ok = await bevestig('Verwerkte wens',
+          `Voor deze cel is een verwerkte wens. Door deze wijziging klopt de wens niet meer.\n\nToch doorgaan?\n(De wens-status wordt teruggezet naar 'open'.)`,
+          'Toch doorgaan');
         if (!ok) return;
         try {
           await updateDoc(doc(db, 'wensen', verwerkteWens.id), {
@@ -168,7 +173,7 @@ export async function slaToewijzingOp(datum, radId, code, opmerking) {
       }
     }
   } catch (e) {
-    alert('Opslaan mislukt: ' + e.message);
+    await meld('Opslaan mislukt', e.message);
   }
 }
 
@@ -208,7 +213,7 @@ export async function slaCelOpmerkingOp(datum, radId, opmerking) {
     }
     await batch.commit();
   } catch (e) {
-    alert('Opslaan mislukt: ' + e.message);
+    await meld('Opslaan mislukt', e.message);
   }
 }
 
@@ -223,7 +228,7 @@ export async function slaOpmerkingOp(datum, opmerking) {
       opmerking: tekst || null,
     }, { merge: true });
   } catch (e) {
-    alert('Opslaan mislukt: ' + e.message);
+    await meld('Opslaan mislukt', e.message);
     return;
   }
   // v3.32.0: wat je zelf schrijft is per definitie gelezen. Zonder deze stap
@@ -247,7 +252,9 @@ async function _schrijfLeesstatus() {
   const uid = state.user?.uid;
   if (!uid) return;
   try {
-    await setDoc(doc(db, 'opmerking_gelezen', uid), {
+    // Bewust rechtstreeks, niet via schrijven.js: wegklikken mag ook zonder
+    // verbinding en komt dan later alsnog aan (v3.34.0).
+    await setDocDirect(doc(db, 'opmerking_gelezen', uid), {
       uid,
       gelezen: state.opmerkingGelezen || {},
       melden_buiten_week: !!state.meldenBuitenWeek,
@@ -303,6 +310,6 @@ export async function slaDienstOp(datum, radId) {
     });
     await batch.commit();
   } catch (e) {
-    alert('Opslaan dienst mislukt: ' + e.message);
+    await meld('Opslaan dienst mislukt', e.message);
   }
 }

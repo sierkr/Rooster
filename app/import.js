@@ -6,7 +6,8 @@
 // gesynchroniseerd:
 //  - Open wens die nu matcht met de geïmporteerde code → status 'verwerkt'
 //  - Verwerkte wens die nu gebroken wordt door de import → status terug naar 'open'
-import { doc, writeBatch, updateDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { doc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { writeBatch, updateDoc } from './schrijven.js';
 import { db, IS_TEST_DB } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, vandaagIso, plusDagen, kolomNaarRadId, wensMatcht, hoofdLetterCode } from './helpers.js';

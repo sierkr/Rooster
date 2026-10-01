@@ -17,10 +17,8 @@
 //     Dit log wordt door de app zelf geschreven; het is dus compleet, maar
 //     niet onvervalsbaar zoals audit_log.
 
-import {
-  collection, addDoc, getDocs, query, orderBy, limit, where, serverTimestamp,
-  doc, setDoc, getDoc, updateDoc, deleteDoc, writeBatch,
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, getDocs, query, orderBy, limit, where, serverTimestamp, doc, getDoc, addDoc as addDocDirect } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { setDoc, updateDoc, deleteDoc, writeBatch } from './schrijven.js';
 import { db } from './firebase-init.js';
 import { state } from './state.js';
 
@@ -48,7 +46,9 @@ export function zetSchrijfactie(aan) { _bezig = !!aan; }
 // export/import daar nooit op stuklopen: een logboek is bijzaak.
 export async function legVast(record) {
   try {
-    await addDoc(collection(db, EXPORT_LOG), {
+    // Bewust rechtstreeks, niet via schrijven.js: een logregel mag later
+    // aankomen en mag een export zonder verbinding niet tegenhouden (v3.34.0).
+    await addDocDirect(collection(db, EXPORT_LOG), {
       ...record,
       uid:    state.user?.uid || null,
       email:  state.profiel?.email || null,

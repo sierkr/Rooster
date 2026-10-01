@@ -21,6 +21,7 @@
 
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase-init.js';
+import { meld } from './dialoog.js';
 import { state, HOOFD_FUNCTIES, SLOTS } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM } from './import.js';
 // v3.33.0: elke export laat voortaan een spoor na in het logboek.
@@ -376,7 +377,7 @@ function voegActiviteitSheetToe(wb, mainSheetNaam, radKolommen, dynKolomMap, COL
 
 // ---- Hoofd-export -----------------------------------------------------------
 export async function actExportJaar(jaar, naamParam) {
-  if (!jaar) { alert('Kies eerst een jaar.'); return; }
+  if (!jaar) { await meld('Geen jaar gekozen', 'Kies eerst een jaar.'); return; }
 
   try {
     const ExcelJS = await laadExcelJS();
@@ -415,7 +416,7 @@ export async function actExportJaar(jaar, naamParam) {
     // code→stoel-mapping, wat na wissels/nieuwe stoelen stilzwijgend een
     // verkeerd bestand opleverde.
     if ((state.radiologen || []).length === 0) {
-      alert('Radiologen zijn nog niet geladen — open de app volledig en probeer de export opnieuw.');
+      await meld('Export niet mogelijk', 'Radiologen zijn nog niet geladen — open de app volledig en probeer de export opnieuw.');
       return;
     }
 
@@ -549,7 +550,7 @@ export async function actExportJaar(jaar, naamParam) {
     const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => COL_AANTAL + 2 + i);
 
     if (functiesActief.length === 0) {
-      alert('Functies zijn nog niet geladen — open de app volledig (Regels/Functies-tab) en probeer de export opnieuw.');
+      await meld('Export niet mogelijk', 'Functies zijn nog niet geladen — open de app volledig (Regels/Functies-tab) en probeer de export opnieuw.');
       return;
     }
 
@@ -962,6 +963,6 @@ export async function actExportJaar(jaar, naamParam) {
 
   } catch (e) {
     console.error('actExportJaar', e);
-    alert('Export mislukt:\n\n' + (e.message || e));
+    await meld('Export mislukt', String(e.message || e));
   }
 }

@@ -11,6 +11,9 @@
 
 import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, IS_TEST_DB } from './firebase-init.js';
+// v3.34.0: terugzetten is een roosterwijziging en loopt dus via de bewaking.
+// De registratie van "laatste backup" (setDoc hierboven) blijft rechtstreeks.
+import { writeBatch } from './schrijven.js';
 import { state } from './state.js';
 // v3.32.8: eigen dialoogvensters i.p.v. native prompt/alert/confirm — die
 // worden door sommige browsers onderdrukt, waardoor een backup (en daarmee de
@@ -213,9 +216,7 @@ export async function maakClientBackup(reden = 'handmatig') {
  * Vraagt het wachtwoord op, ontsleutelt, en schrijft naar Firestore.
  */
 export async function herstelClientBackup(file, onVoortgang = () => {}) {
-  const { writeBatch, doc: fsDoc } = await import(
-    "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"
-  );
+  const fsDoc = doc;
   // getDocs en collection zijn bovenin dit bestand al statisch geïmporteerd.
 
   const tekst  = await file.text();

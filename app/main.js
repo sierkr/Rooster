@@ -1,7 +1,8 @@
 // Entry point van de app. Laadt alle modules in juiste volgorde, registreert
 // algemene window-handlers, doet render-dispatch en boot via Firebase Auth.
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, updateDoc, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { updateDoc } from './schrijven.js';
 import { auth, db } from './firebase-init.js';
 import { state, VASTE_RAD_IDS } from './state.js';
 import {
@@ -11,6 +12,8 @@ import {
 } from './helpers.js';
 import { zetMeldenBuitenWeek } from './save.js';
 import { openSheet, closeSheet } from './sheets.js';
+import { meld, bevestig } from './dialoog.js';
+import { toonBalk, verbergBalk } from './statusbalk.js';
 
 // Importeer alle render-functies (modules registreren ook hun window-handlers)
 import { renderRadView } from './views/radioloog.js';
@@ -116,7 +119,7 @@ window.doLogin = async function() {
 };
 
 window.doLogout = async function() {
-  if (!confirm('Uitloggen?')) return;
+  if (!(await bevestig('Uitloggen', 'Wil je uitloggen?', 'Uitloggen'))) return;
   state.unsubscribers.forEach(fn => fn());
   state.unsubscribers = [];
   // v3.33.8: eerst de aantekening weg. Bleef die staan, dan zou uitloggen
@@ -175,9 +178,9 @@ window.doChangePassword = async function() {
 window.kopieerLink = async function(link) {
   try {
     await navigator.clipboard.writeText(link);
-    alert('Link gekopieerd naar klembord');
+    meld('Link gekopieerd', 'De link staat op het klembord.');
   } catch (e) {
-    alert('Kopiëren mislukte. Selecteer de link handmatig.');
+    meld('Kopiëren mislukt', 'Selecteer de link handmatig.');
   }
 };
 
@@ -381,7 +384,7 @@ function standaardVensterTot() { return `${new Date().getFullYear() + 1}-12-31`;
 // vervult zodra de eerste snapshot binnen is — awaiten vóór berekeningen die
 // de volledige indelingMap in dit bereik nodig hebben.
 function abonneerIndeling(vanIso, totIso) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (_indelingUnsub) { _indelingUnsub(); _indelingUnsub = null; }
     // Logout-hook eenmalig (per sessie) registreren
     if (!state.unsubscribers.includes(_indelingLogoutUnsub)) {
@@ -403,6 +406,12 @@ function abonneerIndeling(vanIso, totIso) {
       state.indelingMap = map;
       render();
       if (eerste) { eerste = false; resolve(); }
+    }, (e) => {
+      luisteraarFout('indeling')(e);
+      // v3.34.0: zonder dit bleef wie op het venster wachtte (de import
+      // bijvoorbeeld) eeuwig hangen. Afwijzen, niet vervullen: de import
+      // vergelijkt anders tegen een onvolledig rooster.
+      if (eerste) { eerste = false; reject(e); }
     });
   });
 }
@@ -436,6 +445,29 @@ window.zorgIndelingVensterTotEinde = async function(vanafIso) {
   return window.zorgIndelingVenster(vanafIso || vandaagIso(), tot);
 };
 
+// v3.34.0: vangnet voor de luisteraars. Tot nu toe had alleen die voor
+// opmerking_gelezen er een. Brak een verbinding af — rechten gewijzigd,
+// account uitgezet, sessie ingetrokken — dan bleef het scherm een oud rooster
+// tonen dat er actueel uitzag, zonder enige melding.
+// Zonder verbinding breekt een luisteraar NIET af (dan levert hij uit de
+// voorraad en wacht hij); dit gaat dus alleen af bij een echte weigering.
+function luisteraarFout(naam) {
+  return (e) => {
+    console.error('luisteraar ' + naam, e);
+    meldReden(e);
+    // Even wachten: bij uitloggen of een verlopen sessie komt de afmelding
+    // vlak na de weigering binnen. Dan staat het appscherm niet meer open en
+    // is er niets te melden.
+    setTimeout(() => {
+      const app = document.getElementById('app');
+      if (!_appGestart || !app || app.style.display === 'none') return;
+      const code = (e && e.code) ? ` (${e.code})` : '';
+      toonBalk('luisteraar', 'Het rooster wordt niet meer bijgewerkt' + code + '.',
+        { label: 'Herladen', actie: () => location.reload() });
+    }, 1500);
+  };
+}
+
 function luisterNaarData() {
   // render() mag pas lopen als functies geladen zijn (kleuren nodig voor weergave)
   let functiesGeladen = false;
@@ -450,18 +482,18 @@ function luisterNaarData() {
         : VASTE_RAD_IDS[0];
     }
     if (functiesGeladen) render();
-  }));
+  }, luisteraarFout('radiologen')));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'functies'), (snap) => {
     state.functies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     window.injecteerNieuweKleuren(state.functies);
     functiesGeladen = true;
     render();
-  }));
+  }, luisteraarFout('functies')));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'besprekingen'), (snap) => {
     state.besprekingen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }));
+  }, luisteraarFout('besprekingen')));
 
   // v3.29.0 (H2): de indeling-listener is begrensd op een datumvenster
   // (standaard: vorig t/m volgend kalenderjaar) i.p.v. de hele collectie.
@@ -472,7 +504,7 @@ function luisterNaarData() {
   state.unsubscribers.push(onSnapshot(collection(db, 'validatie_regels'), (snap) => {
     state.validatieRegels = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
-  }));
+  }, luisteraarFout('validatie_regels')));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'instellingen'), (snap) => {
     state.instellingen = {};
@@ -485,17 +517,17 @@ function luisterNaarData() {
       if (data.toon_jaaroverzicht !== undefined) window.TOON_JAAROVERZICHT = data.toon_jaaroverzicht;
     });
     render();
-  }));
+  }, luisteraarFout('instellingen')));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'wensen'), (snap) => {
     state.wensen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
-  }));
+  }, luisteraarFout('wensen')));
 
   state.unsubscribers.push(onSnapshot(collection(db, 'vakantie_rankings'), (snap) => {
     state.vakantieRankings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
-  }));
+  }, luisteraarFout('vakantie_rankings')));
 
   // Ongelezen wijzigingen: gefilterde query op eigen radioloog_id + gezien===false.
   // Volledige collectie-scan werkt niet: Firestore verwerpt de query zodra er
@@ -513,7 +545,7 @@ function luisterNaarData() {
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(w => w.datum >= vandaag);
       render();
-    }));
+    }, luisteraarFout('wijzigingen')));
   } else {
     state.wijzigingen = [];
   }
@@ -596,6 +628,7 @@ function startApp() {
   renderTabs();
   luisterNaarData();
   _appGestart = true;
+  if (!navigator.onLine) toonAantekeningBalk();
   stap('app gestart');
 }
 
@@ -661,7 +694,6 @@ let _appGestart = false;
 // balk is niet te zien of je naar actuele gegevens kijkt, en bij een rooster is
 // dat geen detail. Hij hangt aan de verbinding, niet aan Firebase: ook als
 // Firebase alsnog antwoordt, is er dan nog steeds geen verbinding.
-let _aantekeningBalk = null;
 let _gegevensBinnen = false;
 
 // v3.33.10: draait de app op de aantekening en komt er niets uit de voorraad,
@@ -731,25 +763,23 @@ function verbergGeenGegevensMelding() {
   if (blok) blok.remove();
 }
 
+// v3.34.0: de balk staat nu in statusbalk.js en verschijnt ook als de
+// verbinding wegvalt terwijl de app al openstaat. Tot nu toe kwam hij alleen
+// bij opstarten zonder verbinding, en zag een beheerder die onderweg de
+// verbinding verloor niets. Wijzigen is dan geblokkeerd (schrijven.js), dus
+// dat staat er ook bij.
 function toonAantekeningBalk() {
-  if (_aantekeningBalk) return;
-  const balk = document.createElement('div');
-  balk.id = 'aantekening-balk';
-  balk.textContent = 'Geen verbinding — laatst bekende rooster';
-  balk.style.cssText = 'position:sticky;top:0;z-index:9998;background:#5f5e5a;color:#fff;'
-    + 'font-family:system-ui,sans-serif;font-weight:600;font-size:13px;text-align:center;padding:6px 10px;';
-  document.body.insertBefore(balk, document.body.firstChild);
-  _aantekeningBalk = balk;
+  toonBalk('verbinding', 'Geen verbinding — laatst bekende rooster. Wijzigen kan even niet.');
 }
 
 function verbergAantekeningBalk() {
-  if (!_aantekeningBalk) return;
-  _aantekeningBalk.remove();
-  _aantekeningBalk = null;
+  verbergBalk('verbinding');
 }
 
 // Komt de verbinding terug, dan mag de balk weg.
 window.addEventListener('online', verbergAantekeningBalk);
+// Valt hij weg terwijl de app openstaat, dan komt de balk terug.
+window.addEventListener('offline', () => { if (_appGestart) toonAantekeningBalk(); });
 
 function toonScherm(id, weergave) {
   ['login', 'change-password', 'app', 'geen-verbinding'].forEach(s => {
@@ -840,6 +870,21 @@ onAuthStateChanged(auth, async (user) => {
     // Firebase heeft het laatste woord: zegt hij dat er niemand is, dan is er
     // niemand — ook als de app al op de aantekening was gestart.
     stap('niemand ingelogd');
+    // v3.34.0: draaide de app al (op de aantekening), dan staan de luisteraars
+    // nog open. Zonder inlogbewijs weigert de databank ze, en dat zou hier als
+    // "rooster wordt niet meer bijgewerkt" op het inlogscherm verschijnen.
+    state.unsubscribers.forEach(fn => fn());
+    state.unsubscribers = [];
+    verbergBalk('luisteraar');
+    // v3.34.1: ook vergeten dát de app draaide en voor wie. Bleef dit staan,
+    // dan zag het opnieuw inloggen "zelfde gebruiker, app draait al" en sloeg
+    // het opstarten over: wie uitlogde en meteen weer inlogde, bleef op het
+    // inlogscherm hangen tot de app helemaal werd afgesloten (sinds v3.33.8;
+    // gemeten op v3.33.16 in de oefendatabank, 1 oktober 2026).
+    _appGestart = false;
+    _opstartUser = null;
+    state.user = null;
+    state.profiel = null;
     vergeetToestelGebruiker();
     verbergAantekeningBalk();
     toonScherm('login');

@@ -6,10 +6,10 @@
 // van de verplaatste roosterdata (alleen de gewijzigde cellen). Daarmee is elke
 // ingreep exact en gevalideerd terug te draaien. De tijdlijn-weergave maakt alle
 // gebeurtenissen per stoel én per persoon inzichtelijk.
-import {
-  collection, doc, getDocs, addDoc, updateDoc, setDoc, deleteDoc, deleteField, writeBatch,
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, doc, getDocs, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { addDoc, updateDoc, setDoc, deleteDoc, writeBatch } from './schrijven.js';
 import { db } from './firebase-init.js';
+import { meld, bevestig } from './dialoog.js';
 import { state } from './state.js';
 import {
   vandaagIso, plusDagen, formatDatum, assertBezettingGeldig,
@@ -66,7 +66,7 @@ export async function registreerMutatie(rec) {
     // Een mislukte log-registratie mag de ingreep zelf niet ongedaan maken;
     // we waarschuwen wel, want zonder record is deze ingreep niet terug te draaien.
     console.warn('registreerMutatie', e && e.message);
-    alert('Let op: de wijziging is doorgevoerd, maar kon niet in het terugdraai-logboek worden vastgelegd '
+    await meld('Let op', 'De wijziging is doorgevoerd, maar kon niet in het terugdraai-logboek worden vastgelegd '
       + '(controleer of firestore.rules de collectie "bezetting_mutaties" toestaat). '
       + 'Deze specifieke ingreep is daardoor niet via "Terugdraaien" ongedaan te maken.');
   }
@@ -123,9 +123,9 @@ export function ondraaibaarReden(m) {
 // ---- Terugdraaien -----------------------------------------------------------
 window.terugdraaiMutatie = async function(id) {
   const m = (state.bezettingMutaties || []).find(x => x.id === id);
-  if (!m) { alert('Mutatie niet gevonden.'); return; }
+  if (!m) { await meld('Mutatie niet gevonden', 'Deze wijziging staat niet (meer) in de lijst.'); return; }
   const reden = ondraaibaarReden(m);
-  if (reden) { alert('Kan niet terugdraaien: ' + reden + '.'); return; }
+  if (reden) { await meld('Kan niet terugdraaien', reden + '.'); return; }
 
   const seats = m.stoelen || Object.keys(m.voor || {});
   const imp = impactVanaf(m.ingangsdatum || vandaagIso(), seats);
@@ -140,7 +140,7 @@ window.terugdraaiMutatie = async function(id) {
   if (m.alleenTijdlijn) waarschuw += `\n\nLet op: deze ingreep staat alleen op tijdlijn-niveau in het logboek (backfill). `
     + `Terugdraaien herstelt de bezetting van de stoel, maar zet eventueel eerder verplaatste roosterdata NIET automatisch terug.`;
   waarschuw += `\n\nDoorgaan?`;
-  if (!confirm(waarschuw)) return;
+  if (!(await bevestig('Terugdraaien', waarschuw, 'Terugdraaien'))) return;
 
   try {
     // 1. Stoel-documenten terugzetten (volledige vervanging) of verwijderen.
@@ -169,10 +169,10 @@ window.terugdraaiMutatie = async function(id) {
     // 4. Mutatie markeren.
     await updateDoc(doc(db, MUT_COLL, id), { teruggedraaid: true, teruggedraaid_op: new Date().toISOString() });
     m.teruggedraaid = true;
-    alert('Wijziging teruggedraaid. Wil je het opnieuw doen met een andere datum, voer dan de ingreep opnieuw uit.');
+    await meld('Wijziging teruggedraaid', 'Wil je het opnieuw doen met een andere datum, voer dan de ingreep opnieuw uit.');
     if (window.__herlaadBeheer) await window.__herlaadBeheer();
   } catch (e) {
-    alert('Terugdraaien mislukt: ' + (e.message || e));
+    await meld('Terugdraaien mislukt', String(e.message || e));
   }
 };
 
@@ -237,16 +237,16 @@ window.registreerBestaandeWijzigingen = async function() {
     }
   });
 
-  if (teMaken.length === 0) { alert('Geen bestaande wijzigingen gevonden die nog niet in het logboek staan.'); return; }
-  if (!confirm(`${teMaken.length} bestaande stoel-wijziging(en) worden alsnog in het logboek geregistreerd, zodat je ze kunt terugdraaien.\n\n`
-    + `Let op: dit reconstrueert alleen de stoel-tijdlijn. Eerder verplaatste roosterdata van een oude → Vast wordt hiermee NIET teruggezet.\n\nDoorgaan?`)) return;
+  if (teMaken.length === 0) { await meld('Niets te registreren', 'Geen bestaande wijzigingen gevonden die nog niet in het logboek staan.'); return; }
+  if (!(await bevestig('Alsnog registreren', `${teMaken.length} bestaande stoel-wijziging(en) worden alsnog in het logboek geregistreerd, zodat je ze kunt terugdraaien.\n\n`
+    + `Let op: dit reconstrueert alleen de stoel-tijdlijn. Eerder verplaatste roosterdata van een oude → Vast wordt hiermee NIET teruggezet.\n\nDoorgaan?`))) return;
   try {
     let n = 0;
     for (const rec of teMaken) { await registreerMutatie(rec); n++; }
-    alert(`${n} wijziging(en) geregistreerd. Je kunt ze nu terugdraaien via "Recente stoel-wijzigingen".`);
+    await meld('Geregistreerd', `${n} wijziging(en) geregistreerd. Je kunt ze nu terugdraaien via "Recente stoel-wijzigingen".`);
     if (window.__herlaadBeheer) await window.__herlaadBeheer();
   } catch (e) {
-    alert('Registreren mislukt: ' + (e.message || e));
+    await meld('Registreren mislukt', String(e.message || e));
   }
 };
 
