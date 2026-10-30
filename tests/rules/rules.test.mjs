@@ -242,3 +242,23 @@ test('opmerking_gelezen: ook een beheerder komt niet bij andermans leesstatus', 
 test('opmerking_gelezen: eigen document verwijderen mag', async () => {
   await assertSucceeds(deleteDoc(doc(radL, 'opmerking_gelezen/uid-radl')));
 });
+
+// ---- indeling_concept (v3.36.0): het concept van het tabblad Indelen ---------
+
+test('indeling_concept: beheerder mag lezen, schrijven en weggooien', async () => {
+  await assertSucceeds(setDoc(doc(admin, 'indeling_concept/2027'), {
+    jaar: '2027', cellen: { '2027-01-04|L': { nieuw: 'E', was: 'B' } },
+  }, { merge: true }));
+  await assertSucceeds(getDoc(doc(admin, 'indeling_concept/2027')));
+  await assertSucceeds(deleteDoc(doc(admin, 'indeling_concept/2027')));
+});
+
+test('indeling_concept: radioloog en lezer zien het concept niet en kunnen er niet in schrijven', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'indeling_concept/2028'), { jaar: '2028', cellen: {} });
+  });
+  await assertFails(getDoc(doc(radL, 'indeling_concept/2028')));
+  await assertFails(getDoc(doc(lezer, 'indeling_concept/2028')));
+  await assertFails(setDoc(doc(radL, 'indeling_concept/2028'), { cellen: { 'x|L': { nieuw: 'V', was: '' } } }, { merge: true }));
+  await assertFails(deleteDoc(doc(lezer, 'indeling_concept/2028')));
+});

@@ -309,6 +309,18 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
+    // indeling_concept/{jaar} - v3.36.0: het concept van het tabblad Indelen
+    //
+    // Eén document per jaar met de cellen die de indeler heeft veranderd maar
+    // nog niet heeft gepubliceerd. Alleen een beheerder mag het zien en
+    // wijzigen: radiologen zien pas iets als het gepubliceerd is (dat schrijft
+    // naar indeling/ en valt onder de regels daar).
+    // -----------------------------------------------------------------------
+    match /indeling_concept/{jaar} {
+      allow read, write: if isBeheerder();
+    }
+
+    // -----------------------------------------------------------------------
     // bezetting_mutaties/ - logboek van stoel-ingrepen (voor terugdraaien)
     // -----------------------------------------------------------------------
     match /bezetting_mutaties/{id} {

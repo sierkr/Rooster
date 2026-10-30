@@ -26,11 +26,9 @@ import { state, HOOFD_FUNCTIES, SLOTS } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM } from './import.js';
 // v3.33.0: elke export laat voortaan een spoor na in het logboek.
 import { legVast, tel } from './logboek.js';
-import {
-  isHoofd, functieFlags, hoofdLetterCode, plusDagen, vandaagIso, huidigKalenderJaar,
-  bezettingOpDatum, bezettingenInRange, alleVasteStoelIds,
-  senioriteitSortKey, vasteIdxVoorStoel, vergelijkOpSenioriteit,
-} from './helpers.js';
+import { isHoofd, functieFlags, hoofdLetterCode, plusDagen } from './helpers.js';
+// v3.36.0: kolommen en normen gedeeld met het tabblad Indelen.
+import { jaarKolommen, functieEisen } from './kolommen.js';
 
 // ---- Kleuren per hoofdletter-functiecode ------------------------------------
 const FALLBACK_KLEUREN = {
@@ -408,9 +406,6 @@ export async function actExportJaar(jaar, naamParam) {
     // de waarnemer-slots (W5..W1) vast na de vaste stoelen. Een stoel/slot
     // krijgt een kolom zodra hij in dit jaar minstens één bezetter heeft gehad
     // — ook als die inmiddels via "→ Vast" is doorgeschoven.
-    const jaarStart = `${jaar}-01-01`;
-    const jaarEind  = `${jaar}-12-31`;
-    const REFDATUM  = (String(jaar) === String(huidigKalenderJaar())) ? vandaagIso() : jaarEind;
     // Zonder geladen state is er geen betrouwbare, datum-bewuste kolominfo.
     // Blokkeer dan expliciet — vroeger viel de export terug op een hardcoded
     // code→stoel-mapping, wat na wissels/nieuwe stoelen stilzwijgend een
@@ -420,76 +415,9 @@ export async function actExportJaar(jaar, naamParam) {
       return;
     }
 
-    const kandidaten = [...alleVasteStoelIds(), ...SLOTS];
-    const kolomEntries = kandidaten
-        .map(id => {
-          const bezetters = bezettingenInRange(id, jaarStart, jaarEind);
-          if (bezetters.length === 0) return null; // niet bezet dit jaar → geen kolom
-          const huidig  = bezettingOpDatum(id, REFDATUM);
-          const laatste = bezetters[bezetters.length - 1];
-          const bez     = huidig || laatste;
-          const isSlot  = SLOTS.includes(id);
-          // Zelfde senioriteits-formule als Overzicht/Afdeling (helpers.js) —
-          // niet hier opnieuw uitgeschreven, om te voorkomen dat de
-          // kolomvolgorde in Excel ooit stilzwijgend afwijkt van de app.
-          const sortKey = senioriteitSortKey(id, bez?.in_dienst);
-          const idx     = vasteIdxVoorStoel(id);
-          let notitie = null;
-          if (bezetters.length > 1) {
-            notitie = 'Bezetters in ' + jaar + ':\n' + bezetters.map(b => {
-              const van = b.van ? b.van.split('-').reverse().join('-') : 'begin';
-              const tot = b.tot ? b.tot.split('-').reverse().join('-') : 'heden';
-              return `${b.code || id} · ${b.achternaam || ''} (${van} – ${tot})`;
-            }).join('\n');
-          }
-          return { id, isSlot, idx, sortKey, code: bez?.code || id, notitie, bezetters };
-        })
-        .filter(Boolean);
-
-    // Round-trip-vangnet: neem ook stoelen op die dit jaar een NIET-lege
-    // toewijzing hebben maar (nog) geen bezetter/kolom kregen. Zonder dit zou de
-    // export die stille data laten vallen en een verse re-import "wijzigingen"
-    // tonen (Firestore heeft de cel, Excel niet). Kolomkop = laatst bekende code
-    // of het stoel-id.
-    const reedsKolom = new Set(kolomEntries.map(e => e.id));
-    const extraIds = new Set();
-    dagen.forEach(dag => {
-      const tw = dag && dag.toewijzingen;
-      if (!tw) return;
-      Object.keys(tw).forEach(id => {
-        if (reedsKolom.has(id) || extraIds.has(id)) return;
-        const v = tw[id];
-        const nietLeeg = Array.isArray(v) ? v.length > 0 : !!v;
-        if (nietLeeg) extraIds.add(id);
-      });
-    });
-    extraIds.forEach(id => {
-      const stoel = (state.radiologen || []).find(r => r.id === id);
-      kolomEntries.push({
-        id, isSlot: SLOTS.includes(id), idx: vasteIdxVoorStoel(id),
-        sortKey: senioriteitSortKey(id, null), code: (stoel && stoel.code) || id,
-        notitie: null, bezetters: [],
-      });
-    });
-
-    // Vaste stoelen eerst (op senioriteit, via dezelfde canonieke functie als
-    // Overzicht/Afdeling), waarnemer-slots daarna (vaste W5..W1-volgorde).
-    kolomEntries.sort((a, b) => {
-      if (a.isSlot !== b.isSlot) return a.isSlot ? 1 : -1;
-      if (a.isSlot && b.isSlot) return SLOTS.indexOf(a.id) - SLOTS.indexOf(b.id);
-      return vergelijkOpSenioriteit(a, b);
-    });
-
-    // Kolomkop-strings uniek maken (zeldzaam randgeval: twee kolommen met
-    // toevallig dezelfde code) zodat er nooit twee kolommen op dezelfde header
-    // samenvallen in dynKolomMap.
-    const gebruikteHeaders = new Set();
-    kolomEntries.forEach(e => {
-      let header = e.code || e.id;
-      if (gebruikteHeaders.has(header)) header = `${header} (${e.id})`;
-      gebruikteHeaders.add(header);
-      e.header = header;
-    });
+    // v3.36.0: de kolommen komen uit kolommen.js — dezelfde functie die het
+    // tabblad Indelen gebruikt, zodat Excel en het raster nooit verschillen.
+    const kolomEntries = jaarKolommen(jaar, dagen);
 
     const radKolommen = kolomEntries.map(e => e.header);
     const dynKolomMap = Object.fromEntries(kolomEntries.map(e => [e.header, e.id]));
@@ -504,49 +432,11 @@ export async function actExportJaar(jaar, naamParam) {
     const COL_OPM      = COL_RAD_EIND + 4;
     const COL_AANTAL   = COL_RAD_EIND + 5;
     // ---- Regel-/functie-afgeleide logica (op exporttijd uit de app) --------
-    const DAGNR = { ma: 1, di: 2, wo: 3, do: 4, vr: 5, za: 6, zo: 7 };
-    const functiesActief  = (state.functies || []);
-    const actieveRegels   = (state.validatieRegels || []).filter(r => r.actief !== false);
-    const bezettingRegels = actieveRegels.filter(r => r.type === 'bezetting');
-
-    // "Aantal" = werkvloerbezetting: alle codes met werkvloer-vlag in de app.
-    const werkvloerUniek = [...new Set(
-      functiesActief
-        .filter(f => functieFlags(f.code || f.id).werkvloer)
-        .map(f => hoofdLetterCode(f.code || f.id))
-        .filter(Boolean)
-    )];
-
-    // Vereist aantal per code per weekdag (1..7), als basis voor de
-    // indicator-kolommen. Bronnen, gecombineerd via max:
-    //  - verplicht-vlag  → ≥1 op werkdagen
-    //  - bezetting-regel → aantal op die weekdag
-    //  - werkvloer-vlag  → ≥1 op werkdagen (per-dag-monitor: toon wat ontbreekt)
-    const reqByCode = {};
-    const ensureReq = (code) => (reqByCode[code] = reqByCode[code] || [0, 0, 0, 0, 0, 0, 0, 0]);
-    const verplichteCodes = functiesActief.filter(f => f.verplicht === true)
-      .map(f => hoofdLetterCode(f.code || f.id)).filter(Boolean);
-    verplichteCodes.forEach(code => { const a = ensureReq(code); for (let d = 1; d <= 5; d++) a[d] = Math.max(a[d], 1); });
-    bezettingRegels.forEach(r => {
-      const code = hoofdLetterCode(r.code || '');
-      const dn = DAGNR[r.dag];
-      const aantal = Number(r.aantal) || 0;
-      if (code && dn && aantal > 0) { const a = ensureReq(code); a[dn] = Math.max(a[dn], aantal); }
-    });
-    // Werkvloer-functies als per-dag-monitor (≥1 op werkdagen).
-    werkvloerUniek.forEach(code => { const a = ensureReq(code); for (let d = 1; d <= 5; d++) a[d] = Math.max(a[d], 1); });
-
-    // "Strikte" codes = de échte app-criteria (verplicht + bezetting-regels).
-    // Alleen déze laten de datum/Aantal rood worden; werkvloer-only codes dienen
-    // als overzicht (rode letter in hun eigen indicator-kolom als ze ontbreken),
-    // zodat een normale dag zonder bv. Mammo niet meteen de hele datum rood maakt.
-    const strictCodes = new Set([
-      ...verplichteCodes,
-      ...bezettingRegels.map(r => hoofdLetterCode(r.code || '')).filter(Boolean),
-    ]);
-
-    // Indicator-kolommen: elke code met een eis (verplicht, regel én/of werkvloer).
-    const FUNCTIE_LETTERS = Object.keys(reqByCode).sort();
+    // v3.36.0: berekend in kolommen.js (gedeeld met het tabblad Indelen).
+    const {
+      functiesActief, bezettingRegels, werkvloerUniek, reqByCode, strictCodes,
+      functieLetters: FUNCTIE_LETTERS,
+    } = functieEisen();
     const COL_FUNCTIES = FUNCTIE_LETTERS.map((_, i) => COL_AANTAL + 2 + i);
 
     if (functiesActief.length === 0) {

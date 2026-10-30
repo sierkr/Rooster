@@ -3,6 +3,7 @@ import { doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firesto
 import { setDoc, updateDoc, deleteDoc } from '../schrijven.js';
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
+import { meld, bevestig, vraagTekst } from '../dialoog.js';
 import { esc, functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags } from '../helpers.js';
 
 
@@ -200,11 +201,11 @@ window.slaFunctieOp = async function(id) {
   const werkvloer = document.getElementById(`fwerkvloer-${id}`)?.checked || false;
   const actief   = document.getElementById(`factief-${id}`)?.checked !== false;
 
-  if (!code) { alert('Code is verplicht.'); return; }
-  if (!naam)  { alert('Naam is verplicht.'); return; }
+  if (!code) { await meld('Controleer de invoer', 'Code is verplicht.'); return; }
+  if (!naam)  { await meld('Controleer de invoer', 'Naam is verplicht.'); return; }
 
   const bestaatAl = (state.functies || []).some(f => (f.code || f.id) === code);
-  if (bestaatAl && id === 'nieuw') { alert(`Code "${code}" bestaat al.`); return; }
+  if (bestaatAl && id === 'nieuw') { await meld('Controleer de invoer', `Code "${code}" bestaat al.`); return; }
 
   try {
     await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, actief }, { merge: true });
@@ -216,16 +217,16 @@ window.slaFunctieOp = async function(id) {
       document.getElementById('fkleur-nieuw').value = '#cccccc';
     }
   } catch (e) {
-    alert('Opslaan mislukt: ' + e.message);
+    await meld('Opslaan mislukt', e.message);
   }
 };
 
 window.verwijderFunctie = async function(id) {
-  if (!confirm(`Functie "${id}" verwijderen?`)) return;
+  if (!(await bevestig('Weet je het zeker?', `Functie "${id}" verwijderen?`))) return;
   try {
     await deleteDoc(doc(db, 'functies', id));
   } catch (e) {
-    alert('Verwijderen mislukt: ' + e.message);
+    await meld('Verwijderen mislukt', e.message);
   }
 };
 
@@ -247,21 +248,21 @@ window.opslaanAlleCheckboxes = async function() {
       return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, verplicht, actief }, { merge: true });
     }));
     await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: telCodes, mtsdagen_codes: mtsCodes }, { merge: true });
-    alert('Opgeslagen.');
+    await meld('Gelukt', 'Opgeslagen.');
   } catch (e) {
-    alert('Opslaan mislukt: ' + e.message);
+    await meld('Opslaan mislukt', e.message);
   }
 };
 
 
 window.verwijderBezettingRegels = async function() {
   const bezetting = state.validatieRegels.filter(r => r.type === 'bezetting');
-  if (!confirm(`${bezetting.length} bezettingsregels permanent verwijderen?`)) return;
+  if (!(await bevestig('Weet je het zeker?', `${bezetting.length} bezettingsregels permanent verwijderen?`))) return;
   try {
     await Promise.all(bezetting.map(r => deleteDoc(doc(db, 'validatie_regels', r.id))));
-    alert(`${bezetting.length} bezettingsregels verwijderd.`);
+    await meld('Gelukt', `${bezetting.length} bezettingsregels verwijderd.`);
   } catch (e) {
-    alert('Mislukt: ' + e.message);
+    await meld('Mislukt', e.message);
   }
 };
 
@@ -271,7 +272,7 @@ window.regelToggle = async function(regelId) {
   try {
     await updateDoc(doc(db, 'validatie_regels', regelId), { actief: r.actief === false });
   } catch (e) {
-    alert('Kan regel niet wijzigen: ' + e.message);
+    await meld('Kan regel niet wijzigen', e.message);
   }
 };
 
@@ -279,6 +280,6 @@ window.regelErnst = async function(regelId, nieuwErnst) {
   try {
     await updateDoc(doc(db, 'validatie_regels', regelId), { ernst: nieuwErnst });
   } catch (e) {
-    alert('Kan regel niet wijzigen: ' + e.message);
+    await meld('Kan regel niet wijzigen', e.message);
   }
 };

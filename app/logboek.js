@@ -179,7 +179,9 @@ function _maandVan(datum) { return String(datum).slice(0, 7); }
 // volledige datumbereik van het bestand is bijgeladen.
 // Geeft het id van het punt terug, of null als het niet lukte (een import mag
 // hier nooit op stuklopen).
-export async function maakTerugdraaiPunt(dagen, bestandsnaam) {
+// v3.36.0: `soort` = 'import' of 'publicatie' (tabblad Indelen). Er blijft
+// precies één punt bestaan: dat van de laatste import óf publicatie.
+export async function maakTerugdraaiPunt(dagen, bestandsnaam, soort = 'import') {
   try {
     const perMaand = {};
     const jaren = {};
@@ -211,6 +213,7 @@ export async function maakTerugdraaiPunt(dagen, bestandsnaam) {
       email: state.profiel?.email || null,
       naam: state.profiel?.naam || null,
       bestandsnaam: bestandsnaam || '',
+      soort: soort === 'publicatie' ? 'publicatie' : 'import',
       jaren: Object.keys(jaren).sort().join(', '),
       aantal_dagen: (dagen || []).length,
       maanden,

@@ -2,7 +2,7 @@
 // Cache-naam bevat versienummer. Bij een nieuwe versie worden oude caches
 // automatisch verwijderd en alle bestanden opnieuw gecached.
 
-const VERSION = '3.34.1';
+const VERSION = '3.36.1';
 const CACHE = `rooster-${VERSION}`;
 
 const PRECACHE = [
@@ -25,6 +25,8 @@ const PRECACHE = [
   './app/logboek.js',
   './app/validatie.js',
   './app/bezetting-mutaties.js',
+  './app/kolommen.js',
+  './app/concept.js',
   './app/views/radioloog.js',
   './app/views/jaaroverzicht.js',
   './app/views/afdeling.js',
@@ -36,6 +38,7 @@ const PRECACHE = [
   './app/views/regels.js',
   './app/views/gebruikers.js',
   './app/views/logboek.js',
+  './app/views/indelen.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-180.png',

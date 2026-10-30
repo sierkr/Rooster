@@ -18,6 +18,7 @@ import { esc,
   radiologenMap, vandaagIso,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
+import { meld, bevestig, vraagTekst } from '../dialoog.js';
 
 // ----- Helpers -------------------------------------------------------------
 
@@ -521,7 +522,7 @@ window.vakToggleV = async function(datum, radId) {
       await setDoc(docRef, { datum, vakantie_v: { [radId]: true } }, { merge: true });
     }
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
@@ -549,7 +550,7 @@ window.vakToggleX = async function(datum) {
   try {
     await setDoc(doc(db, 'indeling', datum), update, { merge: true });
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
@@ -562,7 +563,7 @@ window.vakSetMin = async function(datum, waarde) {
   try {
     await setDoc(doc(db, 'indeling', datum), { datum, vakantie_min: num }, { merge: true });
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
@@ -573,7 +574,7 @@ window.vakSetRank = async function(datum, rankNaam) {
   try {
     await setDoc(doc(db, 'indeling', datum), { datum, vakantie_rank: rankNaam || null }, { merge: true });
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
@@ -613,7 +614,7 @@ window.vakKiesCode = async function(datum, radId, code) {
       await updateDoc(docRef, { [veld]: deleteField() });
     }
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
@@ -662,15 +663,15 @@ window.vakVulRijIn = async function(datum, code) {
   try {
     await setDoc(doc(db, 'indeling', datum), { datum, vakantie_v: nieuw }, { merge: true });
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
 window.vakVulRijInVrij = function(datum) {
   const inp = document.getElementById('vakXVrij');
   const code = (inp?.value || '').trim().toUpperCase();
-  if (!code) { alert('Vul een code in.'); return; }
-  if (code.length > 3) { alert('Max 3 tekens.'); return; }
+  if (!code) { meld('Controleer de invoer', 'Vul een code in.'); return; }
+  if (code.length > 3) { meld('Controleer de invoer', 'Max 3 tekens.'); return; }
   window.vakVulRijIn(datum, code);
 };
 
@@ -719,14 +720,14 @@ window.openVakBlokSheet = function(datum) {
 
 window.vakAccordeer = async function(startISO, eindISO) {
   if (!isBeheerder()) return;
-  if (!confirm('Periode accorderen en V-cellen doorzetten naar het hoofdrooster?')) return;
+  if (!(await bevestig('Weet je het zeker?', 'Periode accorderen en V-cellen doorzetten naar het hoofdrooster?'))) return;
   closeSheet();
   await accordeerRange(startISO, eindISO, true);
 };
 
 window.vakDeaccordeer = async function(startISO, eindISO) {
   if (!isBeheerder()) return;
-  if (!confirm('Periode deaccorderen? V-cellen blijven in Overzicht staan tot je ze handmatig wist.')) return;
+  if (!(await bevestig('Weet je het zeker?', 'Periode deaccorderen? V-cellen blijven in Overzicht staan tot je ze handmatig wist.'))) return;
   closeSheet();
   await accordeerRange(startISO, eindISO, false);
 };
@@ -762,7 +763,7 @@ async function accordeerRange(startISO, eindISO, accorderen) {
     }
     await batch.commit();
   } catch (e) {
-    alert('Bewerking mislukt: ' + (e.message || e.code));
+    await meld('Bewerking mislukt', (e.message || e.code));
   }
 }
 
@@ -840,9 +841,9 @@ window.vakBevriezenUitvoeren = async function() {
   if (!isBeheerder()) return;
   const start = document.getElementById('vakBvStart')?.value;
   const eind  = document.getElementById('vakBvEind')?.value;
-  if (!start || !eind || start > eind) { alert('Kies een geldige periode.'); return; }
+  if (!start || !eind || start > eind) { await meld('Controleer de invoer', 'Kies een geldige periode.'); return; }
 
-  if (!confirm(`Periode ${start} t/m ${eind} bevriezen en V-cellen doorzetten naar Overzicht?`)) return;
+  if (!(await bevestig('Weet je het zeker?', `Periode ${start} t/m ${eind} bevriezen en V-cellen doorzetten naar Overzicht?`))) return;
   closeSheet();
   await accordeerRange(start, eind, true);
 };
@@ -955,9 +956,9 @@ window.vakOpslaanRanking = async function(origineelNaam) {
   const kleur = document.getElementById('vakRkKleur')?.value || '#4caf50';
   const ankerJaar = parseInt(document.getElementById('vakRkAnker')?.value, 10) || new Date().getFullYear();
 
-  if (!naam) { alert('Vul een naam in.'); return; }
-  if (!label) { alert('Vul een label in.'); return; }
-  if (/\s/.test(naam)) { alert('Naam mag geen spaties bevatten.'); return; }
+  if (!naam) { await meld('Controleer de invoer', 'Vul een naam in.'); return; }
+  if (!label) { await meld('Controleer de invoer', 'Vul een label in.'); return; }
+  if (/\s/.test(naam)) { await meld('Controleer de invoer', 'Naam mag geen spaties bevatten.'); return; }
 
   const items = document.querySelectorAll('#vakRkVolgorde .vak-rank-item');
   const volgorde = [...items].map(el => el.getAttribute('data-rid'));
@@ -998,17 +999,17 @@ window.vakOpslaanRanking = async function(origineelNaam) {
 
     closeSheet();
   } catch (e) {
-    alert('Opslaan mislukt: ' + (e.message || e.code));
+    await meld('Opslaan mislukt', (e.message || e.code));
   }
 };
 
 window.vakVerwijderRanking = async function(naam) {
   if (!isBeheerder()) return;
-  if (!confirm(`Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`)) return;
+  if (!(await bevestig('Weet je het zeker?', `Ranking "${naam}" verwijderen? Dagen die deze ranking gebruiken behouden hun verwijzing maar krijgen geen kleur meer.`))) return;
   try {
     await deleteDoc(doc(db, 'vakantie_rankings', naam));
   } catch (e) {
-    alert('Verwijderen mislukt: ' + (e.message || e.code));
+    await meld('Verwijderen mislukt', (e.message || e.code));
   }
 };
 

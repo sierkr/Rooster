@@ -26,6 +26,8 @@ import { renderVakView } from './views/vakantie.js';
 import { renderBehView } from './views/overzicht.js';
 import { renderRegView } from './views/regels.js';
 import { renderGebView } from './views/gebruikers.js';
+// v3.36.0: indelen zoals in Excel, met concept (alleen beheerders).
+import { renderIndView } from './views/indelen.js';
 
 // ==== Aantekening van dit toestel (v3.33.8) =================================
 // Gemeten op een iPhone zonder verbinding: de aanmeldcontrole van Firebase
@@ -295,6 +297,9 @@ function renderTabs() {
     })() },
     { id: 'rad', label: 'Radioloog' },
   ];
+  // v3.36.0: Indelen — het jaar als Excel-blad, met concept en Publiceren.
+  // Alleen de rol beheerder, net als de Excel-import (die schrijft hetzelfde).
+  if (state.profiel?.rol === 'beheerder') tabs.splice(1, 0, { id: 'ind', label: 'Indelen' });
   if (window.TOON_JAAROVERZICHT) tabs.push({ id: 'jaa', label: 'Jaaroverzicht' });
   tabs.push({ id: 'afd', label: 'Afdeling' });
   tabs.push({ id: 'die', label: 'Dienst' });
@@ -318,10 +323,13 @@ function renderTabs() {
     <button class="tab ${t.id === state.huidigeView ? 'active' : ''}" onclick="window.showView('${t.id}')">${t.label}</button>
   `).join('');
 
-  ['rad', 'jaa', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'geb'].forEach(v => {
+  ['rad', 'jaa', 'afd', 'die', 'act', 'wen', 'vak', 'beh', 'geb', 'ind'].forEach(v => {
     const el = document.getElementById('view-' + v);
     if (el) el.style.display = v === state.huidigeView ? 'block' : 'none';
   });
+  // v3.36.0: het indeelraster gebruikt de volle breedte van het scherm.
+  const app = document.getElementById('app');
+  if (app) app.classList.toggle('app-breed', state.huidigeView === 'ind');
 }
 
 function renderUserChip() {
@@ -348,6 +356,11 @@ function render() {
   else if (state.huidigeView === 'beh') renderBehView();
   else if (state.huidigeView === 'reg') { state.huidigeView = 'geb'; renderGebView(); }
   else if (state.huidigeView === 'geb') renderGebView();
+  else if (state.huidigeView === 'ind') {
+    // Iemand die geen beheerder (meer) is, valt terug op Overzicht.
+    if (state.profiel?.rol !== 'beheerder') { state.huidigeView = 'beh'; renderTabs(); renderBehView(); }
+    else renderIndView();
+  }
 }
 
 // Maak render globaal toegankelijk voor modules die zelf willen re-renderen

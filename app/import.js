@@ -22,7 +22,7 @@ import {
 } from './logboek.js';
 
 // Horizon: wijzigingen binnen N dagen worden als "nabij" beschouwd
-const NABIJ_DAGEN = 30;
+export const NABIJ_DAGEN = 30;
 
 export const IMPORT_SHEET = 'Indeling 2026';
 export const IMPORT_KOL_DIENST = 'P';
@@ -97,7 +97,7 @@ function _celComment(cel) {
 //  - open wens die nu matcht → 'verwerkt'
 //  - verwerkte wens die nu gebroken is → 'open'
 // Retourneert { verwerkt: N, heropend: N } voor rapportage.
-async function synchroniseerWensen(importDagen, importeerderUid) {
+async function synchroniseerWensen(importDagen, importeerderUid, toelichting = 'Auto-verwerkt bij Excel-import') {
   // Bouw een map datum+radId → primaireCode vanuit de geïmporteerde data
   const nieuweToewijzingen = {}; // `${datum}|${radId}` → primaireCode
   for (const dag of importDagen) {
@@ -132,7 +132,7 @@ async function synchroniseerWensen(importDagen, importeerderUid) {
           status: 'verwerkt',
           verwerkt_op: serverTimestamp(),
           verwerkt_door: importeerderUid,
-          toelichting: 'Auto-verwerkt bij Excel-import',
+          toelichting,
         });
         verwerkt++;
       } else {
@@ -480,6 +480,8 @@ export async function actImportFile(input, renderGebView) {
 // semantiek als validatie.js/valideerWeek, maar dan op de Excel-data zelf
 // (vóór het schrijven) i.p.v. op de al opgeslagen indeling.
 // Returnt: [{ datum, radId, ernst, bericht }]
+// v3.36.0: ook gebruikt door het publiceren op het tabblad Indelen.
+export function valideerDagenTegenRegels(dagen) { return _valideerDagenTegenRegels(dagen); }
 function _valideerDagenTegenRegels(dagen) {
   const conflicten = [];
   const actieveRegels = (state.validatieRegels || []).filter(r => r.actief !== false);
@@ -617,127 +619,16 @@ export async function actImportSchrijven(renderGebView) {
   zetSchrijfactie(true);
   renderGebView();
   try {
-    // 0a. Terugdraai-punt (v3.33.1). Bewaart de huidige inhoud van precies de
-    //     dagen die deze import overschrijft, in de database zelf. Daarmee is
-    //     terugdraaien later een knop in het logboek in plaats van een bestand
-    //     met een wachtwoord op de computer van wie toevallig importeerde.
-    //     Dit gebeurt vóór de backup, zodat het punt er ook is als de backup
-    //     niet lukt.
-    const terugdraaiId = await maakTerugdraaiPunt(p.dagen, p.bestandnaam);
-    if (!terugdraaiId) {
-      const doorgaan = await bevestig(
-        'Terugdraai-punt niet gemaakt',
-        'Het lukte niet om de huidige inhoud van deze dagen te bewaren.\n\n' +
-        'Je kunt deze import dan later niet met één knop terugdraaien.\n\n' +
-        'Wil je toch doorgaan?',
-        'Toch doorgaan', 'Stoppen'
-      );
-      if (!doorgaan) {
-        await meld('Import afgebroken', 'Er is niets gewijzigd.');
-        return; // het slot en importBezig worden in de finally hersteld
-      }
-    }
-
-    // 0b. Backup vóór schrijven — download JSON als breed vangnet voor het
-    //     grovere geval. In de testomgeving is een backup geblokkeerd; dan
-    //     slaan we deze stap over (testdata hoeft niet veiliggesteld te worden).
-    //
-    //     v3.33.1: een MISLUKTE backup liep hier stilzwijgend door — alleen een
-    //     regel in de console, niets op het scherm. Zo kon een import zonder
-    //     backup gebeuren zonder dat iemand het merkte. Nu wordt de vraag altijd
-    //     gesteld, met de fout erbij en met de stand van het terugdraai-punt.
-    if (!IS_TEST_DB) {
-      const vangnet = terugdraaiId
-        ? 'Het terugdraai-punt van deze import is er wél, dus je kunt hem via het logboek terugdraaien.'
-        : 'Er is ook géén terugdraai-punt; deze import is straks niet met één knop ongedaan te maken.';
-      let backupFout = null;
-      let backupResultaat;
-      try {
-        backupResultaat = await maakClientBackup('voor-import');
-      } catch (backupErr) {
-        backupFout = backupErr;
-        console.warn('Backup mislukt:', backupErr);
-      }
-      if (backupFout || backupResultaat === null) {
-        const reden = backupFout
-          ? `De backup is mislukt: ${backupFout.message || backupFout}`
-          : 'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.';
-        const doorgaan = await bevestig(
-          'Geen backup gemaakt',
-          `${reden}\n\n${vangnet}\n\nWil je doorgaan met de import?`,
-          'Doorgaan', 'Stoppen'
-        );
-        if (!doorgaan) {
-          // v3.32.7: eerder keerde de import hier zonder één woord terug —
-          // niet te onderscheiden van een import die wél had gewerkt.
-          await meld('Import afgebroken', 'Er is niets gewijzigd.');
-          return; // het slot en importBezig worden in de finally hersteld
-        }
-      }
-    }
-
-    // 1. Indeling wegschrijven — met behoud van app-only velden.
-    //    Excel bevat alleen toewijzingen, dienst.dag, bespreking, interventie,
-    //    dag-opmerking en cel-opmerkingen. Alle overige velden op het
-    //    bestaande indeling-doc (vakantie_v uit de Vakantie-tab,
-    //    dienst.avond/nacht, en eventuele toekomstige velden) moeten een
-    //    import overleven — vóór deze fix wiste een export→import-cyclus
-    //    stilzwijgend een heel jaar aan vakantieregistraties.
-    const BATCH = 400;
-    let geschreven = 0;
-    for (let i = 0; i < p.dagen.length; i += BATCH) {
-      const batch = writeBatch(db);
-      const slice = p.dagen.slice(i, i + BATCH);
-      slice.forEach(d => {
-        const { id: _id, ...bestaandDoc } = state.indelingMap[d.datum] || {};
-        const definitief = {
-          ...bestaandDoc,  // app-only velden behouden (o.a. vakantie_v)
-          ...d,            // Excel is leidend voor de geëxporteerde velden
-          dienst: { ...(bestaandDoc.dienst || {}), dag: d.dienst?.dag || null },
-        };
-        batch.set(doc(db, 'indeling', d.datum), definitief);
-      });
-      await batch.commit();
-      geschreven += slice.length;
-    }
-
-    // 2. Wijziging-docs schrijven voor gewijzigde cellen (gezien: false)
-    // vandaag en grens zijn al berekend vóór de bevestiging
-    let wijzigingenGeschreven = 0;
-    const wijzWrites = [];
-    for (const dag of p.dagen) {
-      if (dag.datum < vandaag || dag.datum > grens) continue;
-      const bestaand = state.indelingMap[dag.datum];
-      for (const [radId, nieuweCodes] of Object.entries(dag.toewijzingen || {})) {
-        const oudeCodes = bestaand?.toewijzingen?.[radId] || [];
-        if (JSON.stringify(oudeCodes) === JSON.stringify(nieuweCodes)) continue;
-        wijzWrites.push({
-          uid: state.user?.uid || 'import',
-          email: state.profiel?.email || 'import',
-          datum: dag.datum,
-          radioloog_id: radId,
-          van: oudeCodes,
-          naar: nieuweCodes,
-          wanneer: serverTimestamp(),
-          gezien: false,
-        });
-      }
-    }
-    // Schrijf in échte batches van 400 (writeBatch met auto-id docs) —
-    // atomair per chunk i.p.v. 400 losse addDoc-calls.
-    for (let i = 0; i < wijzWrites.length; i += 400) {
-      const slice = wijzWrites.slice(i, i + 400);
-      const wBatch = writeBatch(db);
-      slice.forEach(w => wBatch.set(doc(collection(db, 'wijzigingen')), w));
-      await wBatch.commit();
-      wijzigingenGeschreven += slice.length;
-    }
-
-    // 3. Wens-statussen synchroniseren
-    const { verwerkt, heropend } = await synchroniseerWensen(
-      p.dagen,
-      state.user?.uid || 'import'
-    );
+    // v3.36.0: de schrijfstappen zelf (terugdraai-punt, backup, wegschrijven,
+    // meldingen, wensen) staan in schrijfDagenWeg(), zodat het publiceren
+    // vanuit het tabblad Indelen exact dezelfde weg gaat.
+    const uitkomst = await schrijfDagenWeg(p.dagen, {
+      soort: 'import',
+      bestandsnaam: p.bestandnaam,
+      vandaag, grens,
+    });
+    if (!uitkomst) return; // afgebroken; de melding is al getoond
+    const { geschreven, wijzigingenGeschreven, verwerkt, heropend, terugdraaiId } = uitkomst;
 
     // v3.33.0: import vastleggen in het logboek — wie, wanneer, welk bestand,
     // hoeveel dagen en gevulde cellen erin zaten en hoeveel er echt wijzigde.
@@ -774,6 +665,182 @@ export async function actImportSchrijven(renderGebView) {
     zetSchrijfactie(false);
     renderGebView();
   }
+}
+
+// ---- De gedeelde schrijfweg (v3.36.0) ---------------------------------------
+// Tot v3.35 stonden deze stappen in actImportSchrijven. Sinds het tabblad
+// Indelen kan er op twee manieren een stuk rooster in één keer naar de
+// databank: de Excel-import en het publiceren van een concept. Beide gaan
+// hierdoorheen, zodat ze dezelfde vangnetten hebben en niet uit elkaar kunnen
+// groeien:
+//   0a. terugdraai-punt (de vorige inhoud van precies deze dagen)
+//   0b. backup (alleen live; mislukt = vragen, nooit stil doorgaan)
+//   1.  de dagen wegschrijven, met behoud van app-only velden
+//   2.  wijziging-meldingen voor radiologen (binnen NABIJ_DAGEN dagen)
+//   3.  wens-statussen bijwerken
+// Het logboek en de eindmelding doet de aanroeper zelf (die verschillen).
+//
+// `dagen`: lijst roosterdagen in het import-formaat
+//   { datum, weeknr, dag, toewijzingen, dienst: { dag }, bespreking,
+//     interventie, opmerking?, cel_opmerkingen? }
+// Velden die ontbreken blijven op het bestaande document staan.
+// De aanroeper zet het slot (zetSchrijfactie) en vangt fouten af.
+// Geeft null terug als de gebruiker onderweg stopt (melding is dan getoond),
+// anders { geschreven, wijzigingenGeschreven, verwerkt, heropend, terugdraaiId }.
+const _WOORDEN = {
+  import: {
+    deze: 'deze import',
+    afgebroken: 'Import afgebroken',
+    doorgaanVraag: 'Wil je doorgaan met de import?',
+    backupReden: 'voor-import',
+    waarTerug: 'via het logboek',
+    wensToelichting: 'Auto-verwerkt bij Excel-import',
+  },
+  publicatie: {
+    deze: 'deze publicatie',
+    afgebroken: 'Publiceren afgebroken',
+    doorgaanVraag: 'Wil je doorgaan met publiceren?',
+    backupReden: 'voor-publicatie',
+    waarTerug: 'met de knop op het tabblad Indelen',
+    wensToelichting: 'Auto-verwerkt bij publiceren (Indelen)',
+  },
+};
+
+export async function schrijfDagenWeg(dagen, { soort = 'import', bestandsnaam = '', vandaag, grens }) {
+  const w = _WOORDEN[soort] || _WOORDEN.import;
+  vandaag = vandaag || vandaagIso();
+  grens   = grens   || plusDagen(vandaag, NABIJ_DAGEN);
+
+  // 0a. Terugdraai-punt (v3.33.1). Bewaart de huidige inhoud van precies de
+  //     dagen die nu overschreven worden, in de database zelf. Daarmee is
+  //     terugdraaien later een knop in plaats van een bestand met een
+  //     wachtwoord op de computer van wie toevallig importeerde.
+  //     Dit gebeurt vóór de backup, zodat het punt er ook is als de backup
+  //     niet lukt.
+  const terugdraaiId = await maakTerugdraaiPunt(dagen, bestandsnaam, soort);
+  if (!terugdraaiId) {
+    const doorgaan = await bevestig(
+      'Terugdraai-punt niet gemaakt',
+      'Het lukte niet om de huidige inhoud van deze dagen te bewaren.\n\n' +
+      `Je kunt ${w.deze} dan later niet met één knop terugdraaien.\n\n` +
+      'Wil je toch doorgaan?',
+      'Toch doorgaan', 'Stoppen'
+    );
+    if (!doorgaan) {
+      await meld(w.afgebroken, 'Er is niets gewijzigd.');
+      return null;
+    }
+  }
+
+  // 0b. Backup vóór schrijven — download JSON als breed vangnet voor het
+  //     grovere geval. In de testomgeving is een backup geblokkeerd; dan
+  //     slaan we deze stap over (testdata hoeft niet veiliggesteld te worden).
+  //
+  //     v3.33.1: een MISLUKTE backup liep hier stilzwijgend door — alleen een
+  //     regel in de console, niets op het scherm. Zo kon een import zonder
+  //     backup gebeuren zonder dat iemand het merkte. Nu wordt de vraag altijd
+  //     gesteld, met de fout erbij en met de stand van het terugdraai-punt.
+  if (!IS_TEST_DB) {
+    const vangnet = terugdraaiId
+      ? `Het terugdraai-punt van ${w.deze} is er wél, dus je kunt hem ${w.waarTerug} terugdraaien.`
+      : `Er is ook géén terugdraai-punt; ${w.deze} is straks niet met één knop ongedaan te maken.`;
+    let backupFout = null;
+    let backupResultaat;
+    try {
+      backupResultaat = await maakClientBackup(w.backupReden);
+    } catch (backupErr) {
+      backupFout = backupErr;
+      console.warn('Backup mislukt:', backupErr);
+    }
+    if (backupFout || backupResultaat === null) {
+      const reden = backupFout
+        ? `De backup is mislukt: ${backupFout.message || backupFout}`
+        : 'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.';
+      const doorgaan = await bevestig(
+        'Geen backup gemaakt',
+        `${reden}\n\n${vangnet}\n\n${w.doorgaanVraag}`,
+        'Doorgaan', 'Stoppen'
+      );
+      if (!doorgaan) {
+        // v3.32.7: eerder keerde de import hier zonder één woord terug —
+        // niet te onderscheiden van een import die wél had gewerkt.
+        await meld(w.afgebroken, 'Er is niets gewijzigd.');
+        return null;
+      }
+    }
+  }
+
+  // 1. Indeling wegschrijven — met behoud van app-only velden.
+  //    Excel bevat alleen toewijzingen, dienst.dag, bespreking, interventie,
+  //    dag-opmerking en cel-opmerkingen. Alle overige velden op het
+  //    bestaande indeling-doc (vakantie_v uit de Vakantie-tab,
+  //    dienst.avond/nacht, en eventuele toekomstige velden) moeten een
+  //    import overleven — vóór deze fix wiste een export→import-cyclus
+  //    stilzwijgend een heel jaar aan vakantieregistraties.
+  //
+  //    ⚠ De vergelijking voor stap 2 gebeurt tegen de inhoud van vóór het
+  //    schrijven. Die leggen we hier vast, want de realtime luisteraar werkt
+  //    state.indelingMap bij zodra de eerste batch binnen is.
+  const vooraf = {};
+  dagen.forEach(d => { vooraf[d.datum] = state.indelingMap[d.datum]; });
+
+  const BATCH = 400;
+  let geschreven = 0;
+  for (let i = 0; i < dagen.length; i += BATCH) {
+    const batch = writeBatch(db);
+    const slice = dagen.slice(i, i + BATCH);
+    slice.forEach(d => {
+      const { id: _id, ...bestaandDoc } = vooraf[d.datum] || {};
+      const definitief = {
+        ...bestaandDoc,  // app-only velden behouden (o.a. vakantie_v)
+        ...d,            // Excel is leidend voor de geëxporteerde velden
+        dienst: { ...(bestaandDoc.dienst || {}), dag: d.dienst?.dag || null },
+      };
+      batch.set(doc(db, 'indeling', d.datum), definitief);
+    });
+    await batch.commit();
+    geschreven += slice.length;
+  }
+
+  // 2. Wijziging-docs schrijven voor gewijzigde cellen (gezien: false)
+  let wijzigingenGeschreven = 0;
+  const wijzWrites = [];
+  for (const dag of dagen) {
+    if (dag.datum < vandaag || dag.datum > grens) continue;
+    const bestaand = vooraf[dag.datum];
+    for (const [radId, nieuweCodes] of Object.entries(dag.toewijzingen || {})) {
+      const oudeCodes = bestaand?.toewijzingen?.[radId] || [];
+      if (JSON.stringify(oudeCodes) === JSON.stringify(nieuweCodes)) continue;
+      wijzWrites.push({
+        uid: state.user?.uid || 'import',
+        email: state.profiel?.email || 'import',
+        datum: dag.datum,
+        radioloog_id: radId,
+        van: oudeCodes,
+        naar: nieuweCodes,
+        wanneer: serverTimestamp(),
+        gezien: false,
+      });
+    }
+  }
+  // Schrijf in échte batches van 400 (writeBatch met auto-id docs) —
+  // atomair per chunk i.p.v. 400 losse addDoc-calls.
+  for (let i = 0; i < wijzWrites.length; i += 400) {
+    const slice = wijzWrites.slice(i, i + 400);
+    const wBatch = writeBatch(db);
+    slice.forEach(wz => wBatch.set(doc(collection(db, 'wijzigingen')), wz));
+    await wBatch.commit();
+    wijzigingenGeschreven += slice.length;
+  }
+
+  // 3. Wens-statussen synchroniseren
+  const { verwerkt, heropend } = await synchroniseerWensen(
+    dagen,
+    state.user?.uid || 'import',
+    w.wensToelichting
+  );
+
+  return { geschreven, wijzigingenGeschreven, verwerkt, heropend, terugdraaiId };
 }
 
 export function actImportAnnuleren(renderGebView) {

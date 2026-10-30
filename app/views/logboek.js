@@ -98,7 +98,7 @@ function _exportHtml() {
   if (!rijen.length) {
     return `
       <div class="empty-state">
-        Nog geen exports of imports vastgelegd.
+        Nog geen exports, imports of publicaties vastgelegd.
         <div class="muted" style="font-size:12px; margin-top:8px;">
           Dit logboek begint bij versie 3.33.0; wat daarvóór is geëxporteerd of
           geïmporteerd, is niet vastgelegd.
@@ -113,9 +113,12 @@ function _exportHtml() {
   );
 
   const lijst = rijen.map(r => {
-    const isImport = r.soort === 'import';
-    const kleur = r.soort === 'terugdraaien' ? '#6b1414' : (isImport ? '#6b3a00' : '#1a4a2a');
-    const achtergrond = r.soort === 'terugdraaien' ? '#fbe9e9' : (isImport ? '#fff4e0' : '#eefaf2');
+    // v3.36.0: een publicatie (tabblad Indelen) schrijft net als een import
+    // dagen weg en heeft een terugdraai-punt; hij krijgt een eigen label.
+    const isPublicatie = r.soort === 'publicatie';
+    const isImport = r.soort === 'import' || isPublicatie;
+    const kleur = r.soort === 'terugdraaien' ? '#6b1414' : (isPublicatie ? '#3b2a6b' : (isImport ? '#6b3a00' : '#1a4a2a'));
+    const achtergrond = r.soort === 'terugdraaien' ? '#fbe9e9' : (isPublicatie ? '#efeafc' : (isImport ? '#fff4e0' : '#eefaf2'));
     const perKolom = Object.entries(r.per_kolom || {})
       .sort((a, b) => b[1] - a[1])
       .map(([k, v]) => `${esc(k)} ${v}`)
@@ -126,7 +129,7 @@ function _exportHtml() {
       <div style="padding:8px; border-bottom:1px solid rgba(0,0,0,0.06); font-size:12px;">
         <div>
           <span style="background:${achtergrond}; color:${kleur}; padding:1px 6px; border-radius:4px; font-weight:600;">
-            ${r.soort === 'terugdraaien' ? 'TERUGGEDRAAID' : (isImport ? 'IMPORT' : 'EXPORT')}
+            ${r.soort === 'terugdraaien' ? 'TERUGGEDRAAID' : (isPublicatie ? 'PUBLICATIE' : (isImport ? 'IMPORT' : 'EXPORT'))}
           </span>
           <b style="margin-left:6px;">${esc(r.jaar || '')}</b>
           <span class="muted"> · ${esc(tijdTekst(r.wanneer || r.wanneer_lokaal))}</span>

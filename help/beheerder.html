@@ -54,13 +54,14 @@
 <div class="wrap">
 
   <h1>Rooster radiologen – Beheerder</h1>
-  <p class="subtitle">Beheerdershandleiding · augustus 2026 · app-versie 3.32.5</p>
+  <p class="subtitle">Beheerdershandleiding · oktober 2026 · app-versie 3.36.1</p>
 
   <div class="toc">
     <h2>Inhoud</h2>
     <ol>
       <li><a href="#rollen">Rollen en rechten</a></li>
       <li><a href="#overzicht">Overzicht – weekrooster bewerken</a></li>
+      <li><a href="#indelen">Indelen – het jaar als Excel-blad</a></li>
       <li><a href="#afdeling">Afdeling en Dienst</a></li>
       <li><a href="#activiteit">Activiteit – bezettingsanalyse</a></li>
       <li><a href="#wensen">Wensen beheren</a></li>
@@ -136,12 +137,32 @@
   <p>Boven het rooster verschijnen automatisch waarschuwingen als de bezetting afwijkt van de ingestelde regels (zie <a href="#regels">Regels</a>). Rode meldingen zijn conflicten die aandacht vereisen; oranje zijn waarschuwingen.</p>
 
   <!-- 3 -->
-  <h2 id="afdeling">3. Afdeling en Dienst</h2>
+  <h2 id="indelen">3. Indelen – het jaar als Excel-blad</h2>
+  <p>De tab <span class="badge">Indelen</span> (alleen voor beheerders, op pc, iPad en telefoon) toont een heel jaar zoals het Excel-bestand: dagen onder elkaar, dezelfde kolommen (radiologen, P, Q, R) en dezelfde hulpkolommen (<em>Aantal</em> en de functies die op een dag nog ontbreken).</p>
+
+  <h3>Werken in het raster</h3>
+  <ul>
+    <li>Klik een cel en typ een code. <b>E,M</b> (of E/M) is ochtend/middag.</li>
+    <li><b>Enter</b> gaat omlaag, <b>Tab</b> naar rechts, de pijltjes bewegen. Met <b>Shift</b> kies je een blok.</li>
+    <li><b>Delete</b> maakt leeg, <b>Ctrl+C</b> / <b>Ctrl+V</b> kopieert en plakt (ook van en naar Excel), <b>Ctrl+Z</b> maakt ongedaan. Eén waarde plakken op een gekozen blok vult het hele blok.</li>
+    <li>Dubbelklik of <b>F2</b> om een bestaande code aan te vullen.</li>
+  </ul>
+  <p><b>Op telefoon of iPad:</b> tik een cel om hem te kiezen en tik nog eens om te typen. <b>Enter</b> slaat op en opent meteen de cel eronder, zodat je een kolom kunt doortypen; ergens anders tikken slaat ook op. Het raster schuift met de vinger. Blokken kiezen en plakken kan alleen met een toetsenbord (ook een iPad met toetsenbord).</p>
+  <p>In de cel zie je ook de wensen (bolletje), de vakantieplanning (kleine V) en opmerkingen (rood driehoekje); de details staan in het hulpvenstertje als je met de muis op de cel staat. Een rood omrande cel botst met een regel. Een gearceerde cel hoort bij een stoel die op die datum niet bezet is.</p>
+
+  <h3>Eerst een concept, dan publiceren</h3>
+  <p>Wat je typt is eerst <b>concept</b> (paarse streep onder de cel). Het concept wordt meteen bewaard, dus je kunt stoppen en later — ook op een andere pc — verder. Alleen beheerders zien het; voor radiologen verandert er niets.</p>
+  <p>Met <b>Publiceren</b> gaan de veranderde cellen het rooster in. Je ziet eerst hoeveel cellen het zijn, welke binnen 30 dagen vallen (die radiologen krijgen een melding) en welke cellen iemand anders intussen in het rooster heeft gewijzigd. Daarna volgen dezelfde stappen als bij de Excel-import: terugdraai-punt, backup (live), wegschrijven, wensen bijwerken en een regel in het logboek. Alleen de veranderde cellen worden geschreven; de rest van het rooster blijft zoals het is.</p>
+  <p>Onder het raster staat de knop om de laatste publicatie (of import) terug te draaien. Er is altijd maar één terugdraai-punt: dat van de laatste import óf publicatie. <b>Concept weggooien</b> maakt het concept van dat jaar leeg, ook wat andere beheerders erin zetten; het rooster zelf verandert dan niet.</p>
+  <div class="tip"><b>Let op:</b> het concept zit niet in de database-backup. Publiceer dus wat af is.</div>
+
+  <!-- 4 -->
+  <h2 id="afdeling">4. Afdeling en Dienst</h2>
   <p><span class="badge">Afdeling</span> toont wie er op een specifieke dag op elke plek staat, met de aanwezige radiologen bovenaan en de afwezige (vakantie, ziek, cursus, administratie) daaronder. Handig als referentie voor dagelijkse afstemming. Je kunt de weergave ook exporteren als wekelijks Excel-overzicht via het map-icoontje rechtsboven.</p>
   <p><span class="badge">Dienst</span> toont de dienstdoende radiologen met hun DECT-nummers. Als beheerder kun je hier ook de dienstrooster invullen en dienst-toewijzingen aanpassen.</p>
 
-  <!-- 4 -->
-  <h2 id="activiteit">4. Activiteit – bezettingsanalyse</h2>
+  <!-- 5 -->
+  <h2 id="activiteit">5. Activiteit – bezettingsanalyse</h2>
   <p>De tab <span class="badge">Activiteit</span> geeft een kwantitatieve analyse over een gekozen periode:</p>
   <ul>
     <li>Aantal werkvloer-/vakantie-/cursusdagen per radioloog</li>
@@ -151,8 +172,8 @@
   <p>Selecteer een periode (kwartaal, maand of eigen bereik) via de knoppen bovenaan. De tabel toont automatisch invallers naast vaste radiologen als die actief zijn in de periode.</p>
   <div class="tip"><b>Tip:</b> Gebruik de activiteittab als check vóór het maken van een nieuw roosterblok: zo zie je in één oogopslag wie relatief weinig of veel heeft gedaan.</div>
 
-  <!-- 5 -->
-  <h2 id="wensen">5. Wensen beheren</h2>
+  <!-- 6 -->
+  <h2 id="wensen">6. Wensen beheren</h2>
   <p>De tab <span class="badge">Wensen</span> toont als beheerder alle openstaande wensen van alle radiologen, gegroepeerd per datum.</p>
   <h3>Wens verwerken</h3>
   <ol class="steps">
@@ -162,13 +183,13 @@
   </ol>
   <p>Een wens afwijzen doe je via de knop <em>Afwijzen</em> in het detailvenster. De radioloog ziet dan de status <em>Afgewezen</em>.</p>
 
-  <!-- 6 -->
-  <h2 id="vakantie">6. Vakantieplanning</h2>
+  <!-- 7 -->
+  <h2 id="vakantie">7. Vakantieplanning</h2>
   <p>De tab <span class="badge">Vakantie</span> toont de maandelijkse vakantieplanning en de volgorderotatie. Als beheerder zie je alle radiologen en kun je vakantiedagen toekennen of blokkeren.</p>
   <p>De rotatiepositie bepaalt de volgorde bij conflicterende vakantieaanvragen: de radioloog die dit jaar het laagst in de volgorde staat heeft voorrang in het volgende jaar.</p>
 
-  <!-- 7 -->
-  <h2 id="regels">7. Regels – functies en validatie</h2>
+  <!-- 8 -->
+  <h2 id="regels">8. Regels – functies en validatie</h2>
   <p>Je vindt de regels onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Regels</em>. Zichtbaar voor beheerders met regel- of gebruikersbeheerrechten.</p>
 
   <h3>Functies</h3>
@@ -192,8 +213,8 @@
   </ul>
   <p>Verouderde bezettingsregels (type "bezetting") kunnen in bulk worden verwijderd via de knop onderaan de pagina.</p>
 
-  <!-- 8 -->
-  <h2 id="gebruikers">8. Gebruikers beheren</h2>
+  <!-- 9 -->
+  <h2 id="gebruikers">9. Gebruikers beheren</h2>
   <p>Via <span class="badge">Beheer</span> → <span class="badge">App gebruikers</span> beheer je accounts, koppel je gebruikers aan radioloog-profielen en stel je permissies in. De lijst is gesplitst in drie onder-tabs: Radiologen, Technici en Secretariaat.</p>
 
   <h3>Nieuwe gebruiker aanmaken</h3>
@@ -234,8 +255,8 @@
     <li>In de tab <span class="badge">Radioloog</span> vind je per persoon een (uitklapbare) <em>Loopbaan</em>: de periodes over alle stoelen heen (stoel · code · van–tot). Alleen zichtbaar voor beheerders/lezers.</li>
   </ul>
 
-  <!-- 9 -->
-  <h2 id="excel-export">9. Excel-export – workflow en formaat</h2>
+  <!-- 10 -->
+  <h2 id="excel-export">10. Excel-export – workflow en formaat</h2>
   <p>De export maakt een volledig opgemaakte <code>.xlsx</code> aan op basis van de Firestore-indeling.</p>
 
   <h3>Export starten</h3>
@@ -281,8 +302,8 @@
 
   <div class="tip"><b>Tip:</b> Je mag in Excel gerust kolommen aanpassen of verplaatsen — dankzij het verborgen <code>_kolommen</code>-blad wordt elke kolom bij import alsnog aan de juiste stoel gekoppeld. Verwijder dat verborgen blad echter niet als je het bestand wilt reimporteren.</div>
 
-  <!-- 10 -->
-  <h2 id="excel-import">10. Excel-import – workflow en beperkingen</h2>
+  <!-- 11 -->
+  <h2 id="excel-import">11. Excel-import – workflow en beperkingen</h2>
   <p>Via de import laad je een bewerkt rooster terug in de app. <strong>Dit overschrijft alle Firestore-data voor de betrokken periode.</strong></p>
 
   <h3>Aanbevolen workflow</h3>
@@ -327,8 +348,8 @@
 
   <div class="danger"><b>Let op:</b> Een import is niet met één knop terug te draaien. Wél maakt de app <strong>vóór elke import automatisch een backup</strong> van de hele database; die verschijnt in de backup-geschiedenis met de reden <em>vóór import</em>. Ging er iets mis, dan zet je die backup terug — zie <a href="#veiligheid">Backup, herstel en veiligheid</a>. Maak daarnaast gerust eerst een export als extra houvast.</div>
 
-  <!-- 11 -->
-  <h2 id="veiligheid">11. Backup, herstel en veiligheid</h2>
+  <!-- 12 -->
+  <h2 id="veiligheid">12. Backup, herstel en veiligheid</h2>
   <p>Je vindt dit onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Overige instellingen</em>.</p>
 
   <h3>Database-backup</h3>
@@ -365,8 +386,8 @@
   <h3>Offline werken</h3>
   <p>De app bewaart de geladen gegevens lokaal op het toestel. Valt het netwerk weg, dan blijft het laatst bekende rooster zichtbaar en worden wijzigingen bewaard tot de verbinding terug is; daarna worden ze vanzelf verstuurd. Er gaat dus niets verloren als iemand midden in een aanpassing zijn verbinding kwijtraakt.</p>
 
-  <!-- 12 -->
-  <h2 id="beperkingen">12. Beperkingen en bekende limieten</h2>
+  <!-- 13 -->
+  <h2 id="beperkingen">13. Beperkingen en bekende limieten</h2>
   <table>
     <tr><th>Beperking</th><th>Detail</th></tr>
     <tr><td>Functiecodes wijzigen</td><td>Verander nooit een functiecode van een reeds gebruikte functie. Historische toewijzingen raken dan los van de definitie.</td></tr>
@@ -377,10 +398,10 @@
     <tr><td>Historie</td><td>Alle roosterdata blijft bewaard in Firestore. Gebruik het gegevensbeheer onder Beheer → Control → Overige instellingen om verlopen wensen en oude indelingen te verwijderen.</td></tr>
   </table>
 
-  <!-- 13 -->
-  <h2 id="workflow">13. Aanbevolen workflow voor roosterbeheer</h2>
+  <!-- 14 -->
+  <h2 id="workflow">14. Aanbevolen workflow voor roosterbeheer</h2>
   <ol class="steps">
-    <li><strong>Plan maken in Excel.</strong> Exporteer het huidige rooster als startpunt. Vul de nieuwe periode in — gebruik alleen geldige functiecodes.</li>
+    <li><strong>Plan maken.</strong> In de tab <a href="#indelen">Indelen</a> (concept, daarna Publiceren), of in Excel: exporteer het huidige rooster als startpunt en vul de nieuwe periode in — gebruik alleen geldige functiecodes.</li>
     <li><strong>Wensen checken.</strong> Raadpleeg de Wensen-tab vóór het finaliseren van het rooster. Verwerk open wensen zoveel mogelijk.</li>
     <li><strong>Activiteit controleren.</strong> Gebruik de Activiteit-tab om te zien of de werkvloerverdeling in balans is.</li>
     <li><strong>Importeren.</strong> Importeer het definitieve rooster. Controleer de preview zorgvuldig, let op de waarschuwing bij wijzigingen binnen 30 dagen. De app maakt vlak vóór het schrijven automatisch een backup; noteer waar die terechtkomt.</li>

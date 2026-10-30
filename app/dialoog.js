@@ -114,23 +114,37 @@ export function bevestig(titel, tekst, jaLabel = 'Doorgaan', neeLabel = 'Annuler
 
 /**
  * Vraagt om tekst. Vervangt prompt(). Geeft null bij annuleren of leeg.
- * opties: { wachtwoord: true } toont een wachtwoordveld.
+ * opties:
+ *   wachtwoord: true  — toont een wachtwoordveld
+ *   leegMag: true     — leeg laten geeft '' terug (annuleren blijft null);
+ *                       zoals prompt() dat deed (v3.35.0)
+ *   waarde: '…'       — vooraf ingevuld (v3.35.0)
+ *   alleenTonen: true — alleen-lezen, geselecteerd om te kopiëren, één knop
+ *                       "Sluiten"; voor iets wat je eenmalig te zien krijgt,
+ *                       zoals een tijdelijk wachtwoord (v3.35.0)
  */
 export function vraagTekst(titel, tekst, opties = {}) {
   const type = opties.wachtwoord ? 'password' : 'text';
+  const attr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const veldHtml = `
     <input class="input" data-dlg-veld type="${type}"
       autocomplete="${opties.wachtwoord ? 'new-password' : 'off'}"
+      ${opties.waarde != null ? `value="${attr(opties.waarde)}"` : ''}
+      ${opties.alleenTonen ? 'readonly onfocus="this.select()"' : ''}
       style="width: 100%; margin-bottom: 1rem;" />`;
-  return _toon({
-    titel, tekst, veldHtml,
-    knoppen: [
+  const knoppen = opties.alleenTonen
+    ? [{ label: opties.jaLabel || 'Sluiten', waarde: true, primair: true }]
+    : [
       { label: opties.neeLabel || 'Annuleren', waarde: null },
       { label: opties.jaLabel  || 'OK',        waarde: true, primair: true },
-    ],
+    ];
+  return _toon({
+    titel, tekst, veldHtml, knoppen,
     leesWaarde: (el, knop) => {
       if (knop.waarde !== true) return null;
       const v = el.querySelector('[data-dlg-veld]')?.value ?? '';
+      if (opties.leegMag) return v;
       return v.trim() ? v : null;
     },
   });

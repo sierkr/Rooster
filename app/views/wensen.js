@@ -9,6 +9,7 @@ import {
   toewijzingVoor, hoofdLetterCode, magAlleWensenZien, isHoofd, esc,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
+import { meld, bevestig, vraagTekst } from '../dialoog.js';
 
 export function renderWenView() {
   const container = document.getElementById('view-wen');
@@ -198,7 +199,7 @@ window.bewerkWens = function(wensId) {
   if (!w) return;
   const status = w.status || 'open';
   if (status !== 'open') {
-    alert(`Deze wens is al ${status === 'verwerkt' ? 'verwerkt' : 'afgewezen'} en kan niet meer worden gewijzigd. Dien eventueel een nieuwe wens in.`);
+    meld('Niet mogelijk', `Deze wens is al ${status === 'verwerkt' ? 'verwerkt' : 'afgewezen'} en kan niet meer worden gewijzigd. Dien eventueel een nieuwe wens in.`);
     return;
   }
   toonWensFormulier(w);
@@ -215,9 +216,9 @@ window.opslaanWens = async function(id) {
   const voorkeur_code = document.getElementById('wVoorkeur')?.value || null;
   const opmerking = document.getElementById('wOpmerking').value.trim() || null;
 
-  if (!datum) { alert('Datum is verplicht'); return; }
-  if (datum < vandaagIso()) { alert('Datum moet in de toekomst liggen'); return; }
-  if (type === 'voorkeur' && !voorkeur_code) { alert('Kies een voorkeursfunctie'); return; }
+  if (!datum) { await meld('Controleer de invoer', 'Datum is verplicht'); return; }
+  if (datum < vandaagIso()) { await meld('Controleer de invoer', 'Datum moet in de toekomst liggen'); return; }
+  if (type === 'voorkeur' && !voorkeur_code) { await meld('Controleer de invoer', 'Kies een voorkeursfunctie'); return; }
 
   const data = {
     radioloog_id: state.profiel.radioloog_id,
@@ -235,17 +236,17 @@ window.opslaanWens = async function(id) {
     }
     closeSheet();
   } catch (e) {
-    alert('Opslaan mislukt: ' + e.message);
+    await meld('Opslaan mislukt', e.message);
   }
 };
 
 window.verwijderWens = async function(id) {
-  if (!confirm('Wens verwijderen?')) return;
+  if (!(await bevestig('Weet je het zeker?', 'Wens verwijderen?'))) return;
   try {
     await deleteDoc(doc(db, 'wensen', id));
     closeSheet();
   } catch (e) {
-    alert('Verwijderen mislukt: ' + e.message);
+    await meld('Verwijderen mislukt', e.message);
   }
 };
 
@@ -254,7 +255,7 @@ window.wensVerwerk = async function(id) {
   if (!w) return;
   const check = checkWensTegenRooster(w);
   if (!check.ok) {
-    alert(`Kan niet verwerken.\n\nCel staat op: ${check.huidig}\nWens vraagt: ${check.gewenst}\n\nPas eerst de planning aan in de Overzicht-tab, of wijs de wens af.`);
+    await meld('Niet mogelijk', `Kan niet verwerken.\n\nCel staat op: ${check.huidig}\nWens vraagt: ${check.gewenst}\n\nPas eerst de planning aan in de Overzicht-tab, of wijs de wens af.`);
     return;
   }
   try {
@@ -265,12 +266,13 @@ window.wensVerwerk = async function(id) {
       toelichting: null,
     });
   } catch (e) {
-    alert('Verwerken mislukt: ' + e.message);
+    await meld('Verwerken mislukt', e.message);
   }
 };
 
 window.wensAfwijs = async function(id) {
-  const reden = prompt('Optionele toelichting voor de radioloog (mag leeg):', '');
+  const reden = await vraagTekst('Wens afwijzen', 'Optionele toelichting voor de radioloog (mag leeg):',
+    { leegMag: true, jaLabel: 'Afwijzen' });
   if (reden === null) return;
   try {
     await updateDoc(doc(db, 'wensen', id), {
@@ -280,17 +282,17 @@ window.wensAfwijs = async function(id) {
       toelichting: reden.trim() || null,
     });
   } catch (e) {
-    alert('Afwijzen mislukt: ' + e.message);
+    await meld('Afwijzen mislukt', e.message);
   }
 };
 
 window.wensHeropen = async function(id) {
-  if (!confirm('Status terugzetten naar open?')) return;
+  if (!(await bevestig('Weet je het zeker?', 'Status terugzetten naar open?'))) return;
   try {
     await updateDoc(doc(db, 'wensen', id), {
       status: 'open', verwerkt_op: null, verwerkt_door: null, toelichting: null,
     });
   } catch (e) {
-    alert('Mislukt: ' + e.message);
+    await meld('Mislukt', e.message);
   }
 };
