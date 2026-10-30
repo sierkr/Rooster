@@ -237,3 +237,27 @@ test('leesKlembord: Excel-blok met tabs, regeleindes en aanhalingstekens', () =>
   assert.deepEqual(leesKlembord('"E,M"\tB\n'), [['E,M', 'B']]);
   assert.equal(maakKlembord([['B', 'E'], ['', 'M']]), 'B\tE\n\tM');
 });
+
+// ---- Keuzelijst (v3.37.0) --------------------------------------------------------
+
+test('gangbareFuncties: actief, geen varianten, op volgorde (lijst van Overzicht én Indelen)', async () => {
+  const { gangbareFuncties } = await import('../../app/helpers.js');
+  state.functies = [
+    { id: 'E', code: 'E', volgorde: 2 },
+    { id: 'B', code: 'B', volgorde: 1 },
+    { id: '.WB', code: '.WB', volgorde: 0 },
+    { id: '5W', code: '5W', volgorde: 0 },
+    { id: 'YYB1', code: 'YYB1', volgorde: 0 },
+    { id: '-', code: '-', volgorde: 0 },
+    { id: 'LANG', code: 'LANG', volgorde: 0 },
+    { id: 'X', code: 'X', volgorde: 3, actief: false },
+    { id: 'bo', code: 'bo', volgorde: 4 },
+  ];
+  assert.deepEqual(gangbareFuncties().map(f => f.code), ['B', 'E', 'bo']);
+});
+
+test('keuzelijst-standen: vier keuzes, menu is de standaard', async () => {
+  const { INDELEN_STANDEN, INDELEN_STAND_STANDAARD } = await import('../../app/state.js');
+  assert.deepEqual(INDELEN_STANDEN.map(s => s.id), ['menu', 'balk', 'blad', 'uit']);
+  assert.equal(INDELEN_STAND_STANDAARD, 'menu');
+});

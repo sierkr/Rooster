@@ -60,6 +60,19 @@ export function radiologenMap() {
 export function functiesMap() {
   return Object.fromEntries(state.functies.map(f => [f.id, f]));
 }
+// De codes die een keuzelijst aanbiedt: actief, geen varianten (".", "YY",
+// een cijfer vooraan), niet "-", hooguit 3 tekens, op volgorde. Tot v3.36
+// stond dit in de keuzelijst van Overzicht; sinds v3.37.0 gebruikt Indelen
+// dezelfde lijst, dus staat hij hier één keer.
+export function gangbareFuncties() {
+  const map = functiesMap();
+  return (state.functies || [])
+    .filter(f => f.actief !== false)
+    .filter(f => { const c = f.code || f.id || ''; return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3; })
+    .sort((a, b) => (a.volgorde || 99) - (b.volgorde || 99))
+    .map(f => map[f.code || f.id])
+    .filter(Boolean);
+}
 export function kolomNaarRadId() {
   const map = {};
   (state.radiologen || []).forEach(r => {

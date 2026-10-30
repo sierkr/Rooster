@@ -1,3 +1,41 @@
+## v3.37.0 — Indelen: keuzelijst naast typen, ook kopiëren en plakken op de telefoon
+
+Wens Sierk (30 oktober 2026): naast vrij typen een keuzelijst bij het kiezen
+van een cel, en kopiëren/plakken op een iPhone. Na een klikbaar voorbeeld
+van drie vormen: **alle drie, standaard het menu bij de cel, te kiezen in
+Beheer › Control › Overige instellingen, inclusief "uit"** — apart voor de pc
+en voor telefoon/iPad.
+
+- Instelling: `instellingen/ui` `indelen_keuze_pc` en `indelen_keuze_tik`,
+  waarden `menu` | `balk` | `blad` | `uit`; niets ingesteld = `menu`
+  (`INDELEN_STANDEN` in state.js). Geldt voor alle beheerders.
+- **Menu bij de cel** (standaard): opent na een klik of tik, naast de
+  gekozen cel(len) zodat de kolom eronder vrij blijft; past dat niet
+  (telefoon), dan eronder of erboven. Codes, Typen, Leeg, Kopieer, Plak,
+  "Blok kiezen vanaf hier". Een code vult de cel en het menu gaat mee naar de
+  cel eronder; op een blok vult het het hele blok. Een toets of typen sluit
+  het menu. Met de vinger: eerste tik = menu, tweede tik = typen.
+- **Balk boven het raster**: dezelfde knoppen vast; Blok als aan/uit-knop.
+- **Onderblad**: het venster van Overzicht (1 code = hele dag, 2 = ochtend/
+  middag), met Leeg/Kopieer/Plak en "Opslaan, volgende ↓". Alles gaat naar
+  het concept, niet rechtstreeks het rooster in.
+- **Uit**: alleen typen, zoals 3.36.1.
+- Codes: `gangbareFuncties()` in helpers.js — dezelfde lijst als de
+  keuzelijst in Overzicht, die er nu ook gebruik van maakt (gemeten: zelfde
+  codes in dezelfde volgorde als 3.35.2). In P, Q, R geen codeknoppen.
+- Kopieer/Plak: het klembord van het toestel (`navigator.clipboard`),
+  meteen binnen de tik (iOS eist dat). Lukt lezen niet, dan het laatst in de
+  app gekopieerde, met een melding. Plakken deelt de code met Ctrl+V.
+- Korte meldingen onderin beeld (gekopieerd, blok kiezen, …).
+
+Gemeten (browserproef, Chromium, nagebootste Firebase): 111 controles groen,
+waarvan 34 nieuw voor de keuzelijst (menu, instelling bewaren, balk,
+onderblad, uit, telefoon met eigen instelling). De oude typ-controles draaien
+met de stand "uit". Unit-tests 109/109. Foutcontrole schoon.
+Niet gemeten: een echte iPhone (het "Plak"-knopje van Apple en het
+schermtoetsenbord), Safari en Firefox; Firefox kan het klembord niet lezen
+(dan plakt de app het eigen gekopieerde; Ctrl+V werkt wel).
+
 ## v3.36.1 — Indelen ook op telefoon en iPad
 
 In 3.36.0 werkte Indelen alleen op een scherm van minstens 900 pixels; smaller

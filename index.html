@@ -143,6 +143,31 @@
   .ind-cel .wens-marker { top: 2px; right: 2px; width: 6px; height: 6px; }
   .ind-vak { position: absolute; left: 2px; bottom: 0; font-size: 8px; line-height: 1; color: #1e7a52; font-weight: 700; font-style: normal; }
   .ind-invoer { position: absolute; inset: 0; width: 100%; height: 100%; border: 2px solid #1a73e8; padding: 0 2px; font-family: inherit; font-size: 16px; font-weight: 600; text-align: center; background: #fff; color: #1a1a18; outline: none; z-index: 2; box-sizing: border-box; border-radius: 0; -webkit-appearance: none; appearance: none; }
+  /* v3.37.0: keuzelijst — menu bij de cel, balk, melding */
+  .ind-menu { position: absolute; z-index: 6; width: 236px; box-sizing: border-box; padding: 10px; background: #fff; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,0.22); }
+  .ind-menu-kop { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+  .ind-menu-x { width: 32px; height: 32px; flex-shrink: 0; border: 0; border-radius: 16px; background: rgba(0,0,0,0.06); color: inherit; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .ind-menu-codes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .ind-menu-noot { font-size: 12px; padding: 2px 0; }
+  .ind-menu-acties { display: flex; gap: 6px; margin-top: 8px; }
+  .ind-menu-acties .btn { flex: 1; padding: 10px 2px; font-size: 12px; }
+  .ind-menu-blok { width: 100%; margin-top: 6px; padding: 10px; font-size: 12px; }
+  .ind-code { height: 40px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.12); background: #f4f4f2; color: #1a1a18; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 0; }
+  .ind-code:disabled { opacity: 0.35; cursor: default; }
+  .ind-codebalk { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 8px; -webkit-overflow-scrolling: touch; }
+  .ind-codebalk .btn { flex-shrink: 0; height: 44px; padding: 0 12px; font-size: 13px; }
+  .ind-codebalk .ind-code { flex-shrink: 0; width: 44px; height: 44px; }
+  .ind-codebalk .btn.ind-aan { outline: 2px solid #1a73e8; outline-offset: -2px; background: #e7f0fd; color: #0c3f70; }
+  .ind-scheid { flex-shrink: 0; width: 1px; background: rgba(0,0,0,0.12); margin: 4px 2px; }
+  .ind-toast { position: fixed; left: 50%; bottom: 24px; z-index: 300; max-width: 90vw; box-sizing: border-box; padding: 10px 14px; border-radius: 8px; background: #2c2c2a; color: #fff; font-size: 13px; text-align: center; opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(16px); transition: opacity 0.2s, transform 0.2s; }
+  .ind-toast.zichtbaar { opacity: 1; transform: translateX(-50%) translateY(0); }
+  button.picker-option { font-family: inherit; width: 100%; }
+  @media (prefers-color-scheme: dark) {
+    .ind-menu { background: #2a2a2a; color: #e5e5e5; }
+    .ind-menu-x { background: rgba(255,255,255,0.08); }
+    .ind-code { background: #333; color: #e5e5e5; }
+    .ind-codebalk .btn.ind-aan { background: #24456b; color: #e8f1ff; }
+  }
   /* v3.36.1: uitleg voor muis of vinger; met de vinger ook een gewone wijzer, anders geeft iOS geen tik door */
   .ind-uitleg-tik { display: none; }
   @media (hover: none) and (pointer: coarse) {

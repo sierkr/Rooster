@@ -80,6 +80,18 @@ export const HOOFD_FUNCTIES = [
   { letter: 'X', label: 'Werkdag',          varianten: [] },
 ];
 
+// v3.37.0: hoe je in Indelen een code kiest. Apart in te stellen voor de pc
+// en voor telefoon/iPad (Beheer › Control › Overige instellingen), bewaard in
+// instellingen/ui als indelen_keuze_pc en indelen_keuze_tik. Niets ingesteld
+// = 'menu' (besluit Sierk, 30 okt 2026).
+export const INDELEN_STANDEN = [
+  { id: 'menu', label: 'Menu bij de cel' },
+  { id: 'balk', label: 'Balk boven het raster' },
+  { id: 'blad', label: 'Onderblad (zoals Overzicht)' },
+  { id: 'uit',  label: 'Uit (alleen typen)' },
+];
+export const INDELEN_STAND_STANDAARD = 'menu';
+
 export const AFWEZIG_CODES = ['V', 'Z', 'K', 'Q'];
 export const WERK_CODES    = ['B', 'E', 'M', 'D', 'O', 'C', 'S', 'A', 'X'];
 

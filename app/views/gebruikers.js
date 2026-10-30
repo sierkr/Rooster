@@ -2,7 +2,7 @@
 import { collection, doc, getDocs, query, where, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { setDoc, updateDoc, writeBatch, deleteDoc } from '../schrijven.js';
 import { db, fnGebruikerAanmaken, fnGebruikerVerwijderen, fnGebruikerResetWachtwoord, IS_TEST_DB } from '../firebase-init.js';
-import { state, SLOTS, VASTE_RAD_IDS, VASTE_BEHEERDER_EMAIL } from '../state.js';
+import { state, SLOTS, VASTE_RAD_IDS, VASTE_BEHEERDER_EMAIL, INDELEN_STANDEN, INDELEN_STAND_STANDAARD } from '../state.js';
 
 // v3.30.0 (M5): het beschermde hoofdbeheerder-adres is nu configureerbaar via
 // instellingen/algemeen.vaste_beheerder_email (Firestore-console); de
@@ -540,6 +540,20 @@ async function _tekenGebView(container) {
               <div class="muted" style="font-size: 12px;">Compact weekraster per radioloog voor het hele jaar</div>
             </div>
             <span class="toggle-switch ${window.TOON_JAAROVERZICHT ? 'aan' : ''}" onclick="window.toggleJaaroverzicht()"></span>
+          </div>
+          <div style="border-top: 1px solid rgba(0,0,0,0.06); margin-top: 12px; padding-top: 12px;">
+            <div style="font-size: 13px; font-weight: 500;">Indelen – keuzelijst</div>
+            <div class="muted" style="font-size: 12px; margin-bottom: 8px;">Hoe je in de tab Indelen een code kiest. Typen werkt altijd. Geldt voor alle beheerders.</div>
+            ${[['pc', 'Op de pc'], ['tik', 'Op telefoon en iPad']].map(([soort, label]) => {
+              const huidig = state.instellingen?.['indelen_keuze_' + soort] || INDELEN_STAND_STANDAARD;
+              return `
+              <label style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px;">
+                <span>${label}</span>
+                <select class="select" style="width: auto; max-width: 60%;" onchange="window.zetIndelenKeuze('${soort}', this.value)">
+                  ${INDELEN_STANDEN.map(st => `<option value="${st.id}" ${st.id === huidig ? 'selected' : ''}>${esc(st.label)}${st.id === INDELEN_STAND_STANDAARD ? ' (standaard)' : ''}</option>`).join('')}
+                </select>
+              </label>`;
+            }).join('')}
           </div>
         </div>
       </div>
@@ -2012,6 +2026,17 @@ async function migreerBezetting(vanSlot, naarSlot, datum, inDienst) {
 window.__herlaadBeheer = renderGebView;
 
 // ==== App-instellingen handlers =============================================
+
+// v3.37.0: keuzelijst in Indelen, apart voor pc ('pc') en telefoon/iPad ('tik').
+window.zetIndelenKeuze = async function(soort, waarde) {
+  if (!['pc', 'tik'].includes(soort) || !INDELEN_STANDEN.some(st => st.id === waarde)) return;
+  try {
+    await setDoc(doc(db, 'instellingen', 'ui'), { ['indelen_keuze_' + soort]: waarde }, { merge: true });
+  } catch (e) {
+    await dlgMeld('Opslaan mislukt', e.message);
+    renderGebView(); // keuzevak terug naar wat er echt staat
+  }
+};
 
 window.toggleJaaroverzicht = async function() {
   const nieuw = !window.TOON_JAAROVERZICHT;

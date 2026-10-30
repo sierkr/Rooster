@@ -17,21 +17,29 @@
 // (v3.36.1, besluit Sierk 30 okt): met muis en toetsenbord zoals Excel, met de
 // vinger door te tikken — één tik kiest een cel, nog een tik opent het
 // toetsenbord in de cel, Enter slaat op en gaat door naar de cel eronder.
+//
+// v3.37.0: naast typen een KEUZELIJST, in één van drie standen — menu bij de
+// cel, balk boven het raster, onderblad (zoals Overzicht) — of uit. Apart in te
+// stellen voor pc en telefoon/iPad (Beheer › Control › Overige instellingen);
+// standaard het menu. Kopieer en Plak gebruiken het klembord van het toestel,
+// zodat het ook op een iPhone werkt; lukt dat niet, dan onthoudt de app het
+// gekopieerde zelf. "Blok vanaf hier" vervangt Shift voor wie geen toetsenbord heeft.
 import { doc, onSnapshot, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { setDoc, deleteDoc, magSchrijven, controleerVerbinding } from '../schrijven.js';
 import { db } from '../firebase-init.js';
-import { state, DAGEN_NL } from '../state.js';
+import { state, DAGEN_NL, INDELEN_STANDEN, INDELEN_STAND_STANDAARD } from '../state.js';
 import {
   esc, fclass, vandaagIso, plusDagen, mandagVanIso, huidigKalenderJaar,
-  bezettingOpDatum, isFeestdag, functieNaam,
+  bezettingOpDatum, isFeestdag, functieNaam, gangbareFuncties,
 } from '../helpers.js';
+import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
 import { meld, bevestig } from '../dialoog.js';
 import { jaarKolommen, functieEisen, hulpKolommen } from '../kolommen.js';
 import {
   EXTRA_KOLOMMEN, isExtraKolom, celSleutel, liveTekst, zichtbareTekst,
   conceptNaInvoer, indelingMetConcept, metIndelingMap, bouwPublicatie,
-  leesKlembord, maakKlembord, splitsSleutel,
+  leesKlembord, maakKlembord, splitsSleutel, tekstNaarCodes,
 } from '../concept.js';
 import {
   schrijfDagenWeg, valideerDagenTegenRegels, NABIJ_DAGEN,
@@ -77,6 +85,12 @@ const ui = {
   eersteKeer: true,
   gekozen: false,        // heeft de gebruiker zelf al een cel gekozen?
   aanwijzer: null,       // 'mouse' | 'touch' | 'pen' — hoe de laatste tik/klik kwam
+  // v3.37.0 keuzelijst
+  menuOpen: false,       // stand 'menu': het menu bij de cel staat open
+  blokVan: null,         // "Blok vanaf hier": de eerste cel van het blok
+  klembord: '',          // het laatst gekopieerde, voor als het toestel-klembord niet lukt
+  bladKeuze: [],         // stand 'blad': de gekozen codes (max. 2)
+  balkZichtbaar: false,
 };
 
 function isBeheerder() { return state.profiel?.rol === 'beheerder'; }
@@ -97,6 +111,29 @@ function vangFocus() {
 function isAanraken() {
   if (ui.aanwijzer) return ui.aanwijzer !== 'mouse';
   return !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+}
+
+// De keuzelijst-stand voor dit toestel: 'menu' | 'balk' | 'blad' | 'uit'.
+function stand() {
+  const v = state.instellingen?.[isAanraken() ? 'indelen_keuze_tik' : 'indelen_keuze_pc'];
+  return INDELEN_STANDEN.some(st => st.id === v) ? v : INDELEN_STAND_STANDAARD;
+}
+
+// Korte melding onderin beeld (kopiëren, plakken, blok kiezen).
+let _meldTimer = null;
+function toonMelding(tekst) {
+  let t = el('ind-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'ind-toast';
+    t.className = 'ind-toast';
+    t.setAttribute('role', 'status');
+    document.body.appendChild(t);
+  }
+  t.textContent = tekst;
+  t.classList.add('zichtbaar');
+  clearTimeout(_meldTimer);
+  _meldTimer = setTimeout(() => t.classList.remove('zichtbaar'), 3500);
 }
 
 // ---- Concept: laden, bijwerken, opslaan ---------------------------------------
@@ -281,6 +318,7 @@ export function renderIndView() {
     ui.eersteKeer = true;
   }
   if (ui.bewerken) { ui.uitgesteld = true; return; }
+  tekenBalk();
   tekenTabel();
   tekenStatus();
   tekenTerugdraaiBlok();
@@ -315,13 +353,14 @@ function kaderHtml(jaar) {
       <span class="ind-uitleg-pc">Klik een cel en typ een code (<b>E,M</b> = ochtend/middag). <b>Enter</b> omlaag, <b>Tab</b> naar rechts,
       pijltjes om te bewegen, <b>Shift</b> om een blok te kiezen. <b>Delete</b> maakt leeg,
       <b>Ctrl+C / Ctrl+V</b> kopieert en plakt (ook uit Excel), <b>Ctrl+Z</b> maakt ongedaan.</span>
-      <span class="ind-uitleg-tik">Tik een cel om hem te kiezen, tik nog eens om te typen (<b>E,M</b> = ochtend/middag).
-      <b>Enter</b> slaat op en gaat naar de cel eronder; ergens anders tikken slaat ook op.</span>
+      <span class="ind-uitleg-tik">Tik een cel om hem te kiezen (de keuzelijst opent als die aan staat); tik nog eens om zelf te typen
+      (<b>E,M</b> = ochtend/middag). <b>Enter</b> slaat op en gaat naar de cel eronder; ergens anders tikken slaat ook op.</span>
       <span class="ind-leg"><span class="ind-leg-concept"></span> concept</span>
       <span class="ind-leg"><span class="ind-leg-fout"></span> regelconflict</span>
       <span class="ind-leg"><span class="wens-marker wens-marker-open" style="position:static;display:inline-block;"></span> wens</span>
       <span class="ind-leg"><span class="ind-vak" style="position:static;">V</span> vakantieplanning</span>
     </div>
+    <div id="ind-codebalk"></div>
     <div id="ind-scroll" class="ind-scroll"></div>
     <textarea id="ind-vang" class="ind-vang" aria-label="Indeelraster: typ een code" autocomplete="off" spellcheck="false"></textarea>
     <div id="ind-terug"></div>
@@ -526,6 +565,7 @@ function tekenTabel() {
   _vorigeSelectie = [...scroll.querySelectorAll('td.ind-sel, td.ind-actief')];
 
   pasHoogteAan();
+  tekenMenu();
   if (ui.eersteKeer) {
     ui.eersteKeer = false;
     // Begin bij vandaag als dat in dit jaar valt, anders bovenaan.
@@ -620,6 +660,7 @@ function zet(r, c, uitbreiden = false) {
   ui.gekozen = true;
   tekenSelectie();
   toonActief();
+  if (ui.balkZichtbaar) tekenBalk();
 }
 
 function beweeg(dr, dc, uitbreiden = false) {
@@ -631,6 +672,7 @@ function beweeg(dr, dc, uitbreiden = false) {
 // opties.aanraken: typen met het schermtoetsenbord (telefoon/iPad).
 // opties.alles: de bestaande tekst geselecteerd, zodat typen hem vervangt.
 function startBewerken(modus, beginTekst, opties = {}) {
+  if (ui.menuOpen) { ui.menuOpen = false; tekenMenu(); }
   const { r, c } = ui.actief;
   const td = ui.td[r]?.[c];
   if (!td) return;
@@ -733,6 +775,12 @@ function _dialoogOpen() {
 function rasterToets(ev) {
   if (ui.bewerken || _dialoogOpen()) return;
   const k = ev.key;
+  if (ui.menuOpen) {
+    ui.menuOpen = false;
+    tekenMenu();
+    if (k === 'Escape') return;
+  }
+  if (k === 'Escape' && ui.blokVan) { ui.blokVan = null; tekenBalk(); return; }
   const mod = ev.ctrlKey || ev.metaKey;
   if (mod && (k === 'z' || k === 'Z')) { ev.preventDefault(); maakOngedaan(); return; }
   if (mod && /^[cxCX]$/.test(k)) {
@@ -794,8 +842,14 @@ function koppelRaster() {
     if (!p) return;
     ev.preventDefault();
     if (ui.bewerken) stopBewerken(true);
+    if (ui.menuOpen) { ui.menuOpen = false; tekenMenu(); }
     vangFocus();
-    zet(p.r, p.c, ev.shiftKey);
+    if (ui.blokVan && !ev.shiftKey) {
+      ui.anker = ui.blokVan; ui.blokVan = null;
+      zet(p.r, p.c, true);
+    } else {
+      zet(p.r, p.c, ev.shiftKey);
+    }
     ui.slepen = true;
   });
   scroll.addEventListener('mouseover', (ev) => {
@@ -808,6 +862,7 @@ function koppelRaster() {
   });
   scroll.addEventListener('dblclick', (ev) => {
     if (ui.aanwijzer !== 'mouse') return;
+    if (_dialoogOpen()) closeSheet();
     const p = celVan(ev.target);
     if (!p) return;
     zet(p.r, p.c);
@@ -824,13 +879,36 @@ function koppelRaster() {
       if (ui.bewerken.r === p.r && ui.bewerken.c === p.c) return;
       stopBewerken(true);
     }
+    if (ui.blokVan) {
+      ui.anker = ui.blokVan; ui.blokVan = null;
+      zet(p.r, p.c, true);
+      naKiezen();
+      return;
+    }
     const s = _selectie();
     const alGekozen = p.r === ui.actief.r && p.c === ui.actief.c && s.r1 === s.r2 && s.c1 === s.c2 && ui.gekozen;
-    if (alGekozen) startBewerken('wijzig', undefined, { aanraken: true, alles: true });
-    else zet(p.r, p.c);
+    const st = stand();
+    if (alGekozen && st === 'menu' && !ui.menuOpen) { openMenu(); return; }
+    if (alGekozen) { startBewerken('wijzig', undefined, { aanraken: true, alles: true }); return; }
+    zet(p.r, p.c);
+    naKiezen();
+  });
+
+  // De balk: knoppen houden de focus niet vast (dan blijft typen werken).
+  const balk = el('ind-codebalk');
+  balk.addEventListener('mousedown', (ev) => ev.preventDefault());
+  balk.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b || b.disabled) return;
+    doeActie(b.dataset.actie, b.dataset.code);
   });
 }
-document.addEventListener('mouseup', () => { ui.slepen = false; });
+// Klaar met klikken of slepen: de keuzelijst openen voor wat er gekozen is.
+document.addEventListener('mouseup', () => {
+  if (!ui.slepen) return;
+  ui.slepen = false;
+  if (state.huidigeView === 'ind') naKiezen();
+});
 
 function _selectieTekst() {
   const s = _selectie();
@@ -864,8 +942,14 @@ function bijKnippen(ev) {
 function bijPlakken(ev) {
   if (ui.bewerken) return;
   ev.preventDefault();
-  const blok = leesKlembord(ev.clipboardData.getData('text/plain'));
   el('ind-vang').value = '';
+  plakTekst(ev.clipboardData.getData('text/plain'));
+}
+
+// Zet een blok tekst (tabs tussen cellen, regeleinde per rij) neer vanaf de
+// gekozen cel. Eén waarde op een gekozen blok vult het hele blok (zoals Excel).
+function plakTekst(tekst) {
+  const blok = leesKlembord(tekst);
   if (!blok.length) return;
   const s = _selectie();
   const lijst = [];
@@ -895,6 +979,328 @@ function bijPlakken(ev) {
       `(voorbij de laatste kolom of de laatste dag van ${ui.jaar}) en ${buiten === 1 ? 'is' : 'zijn'} niet geplakt.`);
   }
 }
+
+// ---- Keuzelijst (v3.37.0) -----------------------------------------------------------
+// Drie standen naast typen: 'menu' (bij de cel), 'balk' (boven het raster) en
+// 'blad' (onderblad zoals Overzicht); 'uit' = alleen typen. De handelingen
+// (code invullen, leeg, kopieer, plak, blok vanaf hier) zijn voor alle standen
+// dezelfde functies; alleen waar de knoppen staan verschilt.
+
+function _isEnkel() { const s = _selectie(); return s.r1 === s.r2 && s.c1 === s.c2; }
+
+// Alleen de kolommen P, Q, R gekozen? Daar staan geen functiecodes in.
+function _alleenExtra() {
+  const s = _selectie();
+  for (let c = s.c1; c <= s.c2; c++) if (!ui.kolommen[c]?.extra) return false;
+  return true;
+}
+
+function _dagLabel(datum) {
+  const d = new Date(datum + 'T12:00:00');
+  return `${DAGEN_NL[d.getDay() === 0 ? 6 : d.getDay() - 1]} ${datum.slice(8, 10)}-${datum.slice(5, 7)}`;
+}
+
+function codeKnoppenHtml(uit) {
+  return gangbareFuncties().map(f => {
+    const code = f.code || f.id;
+    return `<button type="button" class="ind-code f-${esc(code)}" data-code="${esc(code)}" title="${esc(f.naam || code)}"${uit ? ' disabled' : ''}>${esc(code)}</button>`;
+  }).join('');
+}
+
+// Na het kiezen van een cel (klik of tik): de keuzelijst van de stand openen.
+function naKiezen() {
+  const st = stand();
+  if (st === 'menu') openMenu();
+  else if (st === 'blad') { if (_isEnkel()) openBlad(); }
+  else if (st === 'balk') tekenBalk();
+}
+
+function doeActie(actie, code) {
+  if (code !== undefined && code !== null && code !== '') { vulMetCode(code); return; }
+  if (actie === 'sluit') { ui.menuOpen = false; tekenMenu(); vangFocus(); return; }
+  if (actie === 'typen') {
+    ui.menuOpen = false; tekenMenu();
+    startBewerken('wijzig', undefined, { aanraken: isAanraken(), alles: isAanraken() });
+    return;
+  }
+  if (actie === 'leeg') { leegSelectie(); vangFocus(); return; }
+  if (actie === 'kopieer') { kopieerSelectie(); ui.menuOpen = false; tekenMenu(); vangFocus(); return; }
+  if (actie === 'plak') { ui.menuOpen = false; tekenMenu(); plakSelectie(); vangFocus(); return; }
+  if (actie === 'blok') {
+    if (ui.blokVan) { ui.blokVan = null; tekenBalk(); return; }
+    blokVanafHier();
+  }
+}
+
+function vulMetCode(code) {
+  if (ui.bewerken) stopBewerken(true);
+  const s = _selectie();
+  const enkel = _isEnkel();
+  const lijst = [];
+  for (let r = s.r1; r <= s.r2; r++) {
+    for (let c = s.c1; c <= s.c2; c++) {
+      if (!ui.kolommen[c]?.extra) lijst.push({ r, c, tekst: code });
+    }
+  }
+  if (!lijst.length) return;
+  pasToe(lijst);
+  if (enkel) {
+    beweeg(1, 0);        // door naar de cel eronder: zo tik je een kolom vol
+    tekenMenu();         // het menu verhuist mee
+  } else {
+    ui.menuOpen = false;
+    tekenMenu();
+    toonMelding(`${lijst.length} cellen: ${code}`);
+  }
+  vangFocus();
+}
+
+function leegSelectie() {
+  const s = _selectie();
+  const lijst = [];
+  for (let r = s.r1; r <= s.r2; r++) for (let c = s.c1; c <= s.c2; c++) lijst.push({ r, c, tekst: '' });
+  pasToe(lijst);
+  if (!_isEnkel()) { ui.menuOpen = false; tekenMenu(); }
+}
+
+function kopieerSelectie() {
+  const tekst = maakKlembord(_selectieTekst());
+  ui.klembord = tekst;
+  const s = _selectie();
+  const n = (s.r2 - s.r1 + 1) * (s.c2 - s.c1 + 1);
+  // Meteen (nog binnen de tik) naar het klembord van het toestel: iOS staat
+  // het alleen dan toe. Lukt het niet, dan heeft de app het zelf onthouden.
+  try { if (navigator.clipboard?.writeText) navigator.clipboard.writeText(tekst).catch(() => {}); } catch (e) { /* zie hierboven */ }
+  toonMelding(`${n} cel${n === 1 ? '' : 'len'} gekopieerd`);
+}
+
+async function plakSelectie() {
+  if (!magSchrijven()) { try { controleerVerbinding(); } catch (e) { /* venster staat al open */ } return; }
+  let tekst = '';
+  let toestelLuktNiet = false;
+  try {
+    if (navigator.clipboard?.readText) tekst = await navigator.clipboard.readText();
+    else toestelLuktNiet = true;
+  } catch (e) { toestelLuktNiet = true; }
+  if (!tekst && toestelLuktNiet && ui.klembord) {
+    tekst = ui.klembord;
+    toonMelding('Het klembord van het toestel was niet te lezen; het laatst in de app gekopieerde is geplakt.');
+  }
+  if (!tekst) { toonMelding('Er is niets om te plakken.'); return; }
+  plakTekst(tekst);
+}
+
+function blokVanafHier() {
+  ui.blokVan = { ...ui.actief };
+  ui.menuOpen = false;
+  tekenMenu();
+  tekenBalk();
+  toonMelding(isAanraken() ? 'Tik nu de laatste cel van het blok.' : 'Klik nu de laatste cel van het blok.');
+}
+
+// ---- Stand 'menu': het menu bij de cel ----
+
+function openMenu() {
+  if (stand() !== 'menu' || ui.bewerken) return;
+  ui.menuOpen = true;
+  tekenMenu();
+}
+
+function tekenMenu() {
+  const scroll = el('ind-scroll');
+  let m = el('ind-menu');
+  if (!scroll || !ui.menuOpen || stand() !== 'menu' || ui.bewerken || !ui.td.length) {
+    if (m) m.remove();
+    return;
+  }
+  if (!m || m.parentNode !== scroll) {
+    if (m) m.remove();
+    m = document.createElement('div');
+    m.id = 'ind-menu';
+    m.className = 'ind-menu';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-label', 'Keuzelijst');
+    m.addEventListener('mousedown', (ev) => ev.preventDefault());
+    m.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button');
+      if (!b || b.disabled) return;
+      doeActie(b.dataset.actie, b.dataset.code);
+    });
+    scroll.appendChild(m);
+  }
+  const s = _selectie();
+  const enkel = _isEnkel();
+  const kol = ui.kolommen[ui.actief.c];
+  const kop = enkel
+    ? `${esc(kol.header)} · ${_dagLabel(ui.datums[ui.actief.r])}`
+    : `Blok: ${s.r2 - s.r1 + 1} dag${s.r2 === s.r1 ? '' : 'en'} × ${s.c2 - s.c1 + 1} kolom${s.c2 === s.c1 ? '' : 'men'}`;
+  const codes = _alleenExtra()
+    ? `<div class="muted ind-menu-noot">In deze kolom typ je zelf.</div>`
+    : `<div class="ind-menu-codes">${codeKnoppenHtml(false)}</div>`;
+  m.innerHTML = `
+    <div class="ind-menu-kop"><b>${kop}</b><button type="button" class="ind-menu-x" data-actie="sluit" aria-label="Menu sluiten">✕</button></div>
+    ${codes}
+    <div class="ind-menu-acties">
+      ${enkel ? '<button type="button" class="btn" data-actie="typen">Typen</button>' : ''}
+      <button type="button" class="btn" data-actie="leeg">Leeg</button>
+      <button type="button" class="btn" data-actie="kopieer">Kopieer</button>
+      <button type="button" class="btn" data-actie="plak">Plak</button>
+    </div>
+    ${enkel ? '<button type="button" class="btn ind-menu-blok" data-actie="blok">Blok kiezen vanaf hier</button>' : ''}
+  `;
+  plaatsMenu(m);
+}
+
+// Waar het menu komt: liefst NAAST de gekozen cel(len), zodat de kolom eronder
+// zichtbaar en aanklikbaar blijft (daar gaat het menu na een code heen). Past
+// dat niet (telefoon), dan eronder, of erboven als daar in beeld geen plaats
+// is. Het menu staat in het schuifvak, dus het schuift met het raster mee.
+function plaatsMenu(m) {
+  const scroll = el('ind-scroll');
+  const s = _selectie();
+  const boven = ui.td[s.r1]?.[s.c1];
+  const onder = ui.td[s.r2]?.[s.c2];
+  const actief = ui.td[ui.actief.r]?.[ui.actief.c];
+  if (!boven || !onder || !actief) return;
+  const sr = scroll.getBoundingClientRect();
+  const kop = scroll.querySelector('thead');
+  const kopH = kop ? kop.getBoundingClientRect().height : 0;
+  const vast = scroll.querySelector('tbody td.ind-vast2');
+  const vastB = vast ? (vast.getBoundingClientRect().right - sr.left) : 0;
+  const naarInhoud = (r) => ({
+    top: r.top - sr.top + scroll.scrollTop, bottom: r.bottom - sr.top + scroll.scrollTop,
+    left: r.left - sr.left + scroll.scrollLeft, right: r.right - sr.left + scroll.scrollLeft,
+  });
+  const b = naarInhoud(boven.getBoundingClientRect());
+  const o = naarInhoud(onder.getBoundingClientRect());
+  const a = naarInhoud(actief.getBoundingClientRect());
+  const mh = m.offsetHeight, mw = m.offsetWidth;
+  const zichtBoven = scroll.scrollTop + kopH, zichtOnder = scroll.scrollTop + scroll.clientHeight;
+  const zichtLinks = scroll.scrollLeft + vastB, zichtRechts = scroll.scrollLeft + scroll.clientWidth;
+  let top, links;
+  if (o.right + 6 + mw <= zichtRechts) {               // rechts ernaast
+    links = o.right + 6;
+    top = Math.min(Math.max(b.top, zichtBoven + 4), zichtOnder - mh - 4);
+  } else if (b.left - 6 - mw >= zichtLinks) {          // links ernaast
+    links = b.left - 6 - mw;
+    top = Math.min(Math.max(b.top, zichtBoven + 4), zichtOnder - mh - 4);
+  } else {                                             // eronder of erboven
+    links = a.left + (a.right - a.left) / 2 - mw / 2;
+    links = Math.max(scroll.scrollLeft + 4, Math.min(links, zichtRechts - mw - 4));
+    top = o.bottom + 4;
+    if (top + mh > zichtOnder && b.top - 4 - mh >= zichtBoven) top = b.top - 4 - mh;
+  }
+  m.style.top = Math.max(0, top) + 'px';
+  m.style.left = Math.max(0, links) + 'px';
+  if (top + mh > zichtOnder) scroll.scrollTop = top + mh - scroll.clientHeight + 4;
+}
+
+// ---- Stand 'balk': knoppen boven het raster ----
+
+function tekenBalk() {
+  const vak = el('ind-codebalk');
+  if (!vak) return;
+  const zichtbaar = stand() === 'balk';
+  if (!zichtbaar) {
+    if (ui.balkZichtbaar) { vak.innerHTML = ''; ui.balkZichtbaar = false; pasHoogteAan(); }
+    return;
+  }
+  vak.innerHTML = `
+    <div class="ind-codebalk">
+      <button type="button" class="btn ${ui.blokVan ? 'ind-aan' : ''}" data-actie="blok" aria-pressed="${ui.blokVan ? 'true' : 'false'}">Blok</button>
+      <button type="button" class="btn" data-actie="kopieer">Kopieer</button>
+      <button type="button" class="btn" data-actie="plak">Plak</button>
+      <button type="button" class="btn" data-actie="leeg">Leeg</button>
+      <span class="ind-scheid" aria-hidden="true"></span>
+      ${codeKnoppenHtml(ui.kolommen.length ? _alleenExtra() : false)}
+    </div>`;
+  if (!ui.balkZichtbaar) { ui.balkZichtbaar = true; pasHoogteAan(); }
+}
+
+// ---- Stand 'blad': het onderblad zoals in Overzicht ----
+
+function openBlad() {
+  const kol = ui.kolommen[ui.actief.c];
+  if (!kol || kol.extra) return false; // P, Q, R: zelf typen
+  ui.anker = { ...ui.actief };
+  tekenSelectie();
+  ui.bladKeuze = tekstNaarCodes(zichtbareTekst(ui.concept, state.indelingMap, ui.datums[ui.actief.r], kol.id)).slice(0, 2);
+  tekenBlad();
+  openSheet();
+  // Het blad bedekt de onderkant van het scherm: zet de gekozen rij bovenin.
+  const scroll = el('ind-scroll');
+  const td = ui.td[ui.actief.r]?.[ui.actief.c];
+  if (scroll && td) {
+    const sr = scroll.getBoundingClientRect();
+    const kop = scroll.querySelector('thead');
+    const kopH = kop ? kop.getBoundingClientRect().height : 0;
+    scroll.scrollTop = Math.max(0, td.getBoundingClientRect().top - sr.top + scroll.scrollTop - kopH - 8);
+  }
+  return true;
+}
+
+function tekenBlad() {
+  const kol = ui.kolommen[ui.actief.c];
+  const keuze = ui.bladKeuze;
+  document.getElementById('sheetTitle').textContent = `${kol.header} · ${_dagLabel(ui.datums[ui.actief.r])}`;
+  document.getElementById('sheetSub').textContent = 'Tik 1 code (hele dag) of 2 codes (ochtend/middag)';
+  const keuzeTekst = keuze.length === 0
+    ? '<span class="muted" style="font-style: italic;">Geen code gekozen</span>'
+    : keuze.length === 1
+      ? `<b>Hele dag:</b> ${esc(keuze[0])} · ${esc(functieNaam(keuze[0]))}`
+      : `<b>Ochtend:</b> ${esc(keuze[0])} · ${esc(functieNaam(keuze[0]))}<br><b>Middag:</b> ${esc(keuze[1])} · ${esc(functieNaam(keuze[1]))}`;
+  const vol = keuze.length >= 2;
+  const knoppen = gangbareFuncties().map(f => {
+    const code = f.code || f.id;
+    const i = keuze.indexOf(code);
+    const uit = vol && i < 0;
+    return `<button type="button" class="picker-option f-${esc(code)} ${i >= 0 ? 'selected' : ''}" ${uit ? 'disabled style="opacity:0.35;"' : ''}
+      onclick="window.indBlad('code', '${esc(code)}')">${esc(code)}${i === 0 ? ' <sup style="font-size:9px">①</sup>' : i === 1 ? ' <sup style="font-size:9px">②</sup>' : ''}
+      <div class="picker-label">${esc((f.naam || '').split('/')[0])}</div></button>`;
+  }).join('');
+  document.getElementById('sheetBody').innerHTML = `
+    <div style="font-size: 13px; margin-bottom: 10px;">${keuzeTekst}</div>
+    <div class="picker-grid">${knoppen}</div>
+    <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+      <button type="button" class="btn" style="flex: 1;" onclick="window.indBlad('leeg')">Leeg</button>
+      <button type="button" class="btn" style="flex: 1;" onclick="window.indBlad('kopieer')">Kopieer</button>
+      <button type="button" class="btn" style="flex: 1;" onclick="window.indBlad('plak')">Plak</button>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" class="btn" style="flex: 1;" onclick="window.indBlad('sluit')">Sluiten</button>
+      <button type="button" class="btn btn-primary" style="flex: 2;" onclick="window.indBlad('opslaan')">Opslaan, volgende ↓</button>
+    </div>
+  `;
+}
+
+window.indBlad = async function(actie, code) {
+  const kol = ui.kolommen[ui.actief.c];
+  if (!kol) return;
+  if (actie === 'code') {
+    const i = ui.bladKeuze.indexOf(code);
+    if (i >= 0) ui.bladKeuze.splice(i, 1);
+    else if (ui.bladKeuze.length < 2) ui.bladKeuze.push(code);
+    tekenBlad();
+    return;
+  }
+  if (actie === 'leeg') { ui.bladKeuze = []; tekenBlad(); return; }
+  if (actie === 'kopieer') { kopieerSelectie(); return; }
+  if (actie === 'plak') {
+    await plakSelectie();
+    ui.bladKeuze = tekstNaarCodes(zichtbareTekst(ui.concept, state.indelingMap, ui.datums[ui.actief.r], kol.id)).slice(0, 2);
+    tekenBlad();
+    return;
+  }
+  if (actie === 'sluit') { closeSheet(); vangFocus(); return; }
+  if (actie === 'opslaan') {
+    const { r, c } = ui.actief;
+    if (!magSchrijven()) { try { controleerVerbinding(); } catch (e) { /* venster staat al open */ } return; }
+    pasToe([{ r, c, tekst: ui.bladKeuze.join(',') }]);
+    if (r >= ui.datums.length - 1) { closeSheet(); return; }
+    zet(r + 1, c);
+    openBlad(); // het blad blijft open, nu voor de cel eronder
+  }
+};
 
 // ---- Knoppen ----------------------------------------------------------------------
 

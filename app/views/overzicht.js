@@ -10,7 +10,7 @@ import {
   toewijzingVoor, hoofdLetterCode, magWijzigen, magOpmerkingen, magBeheerLezen,
   magAlleWensenZien, isFeestdag, isHoofd, esc,
   opmerkingStatus, ongelezenOpmerkingenInWeek, opmerkingenInWeek,
-  eerderGelezenTekst, dagOpmerkingTekst,
+  eerderGelezenTekst, dagOpmerkingTekst, gangbareFuncties,
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
@@ -531,12 +531,8 @@ window.openCell = function(datum, radId) {
 
 // Hertekenen van de picker-grid en selectie-indicator op basis van _pickerCodes
 function pickerHertekenen() {
-  const gangbaar = (state.functies || [])
-    .filter(f => f.actief !== false)
-    .filter(f => { const c = f.code || f.id || ''; return !c.startsWith('.') && !c.startsWith('YY') && !/^\d/.test(c) && c !== '-' && c.length <= 3; })
-    .sort((a, b) => (a.volgorde || 99) - (b.volgorde || 99))
-    .map(f => f.code || f.id);
-  const fs = gangbaar.map(c => functiesMap()[c]).filter(Boolean);
+  // v3.37.0: dezelfde lijst als de keuzelijst in Indelen (helpers.js).
+  const fs = gangbareFuncties();
   const codes = _pickerCodes;
   const grid = document.getElementById('pickerGrid');
   const sel  = document.getElementById('pickerSelectie');
