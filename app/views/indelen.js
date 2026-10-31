@@ -49,6 +49,7 @@ import {
   laatsteTerugdraaiPunt, vergeetLaatstePunt,
 } from '../logboek.js';
 import { terugdraaiBlokHtml } from './gebruikers.js';
+import { dubbelBannerHtml } from './samenvoegen.js';
 
 export const CONCEPT_COLLECTIE = 'indeling_concept';
 const OPSLAAN_NA_MS = 400;    // wacht even met opslaan, zodat snel typen één schrijfactie wordt
@@ -322,6 +323,15 @@ export function renderIndView() {
   tekenTabel();
   tekenStatus();
   tekenTerugdraaiBlok();
+  tekenDubbel();
+}
+
+// v3.38.0: staat iemand twee keer in de app? Waarschuwing boven het raster.
+function tekenDubbel() {
+  const vak = el('ind-dubbel');
+  if (!vak) return;
+  const html = dubbelBannerHtml();
+  if (vak.dataset.html !== html) { vak.innerHTML = html; vak.dataset.html = html; }
 }
 
 export function planTekenen() {
@@ -336,6 +346,7 @@ export function planTekenen() {
 
 function kaderHtml(jaar) {
   return `
+    <div id="ind-dubbel"></div>
     <div class="ind-balk">
       <div class="ind-jaar">
         <button class="nav-btn" onclick="window.indJaar(-1)" title="Vorig jaar">‹</button>

@@ -35,6 +35,9 @@ import {
   laadBezettingMutaties, snapshotStoelen, registreerMutatie, renderRecenteMutaties,
   impactVanaf, impactTekst,
 } from '../bezetting-mutaties.js';
+// v3.38.0: één persoon op twee stoelen — waarschuwing, samenvoegen, voorkomen.
+import { dubbelBannerHtml, openSamenvoegenVoor, stoelNaam, datumJ } from './samenvoegen.js';
+import { zelfdePersoonElders } from '../dubbel.js';
 
 // v3.32.7: deze ophaalactie had als enige in de Beheer-tab geen vangnet.
 // Mislukte hij één keer — vlak na een nieuwe versie waarschijnlijk, want dan
@@ -125,6 +128,7 @@ async function _tekenGebView(container) {
   let htmlBezetting = '';
   let htmlOverig = '';
   let htmlExcel  = '';
+  let htmlBackup = '';
 
   // ---- App gebruikers: accounts gesplitst per soort medewerker -------------
   // Categorie bepaalt de onder-tab; alleen radiologen kunnen aan een stoel
@@ -171,6 +175,9 @@ async function _tekenGebView(container) {
       else radRows += r.html;
     });
   }
+
+  // v3.38.0: staat iemand twee keer in de app? Dan bovenaan een waarschuwing.
+  htmlBezetting += dubbelBannerHtml();
 
   // Vaste radiologen — parttime-percentage en vakantierecht
   htmlBezetting += `
@@ -500,7 +507,8 @@ async function _tekenGebView(container) {
           }).join('')
         + '</div></div>';
 
-    htmlOverig += `
+    // v3.38.0: eigen tab (Beheer › Control › Backup) i.p.v. onder Overige instellingen.
+    htmlBackup += `
       <div style="margin-top: 1rem;">
         <div class="summary-label" style="margin-bottom: 6px;">Database-backup</div>
         <div class="card">
@@ -646,10 +654,12 @@ async function _tekenGebView(container) {
       ${canReg ? tab2('ctl','regels','Regels',true) : ''}
       ${canGeb ? tab2('ctl','overig','Overige instellingen',!regelsDefault) : ''}
       ${canGeb ? tab2('ctl','logboek','Logboek',false) : ''}
+      ${canGeb ? tab2('ctl','backup','Backup',false) : ''}
     </div>
     ${canReg ? `<div id="ctlsub-regels" class="ctlsub"><div id="view-reg" class="view"></div></div>` : ''}
     ${canGeb ? `<div id="ctlsub-overig" class="ctlsub" style="${regelsDefault?'display:none;':''}">${htmlOverig}</div>` : ''}
     ${canGeb ? `<div id="ctlsub-logboek" class="ctlsub" style="display:none;"><div id="view-logboek"></div></div>` : ''}
+    ${canGeb ? `<div id="ctlsub-backup" class="ctlsub" style="display:none;">${htmlBackup}</div>` : ''}
   `;
 
   container.innerHTML = `
@@ -704,7 +714,7 @@ window.gebTab1 = function(id) {
 window.gebTab2 = function(scope, id) {
   _behTab2[scope] = id;
   const prefix = scope === 'geb' ? 'gebsub-' : 'ctlsub-';
-  const keys = scope === 'geb' ? ['rad','tech','sec'] : ['regels','overig','logboek'];
+  const keys = scope === 'geb' ? ['rad','tech','sec'] : ['regels','overig','logboek','backup'];
   keys.forEach(k => {
     const el = document.getElementById(prefix + k);
     if (el) el.style.display = (k === id) ? 'block' : 'none';
@@ -1565,6 +1575,26 @@ window.nieuweStoelDoorvoeren = async function() {
     return;
   }
 
+  // v3.38.0: zit iemand met deze code en achternaam op of na de ingangsdatum
+  // al op een andere stoel? Dan is het vrijwel zeker dezelfde persoon, en geeft
+  // een nieuwe stoel hem een tweede plek in de app (zo ontstond GJG dubbel).
+  const elders = zelfdePersoonElders({ code, achternaam, datum });
+  if (elders) {
+    const zelfde = await dlgBevestig('Zelfde persoon?',
+      `${elders.code} · ${elders.achternaam} staat al op ${stoelNaam(elders.stoelId)} (${elders.van ? 'sinds ' + datumJ(elders.van) : 'vanaf het begin'}${elders.tot ? ', t/m ' + datumJ(elders.tot) : ''}).\n\nIs dit dezelfde persoon?`,
+      'Ja, zelfde persoon', 'Nee, iemand anders');
+    if (zelfde) {
+      if (SLOTS.includes(elders.stoelId)) {
+        closeSheet();
+        await dlgMeld('Gebruik → Vast', `Dan maken we geen losse nieuwe stoel, maar zetten we ${elders.code} via → Vast op een nieuwe stoel. Zijn indeling, vakantie-V, diensten, wensen en account gaan dan mee, en hij staat maar één keer in de app.`);
+        window.openMaakVastSheet(elders.stoelId, { naar: '__NIEUW__', datum, inDienst });
+      } else {
+        await dlgMeld('Geen nieuwe stoel nodig', `${elders.code} zit al op ${stoelNaam(elders.stoelId)}. Een tweede stoel zou hem twee keer in de app zetten. Er is niets aangemaakt.`);
+      }
+      return;
+    }
+  }
+
   if (!(await dlgBevestig('Weet je het zeker?', `Nieuwe stoel aanmaken voor ${code} · ${achternaam} per ${formatDatum(datum, 'kort')}?
 
 Er komt een kolom bij in het overzicht.`))) return;
@@ -1626,7 +1656,9 @@ function previewMigratie(vanSlot, naarSlot, datum) {
   return { toew, vakantie, dienstD, wensen, gebruikersGekoppeld };
 }
 
-window.openMaakVastSheet = function(wSlotId) {
+// vooraf (v3.38.0): { naar, datum, inDienst } — vooraf ingevuld, bv. vanuit
+// "Nieuwe stoel" als blijkt dat het om deze waarnemer gaat.
+window.openMaakVastSheet = function(wSlotId, vooraf = null) {
   const stoel = state.radiologen.find(r => r.id === wSlotId);
   if (!stoel || stoel.actief === false || !stoel.code) { dlgMeld('Niet mogelijk', 'Deze W-stoel is leeg.'); return; }
 
@@ -1660,6 +1692,12 @@ window.openMaakVastSheet = function(wSlotId) {
     <button class="btn" style="width: 100%; margin-top: 8px;" onclick="window.closeSheet()">Annuleren</button>
   `;
   openSheet();
+  if (vooraf) {
+    const sel = document.getElementById('mvSlot');
+    if (vooraf.naar && sel && [...sel.options].some(o => o.value === vooraf.naar)) sel.value = vooraf.naar;
+    if (vooraf.datum) document.getElementById('mvDatum').value = vooraf.datum;
+    if (vooraf.inDienst) document.getElementById('mvInDienst').value = vooraf.inDienst;
+  }
 };
 
 window.mvUpdatePreview = async function(wSlotId) {
@@ -1696,6 +1734,26 @@ window.maakVastDoorvoeren = async function(wSlotId) {
   // Max 12 gelijktijdig actieve vaste stoelen (op de ingangsdatum).
   if (nieuweStoel && vasteRadsOpDatum(datum).length >= 12) {
     await dlgMeld('Niet mogelijk', 'Er zijn al 12 actieve stoelen op die datum — dat is het maximum. Hef eerst een stoel op (Vertrek).');
+    return;
+  }
+
+  // v3.38.0: zit deze waarnemer op of na de datum al op een andere stoel
+  // (bv. via "Nieuwe stoel")? Dan niet overnemen — dat kan zijn indeling daar
+  // wissen — maar samenvoegen, stap voor stap.
+  const wPersoon = (() => {
+    const st = state.radiologen.find(r => r.id === wSlotId);
+    const h = Array.isArray(st?.bezetting_historie) ? st.bezetting_historie : [];
+    return h.find(e => !e.tot) || laatsteEntry(h) || st || {};
+  })();
+  const elders = zelfdePersoonElders({
+    pid: wPersoon.persoon_id || null, code: wPersoon.code, achternaam: wPersoon.achternaam, datum, behalve: wSlotId,
+  });
+  if (elders) {
+    const doen = await dlgBevestig('Staat al op een stoel',
+      `${elders.code} · ${elders.achternaam} staat al op ${stoelNaam(elders.stoelId)} (${elders.van ? 'sinds ' + datumJ(elders.van) : 'vanaf het begin'}).\n\n`
+      + `Overnemen zou hem twee keer in de app zetten, of zijn indeling daar wissen. Samenvoegen doet het goed: je ziet stap voor stap wat er gebeurt en er gaat niets verloren.`,
+      'Samenvoegen', 'Annuleren');
+    if (doen) { closeSheet(); await openSamenvoegenVoor(wSlotId, elders.stoelId, datum); }
     return;
   }
 

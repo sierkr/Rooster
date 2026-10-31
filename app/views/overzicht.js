@@ -14,6 +14,7 @@ import {
 } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { valideerWeek } from '../validatie.js';
+import { dubbelBannerHtml } from './samenvoegen.js';
 import {
   slaToewijzingOp, slaCelOpmerkingOp, slaOpmerkingOp, markeerOpmerkingGelezen,
 } from '../save.js';
@@ -143,7 +144,8 @@ export function renderBehView() {
         </div>`;
   }
 
-  let html = `
+  // v3.38.0: staat iemand twee keer in de app? Waarschuwing voor beheerders.
+  let html = dubbelBannerHtml() + `
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button class="nav-btn" onclick="window.navigeerWeek(-1)">‹</button>

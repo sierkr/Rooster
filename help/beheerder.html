@@ -54,7 +54,7 @@
 <div class="wrap">
 
   <h1>Rooster radiologen – Beheerder</h1>
-  <p class="subtitle">Beheerdershandleiding · oktober 2026 · app-versie 3.37.0</p>
+  <p class="subtitle">Beheerdershandleiding · oktober 2026 · app-versie 3.38.0</p>
 
   <div class="toc">
     <h2>Inhoud</h2>
@@ -107,7 +107,7 @@
     <tr><td><strong>Stoel bezetting</strong></td><td>Vaste radiologen (in-dienst datum, parttimefactor, vakantierecht), waarnemers, wisselen en vertrek, vertrokken stoelen</td></tr>
     <tr><td><strong>App gebruikers</strong></td><td>Accounts, gesplitst in Radiologen, Technici en Secretariaat</td></tr>
     <tr><td><strong>Excel</strong></td><td>Export (bovenaan) en import (eronder)</td></tr>
-    <tr><td><strong>Control</strong></td><td>Regels, en onder <em>Overige instellingen</em>: database-backup, app-instellingen en gegevensbeheer</td></tr>
+    <tr><td><strong>Control</strong></td><td>Regels; <em>Overige instellingen</em> (app-instellingen en gegevensbeheer); <em>Logboek</em>; <em>Backup</em> (database-backup maken en terugzetten)</td></tr>
   </table>
 
   <!-- 2 -->
@@ -265,6 +265,18 @@
     <li>In de tab <span class="badge">Radioloog</span> vind je per persoon een (uitklapbare) <em>Loopbaan</em>: de periodes over alle stoelen heen (stoel · code · van–tot). Alleen zichtbaar voor beheerders/lezers.</li>
   </ul>
 
+  <h4>Iemand staat twee keer in de app — "Oplossen"</h4>
+  <p>De app controleert zelf of dezelfde persoon (zelfde persoon-id, of zelfde code én achternaam) op twee stoelen tegelijk staat. Dat gebeurt bijvoorbeeld als een waarnemer via <em>Nieuwe stoel</em> een vaste stoel krijgt terwijl zijn W-stoel open blijft. Ook "losse dagen" worden gevonden: rooster dat op een stoel bleef staan nadat iemand daar stopte, terwijl hij op een andere stoel doorwerkt. Je ziet dan bovenaan Overzicht, Indelen en Stoel bezetting een oranje balk, bijvoorbeeld <em>"GJG staat twee keer in de app"</em>, met de knop <span class="badge">Oplossen</span>.</p>
+  <ol class="steps">
+    <li><strong>Wat de app ziet</strong> — beide stoelen met periode, ingeplande dagen, vakantie-V, diensten, wensen en gekoppeld account. Er is nog niets veranderd.</li>
+    <li><strong>Welke stoel blijft</strong> — het voorstel is de vaste stoel, vanaf de dag dat hij daar begon. Je ziet meteen wat dat betekent (bijvoorbeeld "W1: GJG stopt daar op 31 okt"). Kan een datum niet, dan staat er waarom en welke datum wel kan.</li>
+    <li><strong>Botsingen</strong> — dagen waarop op beide stoelen iets staat. Kies per dag wat blijft (voorstel: de blijvende stoel), of in één keer met <em>Overal …</em>.</li>
+    <li><strong>Samenvatting</strong> — wat er verhuist, wat er met de tellingen en de loopbaan gebeurt. Dan <span class="badge">Samenvoegen</span>.</li>
+  </ol>
+  <p>Samenvoegen sluit de oude stoel af op de dag vóór de datum (of laat hem verdwijnen als hij alleen voor deze persoon was) en verhuist indeling, vakantie-V, opmerkingen, diensten, wensen, conceptcellen van Indelen en het account. De persoon houdt één persoon-id, zodat zijn loopbaan (waarnemer → vast) zichtbaar blijft. Er wordt niets gewist dat je niet zelf in stap 3 hebt gekozen.</p>
+  <div class="tip"><b>Terugdraaien:</b> een samenvoeging staat in <em>Recente stoel-wijzigingen</em> als "Dubbele persoon samengevoegd" en is daar met één knop exact terug te draaien.</div>
+  <p>De app helpt het ook te voorkomen: maak je een <em>Nieuwe stoel</em> voor iemand met een code en achternaam die al op een stoel zit, dan vraagt de app of het dezelfde persoon is en stuurt je naar <span class="badge">→ Vast</span>. Kies je <em>→ Vast</em> voor een waarnemer die al op een andere stoel zit, dan gaat het via Samenvoegen in plaats van overnemen.</p>
+
   <!-- 10 -->
   <h2 id="excel-export">10. Excel-export – workflow en formaat</h2>
   <p>De export maakt een volledig opgemaakte <code>.xlsx</code> aan op basis van de Firestore-indeling.</p>
@@ -360,7 +372,7 @@
 
   <!-- 12 -->
   <h2 id="veiligheid">12. Backup, herstel en veiligheid</h2>
-  <p>Je vindt dit onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Overige instellingen</em>.</p>
+  <p>Je vindt dit onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Backup</em>.</p>
 
   <h3>Database-backup</h3>
   <p>Een backup is een versleutelde momentopname van de hele database, die je als bestand downloadt. Er zijn twee manieren waarop er een ontstaat:</p>

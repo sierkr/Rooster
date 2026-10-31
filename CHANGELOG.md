@@ -1,3 +1,64 @@
+## v3.38.0 — Eén persoon op twee stoelen: zien, samenvoegen, voorkomen; Backup-tab
+
+Aanleiding (31 oktober 2026): GJG stond in live twee keer in de app. Hij zat
+als waarnemer op W1 (sinds 6 jul 2026, nooit afgesloten) en kreeg via "Nieuwe
+stoel" per 1 nov 2026 een tweede, vaste stoel met een eigen persoon-id. W1
+had 5 dagen in november, de nieuwe stoel 43 dagen in 2027. Wens Sierk: de app
+ziet zo'n fout en begeleidt de indeler stap voor stap om er weer één persoon
+van te maken — automatisch, maar zó dat hij weet wat er gebeurt.
+
+- **Controle** (`app/dubbel.js`, alleen rekenwerk): dezelfde persoon (zelfde
+  persoon-id, of zelfde code + achternaam) op twee stoelen tegelijk, en
+  "losse dagen": rooster dat op een stoel achterbleef nadat iemand daar
+  stopte, terwijl hij op een andere stoel doorwerkt. Plaatshouders als
+  "W1 · W1" en lege W-stoelen tellen niet als persoon.
+- **Waarschuwing** voor beheerders bovenaan Overzicht, Indelen en Beheer ›
+  Stoel bezetting: "GJG staat twee keer in de app — Oplossen".
+- **Samenvoegen** in vier stappen (`app/views/samenvoegen.js`): (1) wat de app
+  ziet: beide stoelen, periode, ingeplande dagen, vakantie-V, diensten,
+  wensen, account; (2) welke stoel blijft en vanaf welke datum — voorstel:
+  de vaste stoel, vanaf de dag dat hij daar begon; een onmogelijke datum
+  wordt uitgelegd en blokkeert Volgende; (3) botsingen: dagen waarop beide
+  stoelen iets hebben, per dag kiezen (voorstel: de blijvende stoel; ook
+  "Overal …"); (4) samenvatting, dan één knop.
+- Wat Samenvoegen doet: de oude stoel sluit op de dag vóór de datum (of
+  verdwijnt helemaal als hij alleen voor deze persoon was); indeling,
+  vakantie-V, cel-opmerkingen, diensten, wensen, conceptcellen van Indelen en
+  het account verhuizen; één persoon-id (dat van zijn eerste periode), zodat
+  de loopbaan waarnemer → vast zichtbaar blijft. Kiest de indeler een latere
+  datum dan de start op de blijvende stoel, dan gaan de tussenliggende dagen
+  naar de oude stoel. Nergens wordt iets gewist zonder dat het in stap 3 is
+  gekozen.
+- **Terugdraaien**: het terugdraai-record wordt vastgelegd vóórdat er iets
+  geschreven wordt (`legMutatieVast`); lukt dat niet, dan gebeurt er niets.
+  Terugdraaien via Recente stoel-wijzigingen zet stoelen, rooster, wensen,
+  accounts én conceptcellen exact terug (`conceptInvers`, nieuw in
+  `terugdraaiMutatie`). Type in het logboek: "Dubbele persoon samengevoegd".
+- **Voorkomen**: "Nieuwe stoel" met een code + achternaam die op of na de
+  ingangsdatum al op een andere stoel zit, vraagt "Zelfde persoon?". Ja bij
+  een waarnemer → → Vast staat klaar (nieuwe stoel, zelfde datum); ja bij een
+  vaste stoel → er wordt niets aangemaakt. "→ Vast" voor iemand die al op een
+  andere stoel zit, gaat via Samenvoegen in plaats van overnemen.
+- **Backup** heeft een eigen tab: Beheer › Control › Backup (naast Regels,
+  Overige instellingen en Logboek). De kaart Database-backup is daarheen
+  verhuisd.
+- Niet veranderd: wissels tussen verschillende personen, vertrek zonder
+  opvolger, concept/publiceren. Er is niets aan de live-gegevens veranderd;
+  GJG wordt opgelost met de nieuwe knop.
+
+Gemeten (browserproef, Chromium, nagebootste Firebase met de GJG-situatie
+uit live): 71 controles groen — waarschuwing op drie plekken, Backup-tab,
+samenvoegen zoals in live (W1 stopt 31 okt, 5 dagen naar de vaste stoel,
+één persoon-id), terugdraaien exact, een variant met botsing + dienst +
+vakantie-V + opmerking + wens + account + conceptcel en weer exact terug,
+voorkomen bij → Vast en Nieuwe stoel, telefoonbreedte zonder zijwaarts
+scrollen; losse-dagen-variant apart doorgelopen. Unit-tests 124/124 (15
+nieuw). Bestaande proef Indelen 111/111; export identiek aan 3.35.2; import
+geeft hetzelfde resultaat als sinds 3.36.0 (enige verschil met 3.35.2 blijft
+de bewuste meldingen-fix). Foutcontrole schoon.
+Niet gemeten: de echte database en de firestore.rules-tests (draaien in
+GitHub Actions; er is geen regel veranderd).
+
 ## v3.37.0 — Indelen: keuzelijst naast typen, ook kopiëren en plakken op de telefoon
 
 Wens Sierk (30 oktober 2026): naast vrij typen een keuzelijst bij het kiezen

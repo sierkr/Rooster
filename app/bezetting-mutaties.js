@@ -25,6 +25,7 @@ const TYPE_LABEL = {
   vertrek: 'Vertrek / pensioen',
   maakVast: 'Vast in dienst (→ Vast)',
   nieuweStoel: 'Nieuwe stoel',
+  samenvoegen: 'Dubbele persoon samengevoegd',
 };
 
 // ---- Laden ------------------------------------------------------------------
@@ -70,6 +71,22 @@ export async function registreerMutatie(rec) {
       + '(controleer of firestore.rules de collectie "bezetting_mutaties" toestaat). '
       + 'Deze specifieke ingreep is daardoor niet via "Terugdraaien" ongedaan te maken.');
   }
+}
+
+// v3.38.0: zelfde als registreerMutatie, maar vooraf en streng. Samenvoegen legt
+// het terugdraai-record vast VÓÓR het iets schrijft; lukt dat niet, dan gaat het
+// samenvoegen niet door. Zo is een samenvoeging altijd terug te draaien, ook als
+// hij halverwege zou stranden. Geeft het id van het record.
+export async function legMutatieVast(rec) {
+  const doc0 = {
+    tijdstip: new Date().toISOString(),
+    door: state.profiel?.naam || state.user?.email || 'onbekend',
+    teruggedraaid: false,
+    ...rec,
+  };
+  const ref = await addDoc(collection(db, MUT_COLL), doc0);
+  state.bezettingMutaties = [{ id: ref.id, ...doc0 }, ...(state.bezettingMutaties || [])];
+  return ref.id;
 }
 
 // ---- Impact-preview ---------------------------------------------------------
@@ -129,7 +146,8 @@ window.terugdraaiMutatie = async function(id) {
 
   const seats = m.stoelen || Object.keys(m.voor || {});
   const imp = impactVanaf(m.ingangsdatum || vandaagIso(), seats);
-  const invers = (m.roosterInvers || []).length + (m.wensenInvers || []).length + (m.gebruikersInvers || []).length;
+  const invers = (m.roosterInvers || []).length + (m.wensenInvers || []).length + (m.gebruikersInvers || []).length
+    + (m.conceptInvers || []).length;
   let waarschuw = `Terugdraaien: ${m.beschrijving || TYPE_LABEL[m.type] || 'wijziging'}\n\n`
     + `Dit herstelt de situatie van vóór deze ingreep.\n`
     + `Reeds gepland in het geraakte venster: ${impactTekst(imp)}.\n`
@@ -166,6 +184,10 @@ window.terugdraaiMutatie = async function(id) {
     // 3. Wensen en gebruikerskoppelingen terug.
     for (const w of (m.wensenInvers || [])) await updateDoc(doc(db, 'wensen', w.id), { radioloog_id: w.radioloog_id });
     for (const g of (m.gebruikersInvers || [])) await updateDoc(doc(db, 'gebruikers', g.id), { radioloog_id: g.radioloog_id });
+    // v3.38.0: cellen van het Indelen-concept (samenvoegen schuift die mee).
+    for (const c of (m.conceptInvers || [])) {
+      await setDoc(doc(db, 'indeling_concept', String(c.jaar)), { cellen: { [c.sleutel]: c.cel ? c.cel : deleteField() } }, { merge: true });
+    }
     // 4. Mutatie markeren.
     await updateDoc(doc(db, MUT_COLL, id), { teruggedraaid: true, teruggedraaid_op: new Date().toISOString() });
     m.teruggedraaid = true;
