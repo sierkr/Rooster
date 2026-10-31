@@ -54,7 +54,7 @@
 <div class="wrap">
 
   <h1>Rooster radiologen – Beheerder</h1>
-  <p class="subtitle">Beheerdershandleiding · oktober 2026 · app-versie 3.38.0</p>
+  <p class="subtitle">Beheerdershandleiding · oktober 2026 · app-versie 3.39.0</p>
 
   <div class="toc">
     <h2>Inhoud</h2>
@@ -162,7 +162,7 @@
 
   <h3>Eerst een concept, dan publiceren</h3>
   <p>Wat je typt is eerst <b>concept</b> (paarse streep onder de cel). Het concept wordt meteen bewaard, dus je kunt stoppen en later — ook op een andere pc — verder. Alleen beheerders zien het; voor radiologen verandert er niets.</p>
-  <p>Met <b>Publiceren</b> gaan de veranderde cellen het rooster in. Je ziet eerst hoeveel cellen het zijn, welke binnen 30 dagen vallen (die radiologen krijgen een melding) en welke cellen iemand anders intussen in het rooster heeft gewijzigd. Daarna volgen dezelfde stappen als bij de Excel-import: terugdraai-punt, backup (live), wegschrijven, wensen bijwerken en een regel in het logboek. Alleen de veranderde cellen worden geschreven; de rest van het rooster blijft zoals het is.</p>
+  <p>Met <b>Publiceren</b> gaan de veranderde cellen het rooster in. Je ziet eerst hoeveel cellen het zijn, welke binnen 30 dagen vallen (die radiologen krijgen een melding) en welke cellen iemand anders intussen in het rooster heeft gewijzigd. Daarna volgen dezelfde stappen als bij de Excel-import: terugdraai-punt, online backup, wegschrijven, wensen bijwerken en een regel in het logboek. Alleen de veranderde cellen worden geschreven; de rest van het rooster blijft zoals het is.</p>
   <p>Onder het raster staat de knop om de laatste publicatie (of import) terug te draaien. Er is altijd maar één terugdraai-punt: dat van de laatste import óf publicatie. <b>Concept weggooien</b> maakt het concept van dat jaar leeg, ook wat andere beheerders erin zetten; het rooster zelf verandert dan niet.</p>
   <div class="tip"><b>Let op:</b> het concept zit niet in de database-backup. Publiceer dus wat af is.</div>
 
@@ -368,28 +368,33 @@
     <li>Een annuleren na de preview werkt altijd; na het bevestigen is de actie niet met één knop ongedaan te maken.</li>
   </ul>
 
-  <div class="danger"><b>Let op:</b> Een import is niet met één knop terug te draaien. Wél maakt de app <strong>vóór elke import automatisch een backup</strong> van de hele database; die verschijnt in de backup-geschiedenis met de reden <em>vóór import</em>. Ging er iets mis, dan zet je die backup terug — zie <a href="#veiligheid">Backup, herstel en veiligheid</a>. Maak daarnaast gerust eerst een export als extra houvast.</div>
+  <div class="danger"><b>Let op:</b> De laatste import is met de knop onder de import terug te draaien. Daarnaast maakt de app <strong>vóór elke import automatisch een online backup</strong> van de hele database; die staat in de lijst onder Control › Backup met de reden <em>vóór import</em>. Ging er iets mis, dan zet je die backup terug — zie <a href="#veiligheid">Backup, herstel en veiligheid</a>.</div>
 
   <!-- 12 -->
   <h2 id="veiligheid">12. Backup, herstel en veiligheid</h2>
   <p>Je vindt dit onder <span class="badge">Beheer</span> → <span class="badge">Control</span> → <em>Backup</em>.</p>
 
-  <h3>Database-backup</h3>
-  <p>Een backup is een versleutelde momentopname van de hele database, die je als bestand downloadt. Er zijn twee manieren waarop er een ontstaat:</p>
+  <h3>Database-backup (online)</h3>
+  <p>Een backup is een momentopname van de hele database. Sinds versie 3.39.0 staat hij online, in de opslag van het eigen Firebase-project. <strong>Er is geen wachtwoord meer nodig:</strong> alleen een ingelogde beheerder kan backups maken, zien en terugzetten; Google versleutelt de opslag zelf, net als de database. Een backup ontstaat:</p>
   <ul>
-    <li><strong>Handmatig</strong> via de knop <em>Nu backup maken</em>.</li>
-    <li><strong>Automatisch vóór elke Excel-import.</strong> Dat gebeurt zonder dat je er iets voor hoeft te doen, en is het vangnet als een import verkeerd uitpakt.</li>
+    <li><strong>Elke nacht automatisch</strong> (om ongeveer 03:15), van de live-gegevens.</li>
+    <li><strong>Automatisch vóór elke Excel-import, publicatie en terugzetting.</strong> Lukt dat niet, dan vraagt de app of je toch door wilt; hij gaat nooit stil verder.</li>
+    <li><strong>Handmatig</strong> met de knop <em>Nu backup maken</em>.</li>
   </ul>
-  <p>Bovenaan de kaart staat wanneer de laatste backup is gemaakt. Is er nog nooit een gemaakt, of is de laatste ouder dan 30 dagen, dan verschijnt er een gekleurde waarschuwing. Daaronder staat de backup-geschiedenis met per regel het tijdstip, de reden (<em>handmatig</em> of <em>vóór import</em>) en de bestandsnaam, zodat je het juiste bestand op je computer kunt terugvinden.</p>
-  <div class="warn"><b>Let op:</b> de backup wordt versleuteld met jouw wachtwoord en op jouw computer opgeslagen — niet in de app. Bewaar de bestanden op een plek waar je ze terugvindt, en onthoud met welk wachtwoord ze versleuteld zijn. Zonder dat wachtwoord is een backup niet meer te openen.</div>
+  <p>Backups blijven 30 dagen bewaard; de nieuwste vijf blijven altijd staan. Bovenaan staat wanneer de laatste backup is gemaakt. Is die in live ouder dan twee dagen, dan verschijnt er een waarschuwing: dan loopt de nachtelijke backup niet.</p>
 
   <h3>Backup terugzetten</h3>
   <ol class="steps">
-    <li>Tik op <em>Backup terugzetten</em> en kies het <code>.json</code>-bestand.</li>
-    <li>Voer het wachtwoord in waarmee de backup versleuteld is.</li>
+    <li>Tik in de lijst bij de gewenste backup op <em>Terugzetten</em>.</li>
+    <li>De app maakt eerst automatisch een backup van nu (reden <em>vóór terugzetten</em>), zodat je het terugzetten zelf ook weer ongedaan kunt maken.</li>
     <li>Kies of je de database exact gelijk wilt maken aan de backup. Doe je dat, dan worden documenten die na de backup zijn ontstaan verwijderd. Je eigen profiel en de logboeken blijven altijd bewaard.</li>
   </ol>
+  <p>In de <strong>testomgeving</strong> zie je twee lijsten: de backups van test, en die van live. Een live-backup kun je in test zetten om met echte gegevens te oefenen; live verandert daardoor niet. Andersom kan nooit: een test-backup komt niet in live.</p>
   <p>Inloggegevens zelf zitten niet in de backup: accounts blijven bestaan via Firebase Authentication en raken door een herstel nooit kwijt.</p>
+
+  <h3>Kopie op je eigen computer</h3>
+  <p>Wil je ook een kopie buiten Google, gebruik dan <em>Downloaden met wachtwoord</em> (alleen in live). Dat bestand wordt versleuteld met een wachtwoord dat je zelf kiest. Terugzetten gaat met <em>Bestand terugzetten</em> en dat wachtwoord.</p>
+  <div class="warn"><b>Let op:</b> zonder het wachtwoord is zo'n bestand niet meer te openen. Voor de online backups heb je geen wachtwoord nodig.</div>
 
   <h3>Audit-spoor</h3>
   <p>Bij elke roosterwijziging wordt server-side een record weggeschreven met wie wat wanneer heeft aangepast. Dat gebeurt buiten de app om, zodat het vanuit de app niet te wijzigen of te wissen is. Alleen beheerders kunnen het inzien. Gebruik het als er onduidelijkheid ontstaat over wie een cel heeft veranderd.</p>
@@ -426,7 +431,7 @@
     <li><strong>Plan maken.</strong> In de tab <a href="#indelen">Indelen</a> (concept, daarna Publiceren), of in Excel: exporteer het huidige rooster als startpunt en vul de nieuwe periode in — gebruik alleen geldige functiecodes.</li>
     <li><strong>Wensen checken.</strong> Raadpleeg de Wensen-tab vóór het finaliseren van het rooster. Verwerk open wensen zoveel mogelijk.</li>
     <li><strong>Activiteit controleren.</strong> Gebruik de Activiteit-tab om te zien of de werkvloerverdeling in balans is.</li>
-    <li><strong>Importeren.</strong> Importeer het definitieve rooster. Controleer de preview zorgvuldig, let op de waarschuwing bij wijzigingen binnen 30 dagen. De app maakt vlak vóór het schrijven automatisch een backup; noteer waar die terechtkomt.</li>
+    <li><strong>Importeren.</strong> Importeer het definitieve rooster. Controleer de preview zorgvuldig, let op de waarschuwing bij wijzigingen binnen 30 dagen. De app maakt vlak vóór het schrijven automatisch een online backup; die staat daarna in de lijst onder Control › Backup.</li>
     <li><strong>Validatie checken.</strong> Open de Overzicht-tab en kijk of er conflicten zijn (rode/oranje meldingen). Pas indien nodig handmatig aan.</li>
     <li><strong>Wensen synchroniseren.</strong> De app heeft de wens-statussen automatisch bijgewerkt. Check of er wensen zijn teruggezet naar <em>Open</em> die aandacht vereisen.</li>
   </ol>

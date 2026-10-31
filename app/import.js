@@ -8,10 +8,10 @@
 //  - Verwerkte wens die nu gebroken wordt door de import → status terug naar 'open'
 import { doc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { writeBatch, updateDoc } from './schrijven.js';
-import { db, IS_TEST_DB } from './firebase-init.js';
+import { db } from './firebase-init.js';
 import { state, DAGEN_NL } from './state.js';
 import { isoWeekVan, vandaagIso, plusDagen, kolomNaarRadId, wensMatcht, hoofdLetterCode } from './helpers.js';
-import { maakClientBackup } from './backup-client.js';
+import { maakOnlineBackup } from './backup-client.js';
 // v3.32.8: eigen dialoogvensters i.p.v. native alert/confirm — die worden door
 // sommige browsers onderdrukt, waardoor de import geruisloos niets deed.
 import { meld, bevestig } from './dialoog.js';
@@ -674,7 +674,7 @@ export async function actImportSchrijven(renderGebView) {
 // hierdoorheen, zodat ze dezelfde vangnetten hebben en niet uit elkaar kunnen
 // groeien:
 //   0a. terugdraai-punt (de vorige inhoud van precies deze dagen)
-//   0b. backup (alleen live; mislukt = vragen, nooit stil doorgaan)
+//   0b. online backup (live en test; mislukt = vragen, nooit stil doorgaan)
 //   1.  de dagen wegschrijven, met behoud van app-only velden
 //   2.  wijziging-meldingen voor radiologen (binnen NABIJ_DAGEN dagen)
 //   3.  wens-statussen bijwerken
@@ -732,33 +732,30 @@ export async function schrijfDagenWeg(dagen, { soort = 'import', bestandsnaam = 
     }
   }
 
-  // 0b. Backup vóór schrijven — download JSON als breed vangnet voor het
-  //     grovere geval. In de testomgeving is een backup geblokkeerd; dan
-  //     slaan we deze stap over (testdata hoeft niet veiliggesteld te worden).
+  // 0b. Backup vóór schrijven — breed vangnet voor het grovere geval.
+  //     v3.39.0: een ONLINE backup op de server (zonder wachtwoord, in live
+  //     én test, elk in de eigen omgeving). Voorheen een download met een
+  //     wachtwoord, alleen in live.
   //
   //     v3.33.1: een MISLUKTE backup liep hier stilzwijgend door — alleen een
   //     regel in de console, niets op het scherm. Zo kon een import zonder
   //     backup gebeuren zonder dat iemand het merkte. Nu wordt de vraag altijd
   //     gesteld, met de fout erbij en met de stand van het terugdraai-punt.
-  if (!IS_TEST_DB) {
+  {
     const vangnet = terugdraaiId
       ? `Het terugdraai-punt van ${w.deze} is er wél, dus je kunt hem ${w.waarTerug} terugdraaien.`
       : `Er is ook géén terugdraai-punt; ${w.deze} is straks niet met één knop ongedaan te maken.`;
     let backupFout = null;
-    let backupResultaat;
     try {
-      backupResultaat = await maakClientBackup(w.backupReden);
+      await maakOnlineBackup(w.backupReden);
     } catch (backupErr) {
       backupFout = backupErr;
       console.warn('Backup mislukt:', backupErr);
     }
-    if (backupFout || backupResultaat === null) {
-      const reden = backupFout
-        ? `De backup is mislukt: ${backupFout.message || backupFout}`
-        : 'De backup is niet gemaakt omdat het wachtwoord werd geannuleerd.';
+    if (backupFout) {
       const doorgaan = await bevestig(
         'Geen backup gemaakt',
-        `${reden}\n\n${vangnet}\n\n${w.doorgaanVraag}`,
+        `De automatische backup is mislukt: ${backupFout.message || backupFout}\n\n${vangnet}\n\n${w.doorgaanVraag}`,
         'Doorgaan', 'Stoppen'
       );
       if (!doorgaan) {

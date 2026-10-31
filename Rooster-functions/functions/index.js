@@ -15,15 +15,23 @@
  *     de collectie audit_log, inclusief de uid van de veroorzaker (auth-
  *     context). Clients kunnen audit_log niet schrijven (zie firestore.rules);
  *     dit spoor kan dus niet worden vervalst of overgeslagen.
+ *   - backupMaken / backupLijst / backupOphalen (v3.39.0): online backup in
+ *     de opslag van het eigen project, zonder wachtwoord; alleen beheerders.
+ *   - nachtBackup (v3.39.0): elke nacht om 03:15 een backup van live, en
+ *     backups ouder dan 30 dagen opruimen (de nieuwste vijf blijven altijd).
  *
  * Alle callable functies controleren dat de aanroeper een beheerder is.
  */
 
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onDocumentWrittenWithAuthContext } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { logger } = require("firebase-functions");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getStorage } = require("firebase-admin/storage");
+const backupKern = require("./backup-kern");
 
 initializeApp();
 
@@ -71,6 +79,19 @@ async function assertBeheerder(auth) {
     throw new HttpsError("permission-denied", "Alleen beheerders mogen dit");
   }
   return { uid: auth.uid, data };
+}
+
+// v3.39.0: zelfde controle, maar in een gekozen database (live of test). Een
+// backup van de testdatabase vraagt om een beheerder in de testdatabase.
+async function assertBeheerderIn(auth, db) {
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "Niet ingelogd");
+  }
+  const snap = await db.collection("gebruikers").doc(auth.uid).get();
+  if (!snap.exists || snap.data().rol !== "beheerder") {
+    throw new HttpsError("permission-denied", "Alleen beheerders mogen dit");
+  }
+  return { uid: auth.uid, data: snap.data() };
 }
 
 function valideerRol(rol) {
@@ -430,5 +451,110 @@ exports.auditIndeling = onDocumentWrittenWithAuthContext(
       verwijderd,
       velden,
     });
+  }
+);
+
+// ============================================================================
+// Online backup (v3.39.0)
+// Zonder wachtwoord: een backup staat in de opslag van dit project
+// (backups/prod/ voor live, backups/test/ voor test). Alleen een ingelogde
+// beheerder kan via de app een backup maken, de lijst zien of er een
+// terugzetten. Een test-backup kan nooit in live worden teruggezet.
+// Het rekenwerk staat in backup-kern.js (met unit-tests).
+// ============================================================================
+const BACKUP_BUCKET = "rooster-radiologie.firebasestorage.app";
+const BACKUP_OPTIES = { region: REGION, timeoutSeconds: 300, memory: "512MiB" };
+
+function backupDb(omgeving) {
+  return omgeving === "test" ? getFirestore("test") : getFirestore();
+}
+function backupBucket() {
+  return getStorage().bucket(BACKUP_BUCKET);
+}
+function kernInvoer(fn) {
+  try { return fn(); } catch (e) {
+    throw new HttpsError(e.kernCode || "invalid-argument", e.message);
+  }
+}
+// Fouten van de opslag in gewone taal.
+function backupFout(e) {
+  if (e instanceof HttpsError) return e;
+  if (e && e.kernCode) return new HttpsError(e.kernCode, e.message);
+  const tekst = String((e && (e.message || e)) || "onbekende fout");
+  if (/bucket/i.test(tekst) && /(not exist|not found|404)/i.test(tekst)) {
+    return new HttpsError("failed-precondition",
+      "De opslag (Storage) in Firebase staat nog niet aan. Zet die eenmalig aan in de Firebase-console.");
+  }
+  logger.error("backup", tekst);
+  return new HttpsError("internal", "Backup mislukt: " + tekst);
+}
+
+exports.backupMaken = onCall(BACKUP_OPTIES, async (request) => {
+  const data = request.data || {};
+  const omgeving = kernInvoer(() => backupKern.controleerOmgeving(data.omgeving));
+  const reden = kernInvoer(() => backupKern.controleerReden(data.reden));
+  const db = backupDb(omgeving);
+  const beheerder = await assertBeheerderIn(request.auth, db);
+  try {
+    return await backupKern.maakBackup({
+      db, bucket: backupBucket(), omgeving, reden,
+      door: beheerder.data.naam || beheerder.data.email || beheerder.uid,
+    });
+  } catch (e) {
+    throw backupFout(e);
+  }
+});
+
+// Geeft { prod: [...] } in live. In test: { test: [...], prod: [...] } — zo
+// kun je een live-backup in test zetten om met echte gegevens te oefenen
+// (alleen als je ook in live beheerder bent).
+exports.backupLijst = onCall(BACKUP_OPTIES, async (request) => {
+  const data = request.data || {};
+  const omgeving = kernInvoer(() => backupKern.controleerOmgeving(data.omgeving));
+  await assertBeheerderIn(request.auth, backupDb(omgeving));
+  const uit = {};
+  try {
+    uit[omgeving] = await backupKern.lijstBackups({ bucket: backupBucket(), omgeving });
+    if (omgeving === "test") {
+      let magLive = true;
+      try { await assertBeheerderIn(request.auth, backupDb("prod")); } catch (e) { magLive = false; }
+      if (magLive) uit.prod = await backupKern.lijstBackups({ bucket: backupBucket(), omgeving: "prod" });
+    }
+  } catch (e) {
+    throw backupFout(e);
+  }
+  return uit;
+});
+
+// Geeft de inhoud van één backup; de app zet hem zelf terug (dezelfde weg
+// als een backup-bestand). omgeving = waar hij teruggezet gaat worden.
+exports.backupOphalen = onCall(BACKUP_OPTIES, async (request) => {
+  const data = request.data || {};
+  const doel = kernInvoer(() => backupKern.controleerOmgeving(data.omgeving));
+  const bron = backupKern.omgevingVanPad(data.pad);
+  if (!bron) throw new HttpsError("invalid-argument", "Ongeldige backup.");
+  if (!backupKern.magTerugzetten(doel, bron)) {
+    throw new HttpsError("permission-denied", "Een backup van de testomgeving kan nooit in live worden teruggezet.");
+  }
+  await assertBeheerderIn(request.auth, backupDb(doel));
+  if (bron !== doel) await assertBeheerderIn(request.auth, backupDb(bron));
+  try {
+    return { inhoud: await backupKern.haalBackup({ bucket: backupBucket(), pad: data.pad }) };
+  } catch (e) {
+    throw backupFout(e);
+  }
+});
+
+// Elke nacht: backup van live, daarna opruimen (live én test).
+exports.nachtBackup = onSchedule(
+  { ...BACKUP_OPTIES, schedule: "15 3 * * *", timeZone: "Europe/Amsterdam" },
+  async () => {
+    const bucket = backupBucket();
+    const r = await backupKern.maakBackup({
+      db: getFirestore(), bucket, omgeving: "prod", reden: "nacht", door: "automatisch",
+    });
+    const wegLive = await backupKern.ruimOp({ bucket, omgeving: "prod" });
+    const wegTest = await backupKern.ruimOp({ bucket, omgeving: "test" });
+    logger.info("nachtBackup", { pad: r.pad, grootte: r.grootte, opgeruimd: wegLive + wegTest });
   }
 );

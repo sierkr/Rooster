@@ -51,7 +51,7 @@ export function dubbelBannerHtml() {
   if (!lijst.length) return '';
   return `<div class="dubbel-banner" role="alert">${lijst.map(b => {
     const wat = b.soort === 'los'
-      ? `<b>${esc(b.code)}</b>: ${b.losseDagen.length} dag${b.losseDagen.length === 1 ? '' : 'en'} staan nog op ${esc(stoelNaam(b.a.stoelId))}`
+      ? `<b>${esc(b.code)}</b>: ${b.losseDagen.length === 1 ? '1 dag staat' : b.losseDagen.length + ' dagen staan'} nog op ${esc(stoelNaam(b.a.stoelId))}`
       : `<b>${esc(b.code)}</b> staat twee keer in de app`;
     return `<div class="dubbel-regel"><span>⚠ ${wat}</span>
       <button class="btn dubbel-knop" onclick="window.openSamenvoegen('${esc(b.sleutel)}')">Oplossen</button></div>`;

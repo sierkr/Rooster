@@ -103,4 +103,16 @@ export const fnGebruikerAanmaken        = accountFunctie('gebruikerAanmaken');
 export const fnGebruikerVerwijderen     = accountFunctie('gebruikerVerwijderen');
 export const fnGebruikerResetWachtwoord = accountFunctie('gebruikerResetWachtwoord');
 
+// v3.39.0: online backup (Rooster-functions: backupMaken / backupLijst /
+// backupOphalen). Deze werken wél in test: de server kiest de database op
+// basis van `omgeving`, controleert daar of je beheerder bent, en weigert
+// een test-backup in live terug te zetten.
+export const OMGEVING = IS_TEST_DB ? 'test' : 'prod';
+function backupFunctie(naam) {
+  return metVerbindingsControle(httpsCallable(functions, naam, { timeout: 300000 }));
+}
+export const fnBackupMaken   = backupFunctie('backupMaken');
+export const fnBackupLijst   = backupFunctie('backupLijst');
+export const fnBackupOphalen = backupFunctie('backupOphalen');
+
 export { reauthenticateWithCredential, EmailAuthProvider };

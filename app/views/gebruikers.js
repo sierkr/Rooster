@@ -21,7 +21,7 @@ import { STANDAARD_WACHTWOORD } from '../helpers.js';
 import { openSheet, closeSheet } from '../sheets.js';
 import { IMPORT_SHEET, actImportFile, actImportSchrijven, actImportAnnuleren, actZetImportJaar } from '../import.js';
 import { actExportJaar } from '../export.js';
-import { maakClientBackup, herstelClientBackup } from '../backup-client.js';
+import { maakClientBackup, herstelClientBackup, maakOnlineBackup, laadOnlineBackups, zetOnlineBackupTerug } from '../backup-client.js';
 // v3.33.0: logboek-scherm (audit_log + export_log).
 import { renderLogboek } from './logboek.js';
 // v3.33.2: de terugdraai-knop hoort bij de import, niet in het logboek — wie
@@ -467,42 +467,40 @@ async function _tekenGebView(container) {
   // niets te kiezen en er kan niet per ongeluk verder terug gegrepen worden.
   htmlExcel += terugdraaiBlokHtml(terugPunt);
 
-  // Database-backup sectie
+  // Database-backup sectie — v3.39.0: online, zonder wachtwoord. De lijst
+  // zelf wordt pas opgehaald als je de tab Backup opent (renderOnlineBackups).
   if (magGebruikersBeheren()) {
     const _lb     = state.instellingen?.laatste_backup;
-    const _dagOud = _lb ? Math.floor((Date.now() - new Date(_lb).getTime()) / 86400000) : null;
-    const _nooit  = _dagOud === null;
-    const _teOud  = _dagOud !== null && _dagOud > 30;
+    const _uurOud = _lb ? (Date.now() - new Date(_lb).getTime()) / 3600000 : null;
+    const _dagOud = _uurOud === null ? null : Math.floor(_uurOud / 24);
     const _lbDag  = _dagOud === 0 ? 'vandaag' : _dagOud === 1 ? 'gisteren' : _dagOud + ' dagen geleden';
-    const _lbTxt  = _nooit ? 'Nog nooit een backup gemaakt' : 'Laatste backup: ' + _lbDag + ' · ' + new Date(_lb).toLocaleDateString('nl-NL');
+    const _lbTxt  = _dagOud === null ? 'Nog geen backup gemaakt' : 'Laatste backup: ' + _lbDag + ' · ' + new Date(_lb).toLocaleDateString('nl-NL');
     const _lbRed  = state.instellingen?.laatste_backup_reden || '';
-    const _lbRStr = (_lbRed && _lbRed !== 'handmatig') ? ' (' + _lbRed + ')' : '';
-    const _wBg    = _nooit ? '#fff0f0' : '#fff4e0';
-    const _wKl    = _nooit ? '#7a1010' : '#6b3a00';
-    const _wRd    = _nooit ? '#e04040' : '#f0a020';
-    const _wTxt   = _nooit
-      ? '⚠ Nog nooit een backup gemaakt. Maak er een vóór je iets wijzigt.'
-      : '⚠ Laatste backup is ' + _dagOud + ' dagen geleden. Aanbevolen: maandelijks of vóór grote wijzigingen.';
-    const _wHtml  = (_nooit || _teOud)
-      ? '<div style="background:' + _wBg + ';color:' + _wKl + ';padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;border-left:3px solid ' + _wRd + ';">' + _wTxt + '</div>'
+    const _lbRStr = _lbRed ? ' (' + (BACKUP_REDEN_LABEL[_lbRed] || _lbRed) + ')' : '';
+    // In live hoort er elke nacht een backup bij te komen. Is de laatste ouder
+    // dan twee dagen, dan loopt die niet — dat is precies wat je wilt zien.
+    const _waarschuw = !IS_TEST_DB && (_uurOud === null || _uurOud > 50);
+    const _wHtml = _waarschuw
+      ? `<div class="backup-melding backup-melding-let">⚠ ${_uurOud === null ? 'Er is nog geen backup.' : `De laatste backup is ${_dagOud} dagen oud.`}
+           Elke nacht hoort er automatisch een bij te komen. Gebeurt dat niet, dan staat de opslag (Storage) in Firebase
+           misschien nog niet aan, of is de server-kant nog niet uitgerold. Maak intussen met de knop hieronder een backup.</div>`
       : '';
 
-    // Backup-geschiedenis lijst
+    // Geschiedenis van gedownloade bestanden (met wachtwoord)
     const _gesch  = (state.instellingen?.backup_geschiedenis || []);
-    const _reden  = { handmatig: 'handmatig', 'voor-import': 'vóór import' };
     const _geschHtml = _gesch.length === 0
-      ? '<p class="muted" style="margin:10px 0 0;font-size:11px;font-style:italic;">Nog geen backup-geschiedenis beschikbaar.</p>'
+      ? ''
       : '<div style="margin-top:10px;">'
-        + '<div style="font-size:11px;color:#5f5e5a;margin-bottom:4px;font-weight:500;">Eerdere backups (herstel door bestand te selecteren):</div>'
+        + '<div style="font-size:11px;color:#5f5e5a;margin-bottom:4px;font-weight:500;">Eerder gedownload (terugzetten door het bestand te kiezen):</div>'
         + '<div style="display:flex;flex-direction:column;gap:4px;">'
-        + _gesch.map((e, i) => {
+        + _gesch.map((e) => {
             const _d  = new Date(e.tijdstip);
             const _dd = _d.toLocaleDateString('nl-NL') + ' ' + _d.toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
-            const _r  = _reden[e.reden] || e.reden || '';
+            const _r  = BACKUP_REDEN_LABEL[e.reden] || e.reden || '';
             const _fn = e.bestandsnaam || '';
-            return '<div style="font-size:11px;background:#f5f4f0;padding:5px 8px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">'
-              + '<span style="color:#3a3937;">' + _dd + (_r ? ' <span style="color:#888;">(' + _r + ')</span>' : '') + '</span>'
-              + '<span style="color:#888;font-family:monospace;font-size:10px;">' + _fn + '</span>'
+            return '<div class="backup-rij backup-rij-klein">'
+              + '<span>' + _dd + (_r ? ' <span class="muted">(' + esc(_r) + ')</span>' : '') + '</span>'
+              + '<span class="muted" style="font-family:monospace;font-size:10px;">' + esc(_fn) + '</span>'
               + '</div>';
           }).join('')
         + '</div></div>';
@@ -513,23 +511,32 @@ async function _tekenGebView(container) {
         <div class="summary-label" style="margin-bottom: 6px;">Database-backup</div>
         <div class="card">
           ${_wHtml}
-          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">${_lbTxt}${_lbRStr}</div>
-          ${IS_TEST_DB
-            ? `<div style="font-size:12px;color:#9c5700;background:#fff6e0;border:1px solid #e6a817;border-radius:6px;padding:8px 10px;margin-bottom:10px;">
-                 In de <b>testomgeving</b> kan geen backup gemaakt worden. Maak een backup in de live-agenda; die kun je hier wél terugzetten om met actuele data te oefenen.
-               </div>`
-            : `<div style="font-size:12px;color:#5f5e5a;margin-bottom:8px;">
-                 Klik op <b>Nu backup maken</b> om een versleutelde snapshot van de hele database te downloaden.
-                 Vóór elke Excel-import wordt automatisch een backup gemaakt.
-               </div>`}
+          <div style="font-size:12px;color:#5f5e5a;margin-bottom:8px;">${_lbTxt}${_lbRStr}</div>
+          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">
+            ${IS_TEST_DB
+              ? `Hier maak je een backup van de <b>testgegevens</b>. Je kunt ook een <b>live-backup in test zetten</b> om met echte gegevens te oefenen; andersom kan niet.`
+              : `Elke nacht maakt de app automatisch een backup, en ook vóór elke import, publicatie en terugzetting.`}
+            Backups staan online in Firebase en blijven 30 dagen bewaard (de nieuwste vijf altijd).
+            Geen wachtwoord nodig: alleen een ingelogde beheerder kan ze zien en terugzetten.
+          </div>
+          <button class="btn btn-primary" id="btnOnlineBackup" onclick="window.actOnlineBackup()">Nu backup maken</button>
+          <div id="onlineBackups" style="margin-top:12px;"></div>
+        </div>
+      </div>
+      <div style="margin-top: 1rem;">
+        <div class="summary-label" style="margin-bottom: 6px;">Kopie op je eigen computer</div>
+        <div class="card">
+          <div style="font-size:12px;color:#5f5e5a;margin-bottom:10px;">
+            Wil je ook een kopie buiten Google? Download dan een bestand. Dat wordt versleuteld met een
+            wachtwoord dat je zelf kiest; zonder dat wachtwoord is het niet te openen.
+            ${IS_TEST_DB ? '<br><b>In de testomgeving kan geen bestand gedownload worden.</b>' : ''}
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="window.actMaakBackup()">⬇ Nu backup maken</button>
-            <button class="btn" onclick="document.getElementById('herstelFileInput').click()">↩ Backup terugzetten</button>
+            ${IS_TEST_DB ? '' : '<button class="btn" onclick="window.actMaakBackup()">⬇ Downloaden met wachtwoord</button>'}
+            <button class="btn" onclick="document.getElementById('herstelFileInput').click()">↩ Bestand terugzetten</button>
             <input type="file" accept=".json" id="herstelFileInput" style="display:none;" onchange="window.actHerstelBackup(this)">
           </div>
-          <p class="muted" style="margin:8px 0 0;font-size:11px;">
-            Backup is versleuteld met jouw wachtwoord. Auth-accounts blijven altijd bewaard via Firebase Auth.
-          </p>
+          <p class="muted" style="margin:8px 0 0;font-size:11px;">Inloggegevens zitten nooit in een backup; die blijven bewaard bij Firebase.</p>
           ${_geschHtml}
         </div>
       </div>
@@ -723,6 +730,8 @@ window.gebTab2 = function(scope, id) {
   // v3.33.0: het logboek pas ophalen als je het opent — het zijn losse
   // Firestore-leesacties die niemand hoeft te betalen zolang het dicht is.
   if (scope === 'ctl' && id === 'logboek') renderLogboek();
+  // v3.39.0: zelfde voor de lijst met online backups (een vraag aan de server).
+  if (scope === 'ctl' && id === 'backup') renderOnlineBackups();
 };
 
 // ==== Handlers ===============================================================
@@ -1368,6 +1377,87 @@ window.draaiLaatsteImportTerug = async () => {
 
 window.actImportFile        = (input) => actImportFile(input, renderGebView);
 
+// ---- Online backup (v3.39.0) -------------------------------------------------
+const BACKUP_REDEN_LABEL = {
+  nacht: 'nacht, automatisch', handmatig: 'handmatig', 'voor-import': 'vóór import',
+  'voor-publicatie': 'vóór publicatie', 'voor-terugzetten': 'vóór terugzetten',
+};
+function _backupWanneer(iso) {
+  if (!iso) return 'onbekend';
+  const d = new Date(iso);
+  return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    + ' ' + d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+}
+function _backupGrootte(n) {
+  if (!n) return '';
+  return n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' kB';
+}
+
+async function renderOnlineBackups() {
+  const vak = document.getElementById('onlineBackups');
+  if (!vak) return;
+  vak.innerHTML = '<div class="muted" style="font-size:12px;">Lijst met backups laden…</div>';
+  let lijst;
+  try {
+    lijst = await laadOnlineBackups();
+  } catch (e) {
+    vak.innerHTML = `<div class="backup-melding backup-melding-fout">De lijst met backups kon niet worden opgehaald: ${esc(e.message)}</div>`;
+    return;
+  }
+  const blok = (omg, titel) => {
+    const l = lijst[omg];
+    if (!Array.isArray(l)) return '';
+    const kop = titel ? `<div class="backup-kop">${titel}</div>` : '';
+    if (!l.length) return kop + '<div class="muted" style="font-size:12px;font-style:italic;margin-bottom:8px;">Nog geen backups.</div>';
+    return kop + l.map(b => `
+      <div class="backup-rij">
+        <div style="min-width:0;">
+          <div style="font-size:13px;font-weight:500;">${esc(_backupWanneer(b.tijdstip))}</div>
+          <div class="muted" style="font-size:11px;">${esc(BACKUP_REDEN_LABEL[b.reden] || b.reden || '')}${b.grootte ? ' · ' + _backupGrootte(b.grootte) : ''}${b.door && b.door !== 'automatisch' ? ' · ' + esc(b.door) : ''}</div>
+        </div>
+        <button class="btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;" onclick="window.actOnlineTerug('${esc(b.pad)}','${omg}','${esc(b.tijdstip || '')}')">Terugzetten</button>
+      </div>`).join('');
+  };
+  vak.innerHTML = IS_TEST_DB
+    ? blok('test', 'Test') + blok('prod', 'Live — in test zetten om te oefenen')
+    : blok('prod', '');
+}
+
+window.actOnlineBackup = async function() {
+  const knop = document.getElementById('btnOnlineBackup');
+  if (knop) { knop.disabled = true; knop.textContent = 'Bezig…'; }
+  try {
+    const r = await maakOnlineBackup('handmatig');
+    await dlgMeld('Backup gemaakt', `De backup staat online in Firebase${r.grootte ? ' (' + _backupGrootte(r.grootte) + ')' : ''}. Je vindt hem in de lijst.`);
+  } catch (e) {
+    await dlgMeld('Backup mislukt', e.message);
+  }
+  renderGebView();
+};
+
+window.actOnlineTerug = async function(pad, omg, tijdstip) {
+  const wanneer = _backupWanneer(tijdstip);
+  const wat = (IS_TEST_DB && omg === 'prod')
+    ? `Je zet de LIVE-backup van ${wanneer} in de TESTomgeving. Live verandert niet.`
+    : `De gegevens gaan terug naar de stand van ${wanneer}.`;
+  if (!(await dlgBevestig('Backup terugzetten',
+    `${wat}\n\nEerst maakt de app automatisch een backup van nu, zodat je dit weer ongedaan kunt maken. Inloggegevens veranderen niet.\n\nDoorgaan?`,
+    'Terugzetten', 'Annuleren'))) return;
+  try {
+    await maakOnlineBackup('voor-terugzetten');
+  } catch (e) {
+    if (!(await dlgBevestig('Geen backup van nu', `De backup van nu lukte niet: ${e.message}\n\nToch terugzetten?`, 'Toch terugzetten', 'Stoppen'))) return;
+  }
+  const meldingen = [];
+  try {
+    await zetOnlineBackupTerug(pad, (t) => meldingen.push(t));
+    await dlgMeld('Teruggezet', meldingen.join('\n'));
+  } catch (e) {
+    await dlgMeld('Terugzetten mislukt', e.message + (meldingen.length ? '\n\n' + meldingen.join('\n') : ''));
+  }
+  renderGebView();
+};
+
 window.actMaakBackup = async function() {
   if (IS_TEST_DB) {
     await dlgMeld('Niet mogelijk', 'In de testomgeving kan geen backup gemaakt worden.\n\nMaak een backup in de live-agenda; die kun je desgewenst in de testomgeving terugzetten om met actuele data te oefenen.');
@@ -1376,8 +1466,8 @@ window.actMaakBackup = async function() {
   try {
     const knop = document.querySelector('[onclick="window.actMaakBackup()"]');
     if (knop) { knop.disabled = true; knop.textContent = 'Bezig\u2026'; }
-    await maakClientBackup('handmatig');
-    await dlgMeld('Gelukt', 'Backup gedownload. Bewaar dit bestand op een veilige plek.');
+    const r = await maakClientBackup('handmatig');
+    if (r) await dlgMeld('Gelukt', 'Backup gedownload. Bewaar dit bestand op een veilige plek, en onthoud het wachtwoord.');
   } catch (e) {
     await dlgMeld('Backup mislukt', e.message);
   } finally {

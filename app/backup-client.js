@@ -8,9 +8,16 @@
 //
 // Restore: upload het .json-bestand via Beheer → "Backup terugzetten".
 // LET OP: bij vergeten wachtwoord is de backup NIET te herstellen.
+//
+// v3.39.0: daarnaast de ONLINE backup, zonder wachtwoord. De server
+// (Rooster-functions, backup-kern.js) maakt hem en bewaart hem in de opslag
+// van het eigen project; alleen een ingelogde beheerder kan hem maken, zien
+// en terugzetten. Elke nacht automatisch, en vóór elke import en publicatie.
+// Terugzetten loopt via dezelfde weg als een backup-bestand (herstelGegevens).
+// Het bestand met wachtwoord blijft bestaan als kopie buiten Google.
 
-import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { db, IS_TEST_DB } from './firebase-init.js';
+import { collection, getDocs, doc, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { db, IS_TEST_DB, OMGEVING, fnBackupMaken, fnBackupLijst, fnBackupOphalen } from './firebase-init.js';
 // v3.34.0: terugzetten is een roosterwijziging en loopt dus via de bewaking.
 // De registratie van "laatste backup" (setDoc hierboven) blijft rechtstreeks.
 import { writeBatch } from './schrijven.js';
@@ -211,14 +218,79 @@ export async function maakClientBackup(reden = 'handmatig') {
   return { tijdstip, aantallen };
 }
 
+// ---- Online backup (v3.39.0) ------------------------------------------------
+
+// Een fout van de server in gewone taal.
+export function backupFoutTekst(e) {
+  const code = String((e && e.code) || '');
+  const tekst = String((e && e.message) || e || 'onbekende fout');
+  // Bestaat de functie (nog) niet, dan meldt de browser kaal "internal" of
+  // "not-found": de server-kant gaat pas mee met de uitrol naar live.
+  if (/not-found/.test(code) || /^(internal|not found)$/i.test(tekst.trim())) {
+    return 'De backup-dienst op de server gaf geen antwoord. Die komt mee met de uitrol naar live; is die al gedaan, probeer het dan zo nog eens.';
+  }
+  return tekst.replace(/^FirebaseError:\s*/, '');
+}
+
+// Maakt een online backup van de database van deze omgeving. Gooit een fout
+// met een leesbare tekst als het niet lukt.
+export async function maakOnlineBackup(reden = 'handmatig') {
+  let r;
+  try {
+    r = await fnBackupMaken({ omgeving: OMGEVING, reden });
+  } catch (e) {
+    throw new Error(backupFoutTekst(e));
+  }
+  const uit = (r && r.data) || {};
+  if (state && state.instellingen && uit.tijdstip) {
+    state.instellingen.laatste_backup = uit.tijdstip;
+    state.instellingen.laatste_backup_reden = reden;
+  }
+  return uit;
+}
+
+// { prod: [...] } in live; { test: [...], prod: [...] } in test.
+export async function laadOnlineBackups() {
+  try {
+    const r = await fnBackupLijst({ omgeving: OMGEVING });
+    return (r && r.data) || {};
+  } catch (e) {
+    throw new Error(backupFoutTekst(e));
+  }
+}
+
+// Tijdstempels uit een online backup ({ __tijd: ISO }) weer echte tijdstempels.
+export function herstelTijden(v) {
+  if (Array.isArray(v)) return v.map(herstelTijden);
+  if (v && typeof v === 'object') {
+    const sleutels = Object.keys(v);
+    if (sleutels.length === 1 && sleutels[0] === '__tijd' && typeof v.__tijd === 'string') {
+      return Timestamp.fromMillis(Date.parse(v.__tijd));
+    }
+    const o = {};
+    sleutels.forEach(k => { o[k] = herstelTijden(v[k]); });
+    return o;
+  }
+  return v;
+}
+
+// Zet een online backup terug in de database van deze omgeving.
+export async function zetOnlineBackupTerug(pad, onVoortgang = () => {}) {
+  let r;
+  try {
+    r = await fnBackupOphalen({ omgeving: OMGEVING, pad });
+  } catch (e) {
+    throw new Error(backupFoutTekst(e));
+  }
+  const data = herstelTijden(JSON.parse(r.data.inhoud));
+  return herstelGegevens(data, onVoortgang);
+}
+
 /**
  * Zet een versleuteld backup-bestand terug naar Firestore.
  * Vraagt het wachtwoord op, ontsleutelt, en schrijft naar Firestore.
  */
 export async function herstelClientBackup(file, onVoortgang = () => {}) {
-  const fsDoc = doc;
-  // getDocs en collection zijn bovenin dit bestand al statisch geïmporteerd.
-
   const tekst  = await file.text();
   const envelop = JSON.parse(tekst);
 
@@ -239,7 +311,13 @@ export async function herstelClientBackup(file, onVoortgang = () => {}) {
 
   onVoortgang('Ontsleutelen…');
   const plaintext = await ontsleutel(envelop, wachtwoord);
-  const data = JSON.parse(plaintext);
+  return herstelGegevens(JSON.parse(plaintext), onVoortgang);
+}
+
+// Schrijft de inhoud van een backup (bestand of online) terug in de database.
+// Vraagt eerst: volledig of aanvullen.
+async function herstelGegevens(data, onVoortgang = () => {}) {
+  const fsDoc = doc;
   const meta = data._meta || {};
 
   onVoortgang(`Backup bevat ${Object.values(meta.aantallen || {}).reduce((a,b)=>a+b,0)} documenten.`);

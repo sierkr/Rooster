@@ -1,3 +1,51 @@
+## v3.39.0 — Online backup zonder wachtwoord, elke nacht automatisch
+
+Wens Sierk (31 oktober 2026): de backup koppelen aan de beheerder, zonder
+eigen wachtwoord, en automatisch laten maken en online bewaren. Advies en
+besluit: in Firebase (niet op GitHub: de repo's zijn openbaar en het zijn
+persoonsgegevens).
+
+- **Server-kant** (`Rooster-functions/functions/`): `backupMaken`,
+  `backupLijst`, `backupOphalen` (alleen beheerders, gecontroleerd in de
+  database waar het om gaat) en `nachtBackup` (elke nacht 03:15 Amsterdamse
+  tijd, live). Backups gaan als één JSON-bestand naar de opslag van het eigen
+  project (`rooster-radiologie.firebasestorage.app`, map `backups/prod/` of
+  `backups/test/`). Bewaard 30 dagen; de nieuwste vijf blijven altijd. Een
+  test-backup kan nooit in live worden teruggezet. Het rekenwerk staat in
+  `backup-kern.js`, los van Firebase, met unit-tests.
+- **Geen wachtwoord meer** voor de gewone backup: alleen een ingelogde
+  beheerder kan backups maken, zien en terugzetten. Google versleutelt de
+  opslag zelf, net als de database. Tijdstempels komen bij terugzetten weer
+  als echte tijdstempel terug.
+- **Vóór elke import en publicatie** automatisch een online backup, ook in
+  test (elk in de eigen omgeving). Geen wachtwoordvraag meer; mislukt de
+  backup, dan vraagt de app of je door wilt (zoals sinds 3.33.1).
+- **Beheer › Control › Backup**: knop "Nu backup maken", lijst met backups
+  (datum, reden, grootte) en per backup "Terugzetten". Vóór het terugzetten
+  maakt de app eerst een backup van nu. In test staan twee lijsten: test, en
+  live (een live-backup in test zetten om te oefenen). In live een
+  waarschuwing als de laatste backup ouder is dan twee dagen — dan loopt de
+  nachtbackup niet.
+- **Downloaden met wachtwoord** blijft bestaan, als kopie buiten Google (alleen
+  live); oude bestanden blijven terug te zetten.
+- Taalfout: "1 dag staat nog op W1" (was "staan").
+- Eenmalig nodig: in de Firebase-console Opslag (Storage) aanzetten. Gemeten
+  31 okt 2026: die stond nog niet aan (de opslag gaf "Not Found"). Zolang dat
+  niet is gebeurd, meldt de app dat in gewone taal.
+
+Gemeten: unit-tests 131/131 (7 nieuw voor de backup-kern, met nep-opslag);
+de functies laden met firebase-functions 6.6.0 en firebase-admin 13.10.0
+(regio europe-west1, nachtschema "15 3 * * *" Europe/Amsterdam). Browserproef
+op de nagebootste Firebase met een nagespeelde server: 34 controles (Backup-tab
+in test en live, nu backup maken, live-backup in test zetten en weer terug,
+tijdstempel blijft tijdstempel, import zonder wachtwoordvraag, opslag uit,
+server-kant nog niet uitgerold, telefoonbreedte). Proef dubbele persoon
+71/71, proef Indelen 111/111, export identiek aan 3.35.2; import gelijk op de
+bekende verschillen plus de nieuwe backup-regel. Foutcontrole schoon.
+Niet gemeten: de echte server-kant (Cloud Functions, opslag, nachtschema) —
+die kan pas na de uitrol naar live; of het standaard-serviceaccount van de
+functies in de opslag mag schrijven.
+
 ## v3.38.0 — Eén persoon op twee stoelen: zien, samenvoegen, voorkomen; Backup-tab
 
 Aanleiding (31 oktober 2026): GJG stond in live twee keer in de app. Hij zat

@@ -205,6 +205,21 @@
     .ind-status { color: #aaa; }
   }
 
+  /* v3.39.0: online backup — lijst en meldingen in Beheer › Control › Backup */
+  .backup-kop { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #5f5e5a; margin: 10px 0 4px; }
+  .backup-rij { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
+  .backup-rij-klein { font-size: 11px; padding: 5px 8px; background: #f5f4f0; border-radius: 4px; border-bottom: 0; }
+  .backup-melding { padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
+  .backup-melding-let { background: #fff4e0; color: #6b3a00; border-left: 3px solid #f0a020; }
+  .backup-melding-fout { background: #fbe9e9; color: #6b1414; border-left: 3px solid #c0392b; margin-bottom: 0; }
+  @media (prefers-color-scheme: dark) {
+    .backup-kop { color: #aaa; }
+    .backup-rij { border-bottom-color: rgba(255,255,255,0.08); }
+    .backup-rij-klein { background: #2a2a2a; }
+    .backup-melding-let { background: rgba(240,160,32,0.14); color: #f3c47a; }
+    .backup-melding-fout { background: rgba(192,57,43,0.2); color: #f1a9a0; }
+  }
+
   /* v3.38.0: één persoon op twee stoelen — waarschuwing en samenvoeg-venster */
   .dubbel-banner { background: #fff4e0; color: #6b3a00; border-left: 3px solid #f0a020; border-radius: 8px; padding: 6px 10px; margin-bottom: 0.75rem; font-size: 13px; }
   .dubbel-regel { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
