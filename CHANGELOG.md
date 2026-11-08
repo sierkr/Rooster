@@ -1,3 +1,40 @@
+## v3.40.0 — Firebase in de servercode bijgewerkt
+
+Aanleiding: het onderhoudsrapport van pc-wacht (8 november 2026) meldde
+firebase-admin 12.7.0 → 14.5.0 en firebase-functions 5.1.1 → 7.4.0 als grote
+stap. Besluit Sierk (JA BOUWEN, 8 nov 2026): bijwerken in een eigen versie,
+verder niets.
+
+- **`Rooster-functions/functions/`**: firebase-admin ^14.5.0 en
+  firebase-functions ^7.4.0; `package-lock.json` opnieuw opgebouwd.
+- **Lock en package.json klopten niet meer met elkaar.** Sinds 3.39.0 vroeg
+  `package.json` om admin 13 en functions 6, maar de lock stond nog op 12.7.0
+  en 5.1.1. `npm ci` weigerde daardoor (gemeten 8 nov 2026); `uitrollen.sh`
+  gebruikt `npm install` en merkte het niet. Nu staan ze gelijk, en `npm ci`
+  lukt.
+- De code zelf hoefde niet te veranderen: hij gebruikte al de nieuwe
+  schrijfwijze (`firebase-admin/app`, `/auth`, `/firestore`, `/storage` en
+  `firebase-functions/v2`). De foutcodes waar de code op let
+  (`auth/email-already-exists`, `auth/invalid-email`, `auth/user-not-found`)
+  bestaan in admin 14 nog precies zo (nagelezen in de bron).
+- Node blijft 22 (admin 14 vraagt 22 of hoger).
+- Versienummer: `sw.js`, `config.js` en de beheerdershandleiding.
+
+Wat níet verandert: de app in de browser, de schermen, de databankregels, de
+gegevens.
+
+Gemeten (8 nov 2026, cloudsessie): unit-tests groen; een rooksproef tegen de
+Firebase-emulator (auth, firestore, functions; de opslag nagebootst) met 17
+controles — gebruiker aanmaken, dubbel e-mailadres, te kort wachtwoord, zonder
+inloggen, wachtwoord resetten, verwijderen, backup maken/lijst/ophalen, een
+test-backup nooit in live, de audit-trigger en de agenda-feed. 17/17 op 3.39.0
+(admin 13.10.0, functions 6.6.0, zoals `npm install` het uitrol) én 17/17 op
+3.40.0 (admin 14.5.0, functions 7.4.0).
+
+Niet getest: de echte Firebase-cloud en de echte opslag (Storage). De
+functies gaan alleen mee met `uitrollen.sh live` (gedeeld project). Steekproef
+na live: Beheer › Control › Backup → "Nu backup maken", en de lijst ziet hem.
+
 ## v3.39.0 — Online backup zonder wachtwoord, elke nacht automatisch
 
 Wens Sierk (31 oktober 2026): de backup koppelen aan de beheerder, zonder
