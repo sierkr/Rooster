@@ -43,11 +43,13 @@ function bouwKleurenMap() {
   return kleurPerHoofdletter(state.functies, FALLBACK_KLEUREN);
 }
 
-function tekstArgb(hex6) {
-  const r = parseInt(hex6.slice(0,2), 16);
-  const g = parseInt(hex6.slice(2,4), 16);
-  const b = parseInt(hex6.slice(4,6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 160 ? 'FF1A1A18' : 'FFFFFFFF';
+// v3.42.0: letterkleur per hoofdletter uit het vinkje "Letter zwart" van de
+// functie die ook de kleur levert; zonder vinkje automatisch.
+function bouwZwartMap() {
+  return kleurPerHoofdletter(state.functies, FALLBACK_KLEUREN, true);
+}
+function tekstArgb(zwart) {
+  return zwart ? 'FF1A1A18' : 'FFFFFFFF';
 }
 
 // ---- Formule-helpers --------------------------------------------------------
@@ -395,6 +397,7 @@ export async function actExportJaar(jaar, naamParam) {
     }
 
     const kleurenMap = bouwKleurenMap();
+    const zwartMap   = bouwZwartMap();
 
     // ---- Kolommen (vaste stoelen + waarnemers), datum-bewust op senioriteit -
     // Kolomvolgorde en kolomkop identiek aan hoe de app dit toont (Overzicht/
@@ -546,7 +549,7 @@ export async function actExportJaar(jaar, naamParam) {
           const bg = kleurenMap[letter];
           if (bg && bg.length === 6) {
             cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg.toUpperCase() } };
-            cel.font = { color: { argb: tekstArgb(bg) } };
+            cel.font = { color: { argb: tekstArgb(zwartMap[letter]) } };
           }
         }
 
@@ -651,7 +654,7 @@ export async function actExportJaar(jaar, naamParam) {
         formulae: [`OR(UPPER(C2)="${code}",UPPER(LEFT(C2,1))="${code}",AND(LEFT(C2,1)=".",UPPER(MID(C2,2,1))="${code}"),AND(ISNUMBER(VALUE(LEFT(C2,1))),UPPER(MID(C2,2,1))="${code}"))`],
         style: {
           fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex.toUpperCase() } },
-          font: { color: { argb: tekstArgb(hex) } },
+          font: { color: { argb: tekstArgb(zwartMap[code]) } },
         },
         priority: 20 + i,
       }));

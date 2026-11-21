@@ -1,7 +1,7 @@
 // v3.41.0: kleur per hoofdletter voor de Excel-export.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { kleurPerHoofdletter } from '../../app/helpers.js';
+import { kleurPerHoofdletter, automatischZwart, letterZwart } from '../../app/helpers.js';
 
 // Volgorde zoals Firestore ze in live teruggeeft (document-id), gemeten 21 nov 2026.
 const live = [
@@ -37,4 +37,33 @@ test('ongeldige kleuren worden overgeslagen', () => {
   const m = kleurPerHoofdletter([{ code: 'W', kleur: '#fff' }, { code: 'B', kleur: '' }], { W: 'DCE6F1' });
   assert.equal(m.W, 'DCE6F1');
   assert.equal(m.B, undefined);
+});
+
+// v3.42.0: vinkje "Letter zwart".
+test('automatisch: zwart op licht, wit op donker; #ff7a6e is nét zwart', () => {
+  assert.equal(automatischZwart('#ff7a6e'), true);   // helderheid 160,4
+  assert.equal(automatischZwart('#e10e0e'), false);  // rood
+  assert.equal(automatischZwart('#1f3863'), false);  // donkerblauw
+  assert.equal(automatischZwart('#000000'), false);
+  assert.equal(automatischZwart('#faece7'), true);
+});
+
+test('zonder vinkje-veld geldt de automatische keuze; met veld wint het vinkje', () => {
+  assert.equal(letterZwart({ kleur: '#e10e0e' }), false);
+  assert.equal(letterZwart({ kleur: '#e10e0e', letter_zwart: true }), true);
+  assert.equal(letterZwart({ kleur: '#faece7', letter_zwart: false }), false);
+});
+
+test('Excel: zwart per letter komt van dezelfde functie als de kleur', () => {
+  const f = [
+    { code: '3W', kleur: '#eeedfe' },
+    { code: 'W', kleur: '#e10e0e', letter_zwart: true },
+    { code: 'YYW', kleur: '#eeedfe', letter_zwart: false },
+    { code: 'B', kleur: '#faece7' },
+  ];
+  const z = kleurPerHoofdletter(f, { Q: 'E0F7FA', X: '1F3863' }, true);
+  assert.equal(z.W, true);    // vinkje van W, niet van YYW
+  assert.equal(z.B, true);    // automatisch
+  assert.equal(z.Q, true);    // terugval, automatisch
+  assert.equal(z.X, false);
 });

@@ -4,7 +4,7 @@ import { setDoc, updateDoc, deleteDoc } from '../schrijven.js';
 import { db } from '../firebase-init.js';
 import { state } from '../state.js';
 import { meld, bevestig, vraagTekst } from '../dialoog.js';
-import { esc, functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags } from '../helpers.js';
+import { esc, functiesMap, defaultFunctieFlags, magGebruikersBeheren, magRegelsBeheren, isHoofd, functieFlags, letterZwart, automatischZwart } from '../helpers.js';
 
 
 // Eenmalige migratie: corrigeer werkvloer-waarden die door oude code fout zijn opgeslagen.
@@ -109,6 +109,7 @@ export function renderRegView() {
                 <th style="padding: 8px; text-align: left; font-weight: 500; width: 48px;">Code</th>
                 <th style="padding: 8px; text-align: left; font-weight: 500;">Naam</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 36px;" title="Kleur">🎨</th>
+                <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;" title="Aan: zwarte letter. Uit: witte letter. Springt bij een nieuwe kleur naar de automatische keuze.">Letter<br>zwart</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Dag-<br>teller</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Maat-<br>schaps</th>
                 <th style="padding: 8px 4px; text-align: center; font-weight: 500; width: 46px; font-size: 10px; line-height: 1.3;">Werk-<br>vloer</th>
@@ -160,7 +161,10 @@ function rijCellen(f, id, telCodes, mtsCodes, isNieuw) {
     </td>
     <td style="padding: 5px 4px; text-align: center;">
       <input type="color" style="width: 28px; height: 22px; border: none; border-radius: 3px; cursor: pointer; padding: 1px;"
-        value="${kleur}" id="fkleur-${id}">
+        value="${kleur}" id="fkleur-${id}" oninput="window.kleurGekozen('${id}')">
+    </td>
+    <td style="padding: 5px 4px; text-align: center;">
+      <input type="checkbox" id="fzwart-${id}" ${letterZwart({ ...f, kleur }) ? 'checked' : ''} style="width: 15px; height: 15px;" title="Aan: zwarte letter. Uit: witte letter.">
     </td>
     <td style="padding: 5px 4px; text-align: center;">
       <input type="checkbox" id="ftel-${id}" ${isTel ? 'checked' : ''} style="width: 15px; height: 15px;">
@@ -194,10 +198,20 @@ window.toonNieuweRij = function() {
   document.getElementById('fcode-nieuw')?.focus();
 };
 
+// v3.42.0: een nieuwe kleur zet het vinkje "Letter zwart" op de automatische
+// keuze voor die kleur; daarna kan de beheerder het met de hand omzetten.
+window.kleurGekozen = function(id) {
+  const kleur = document.getElementById(`fkleur-${id}`)?.value;
+  const vak = document.getElementById(`fzwart-${id}`);
+  if (vak && kleur) vak.checked = automatischZwart(kleur);
+};
+
 window.slaFunctieOp = async function(id) {
   const code     = document.getElementById(`fcode-${id}`)?.value?.trim();
   const naam     = document.getElementById(`fnaam-${id}`)?.value?.trim();
   const kleur    = document.getElementById(`fkleur-${id}`)?.value || '#cccccc';
+  const zwartVak = document.getElementById(`fzwart-${id}`);
+  const letter_zwart = zwartVak ? zwartVak.checked : automatischZwart(kleur);
   const werkvloer = document.getElementById(`fwerkvloer-${id}`)?.checked || false;
   const actief   = document.getElementById(`factief-${id}`)?.checked !== false;
 
@@ -208,13 +222,14 @@ window.slaFunctieOp = async function(id) {
   if (bestaatAl && id === 'nieuw') { await meld('Controleer de invoer', `Code "${code}" bestaat al.`); return; }
 
   try {
-    await setDoc(doc(db, 'functies', code), { code, naam, kleur, werkvloer, actief }, { merge: true });
-    if (window.injecteerNieuweKleuren) window.injecteerNieuweKleuren([...( state.functies || []), { code, naam, kleur }]);
+    await setDoc(doc(db, 'functies', code), { code, naam, kleur, letter_zwart, werkvloer, actief }, { merge: true });
+    if (window.injecteerNieuweKleuren) window.injecteerNieuweKleuren([...( state.functies || []), { code, naam, kleur, letter_zwart }]);
     if (id === 'nieuw') {
       document.getElementById('nieuwe-rij').style.display = 'none';
       document.getElementById('fcode-nieuw').value = '';
       document.getElementById('fnaam-nieuw').value = '';
       document.getElementById('fkleur-nieuw').value = '#cccccc';
+      window.kleurGekozen('nieuw');
     }
   } catch (e) {
     await meld('Opslaan mislukt', e.message);
@@ -240,12 +255,14 @@ window.opslaanAlleCheckboxes = async function() {
       const id        = f.code || f.id;
       const naam      = document.getElementById(`fnaam-${id}`)?.value?.trim() || f.naam;
       const kleur     = document.getElementById(`fkleur-${id}`)?.value || f.kleur;
+      const zwartVak  = document.getElementById(`fzwart-${id}`);
+      const letter_zwart = zwartVak ? zwartVak.checked : letterZwart({ ...f, kleur });
       const werkvloer = document.getElementById(`fwerkvloer-${id}`)?.checked || false;
       const verplicht = document.getElementById(`fverplicht-${id}`)?.checked || false;
       const actief    = document.getElementById(`factief-${id}`)?.checked !== false;
       if (document.getElementById(`ftel-${id}`)?.checked) telCodes.push(id);
       if (document.getElementById(`fmts-${id}`)?.checked) mtsCodes.push(id);
-      return setDoc(doc(db, 'functies', id), { naam, kleur, werkvloer, verplicht, actief }, { merge: true });
+      return setDoc(doc(db, 'functies', id), { naam, kleur, letter_zwart, werkvloer, verplicht, actief }, { merge: true });
     }));
     await setDoc(doc(db, 'instellingen', 'algemeen'), { tellen_codes: telCodes, mtsdagen_codes: mtsCodes }, { merge: true });
     await meld('Gelukt', 'Opgeslagen.');

@@ -10,6 +10,7 @@ import {
   magBeheerLezen, magRegelsBeheren, magGebruikersBeheren, magAlleWensenZien, magWijzigen,
   magVakantieZien, valideerWachtwoord, isVasteStoel, ongelezenOpmerkingenTotaal,
 } from './helpers.js';
+import { letterZwart } from './helpers.js';
 import { zetMeldenBuitenWeek } from './save.js';
 import { openSheet, closeSheet } from './sheets.js';
 import { meld, bevestig } from './dialoog.js';
@@ -610,13 +611,10 @@ window.injecteerNieuweKleuren = function(functies) {
       if (!/^[A-Za-z0-9._-]+$/.test(String(code))) return '';
       const hex = f.kleur.replace('#', '');
       if (hex.length !== 6) return '';
-      const r = parseInt(hex.slice(0,2), 16);
-      const g = parseInt(hex.slice(2,4), 16);
-      const b = parseInt(hex.slice(4,6), 16);
       const bg = f.kleur;
-      // Tekstkleur: donker op lichte achtergrond, licht op donkere achtergrond
-      const helderheid = (r * 299 + g * 587 + b * 114) / 1000;
-      const tekst = helderheid > 160 ? '#1a1a18' : '#ffffff';
+      // Tekstkleur: het vinkje "Letter zwart" (v3.42.0); zonder vinkje
+      // automatisch: donker op lichte achtergrond, licht op donkere.
+      const tekst = letterZwart(f) ? '#1a1a18' : '#ffffff';
       return `.f-${code} { background: ${bg}; color: ${tekst}; }`;
     })
     .filter(Boolean);

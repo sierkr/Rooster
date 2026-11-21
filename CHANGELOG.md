@@ -1,3 +1,20 @@
+## v3.42.0 — Vinkje "Letter zwart" per functie
+
+Aanleiding: rood is een twijfelgeval voor de letterkleur (Sierk en Gerwin,
+21 nov 2026). Besluit Sierk (JA BOUWEN, 21 nov 2026): vinkje aan = zwart,
+uit = wit; bij het kiezen van een kleur zet de app het vinkje op de
+automatische keuze.
+
+- **Beheer › Regels, functietabel:** kolom "Letter zwart". Een nieuwe kleur
+  zet het vinkje meteen op de automatische keuze (helderheid > 160 = zwart);
+  daarna kan de beheerder het omzetten. Opslaan schrijft `letter_zwart`.
+- **Zonder `letter_zwart`** (functies die nog niet zo zijn opgeslagen) geldt
+  de automatische keuze, precies zoals tot nu toe.
+- **App** (`injecteerNieuweKleuren`) en **Excel** (vaste opmaak én de
+  meekleurende opmaak) gebruiken `letterZwart()` uit `app/helpers.js`. In de
+  Excel volgen varianten (3W, YYW) het vinkje van hun letter, net als de kleur.
+- Niet veranderd: kleuren, import, beveiligingsregels, wie het mag aanpassen.
+
 ## v3.41.0 — Excel-export: elke functie haar eigen kleur
 
 Aanleiding: Gerwin (20 nov 2026) vond de W van de weekradioloog in de Excel

@@ -532,22 +532,42 @@ export function hoofdLetterCode(code) {
   return code.replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
 }
 
+// v3.42.0: letterkleur. Automatisch = zwart op een lichte achtergrond
+// (helderheid > 160), wit op een donkere. Een beheerder kan dat per functie
+// vastzetten met het vinkje "Letter zwart" (veld letter_zwart). Zonder dat
+// veld geldt de automatische keuze, zodat bestaande functies niet veranderen.
+export function automatischZwart(kleur) {
+  const hex = String(kleur || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return true;
+  const r = parseInt(hex.slice(0,2), 16), g = parseInt(hex.slice(2,4), 16), b = parseInt(hex.slice(4,6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+}
+
+export function letterZwart(f) {
+  if (f && typeof f.letter_zwart === 'boolean') return f.letter_zwart;
+  return automatischZwart(f && f.kleur);
+}
+
 // v3.41.0: kleur per hoofdletter voor de Excel-export. De functie met precies
 // die code (W) gaat vóór elke variant (3W, .WB, YYW), ongeacht de volgorde.
 // Tot 3.40.0 won de laatste in de lijst: de W werd het bijna witte lila van
 // YYW en was op grijze weekenddagen bijna onzichtbaar (Gerwin, 20 nov 2026).
 // Geeft { W: 'ff7a6e', ... } (zonder #); alleen geldige 6-cijferige kleuren.
-export function kleurPerHoofdletter(functies, terugval = {}) {
-  const map = { ...terugval };
+// v3.42.0: met zwart = true geeft hij per letter true/false (letter zwart),
+// van dezelfde functie die de kleur levert.
+export function kleurPerHoofdletter(functies, terugval = {}, zwart = false) {
+  const map = {};
+  Object.entries(terugval).forEach(([l, hex]) => { map[l] = zwart ? automatischZwart(hex) : hex; });
   const exact = new Set();
   (functies || []).forEach(f => {
     const code = String(f.code || f.id || '');
     const letter = hoofdLetterCode(code);
     const hex = String(f.kleur || '').replace('#', '');
     if (!letter || !/^[0-9a-fA-F]{6}$/.test(hex)) return;
+    const waarde = zwart ? letterZwart(f) : hex;
     const isExact = code.toUpperCase() === letter;
-    if (isExact) { map[letter] = hex; exact.add(letter); }
-    else if (!exact.has(letter)) map[letter] = hex;
+    if (isExact) { map[letter] = waarde; exact.add(letter); }
+    else if (!exact.has(letter)) map[letter] = waarde;
   });
   return map;
 }
