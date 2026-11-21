@@ -26,7 +26,7 @@ import { state, HOOFD_FUNCTIES, SLOTS } from './state.js';
 import { IMPORT_SHEET, IMPORT_KOL_DIENST, IMPORT_KOL_BESPR, IMPORT_KOL_INTERV, IMPORT_KOL_OPM } from './import.js';
 // v3.33.0: elke export laat voortaan een spoor na in het logboek.
 import { legVast, tel } from './logboek.js';
-import { isHoofd, functieFlags, hoofdLetterCode, plusDagen } from './helpers.js';
+import { isHoofd, functieFlags, hoofdLetterCode, plusDagen, kleurPerHoofdletter } from './helpers.js';
 // v3.36.0: kolommen en normen gedeeld met het tabblad Indelen.
 import { jaarKolommen, functieEisen } from './kolommen.js';
 
@@ -39,12 +39,8 @@ const FALLBACK_KLEUREN = {
 };
 
 function bouwKleurenMap() {
-  const map = { ...FALLBACK_KLEUREN };
-  (state.functies || []).forEach(f => {
-    const code = hoofdLetterCode(f.code || f.id);
-    if (code && f.kleur) map[code] = f.kleur.replace('#', '');
-  });
-  return map;
+  // v3.41.0: de functie met precies de letter-code wint (zie helpers.js).
+  return kleurPerHoofdletter(state.functies, FALLBACK_KLEUREN);
 }
 
 function tekstArgb(hex6) {

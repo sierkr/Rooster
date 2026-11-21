@@ -532,6 +532,26 @@ export function hoofdLetterCode(code) {
   return code.replace(/^\./, '').replace(/^[0-9]+/, '').replace(/^YY/, '').charAt(0).toUpperCase();
 }
 
+// v3.41.0: kleur per hoofdletter voor de Excel-export. De functie met precies
+// die code (W) gaat vóór elke variant (3W, .WB, YYW), ongeacht de volgorde.
+// Tot 3.40.0 won de laatste in de lijst: de W werd het bijna witte lila van
+// YYW en was op grijze weekenddagen bijna onzichtbaar (Gerwin, 20 nov 2026).
+// Geeft { W: 'ff7a6e', ... } (zonder #); alleen geldige 6-cijferige kleuren.
+export function kleurPerHoofdletter(functies, terugval = {}) {
+  const map = { ...terugval };
+  const exact = new Set();
+  (functies || []).forEach(f => {
+    const code = String(f.code || f.id || '');
+    const letter = hoofdLetterCode(code);
+    const hex = String(f.kleur || '').replace('#', '');
+    if (!letter || !/^[0-9a-fA-F]{6}$/.test(hex)) return;
+    const isExact = code.toUpperCase() === letter;
+    if (isExact) { map[letter] = hex; exact.add(letter); }
+    else if (!exact.has(letter)) map[letter] = hex;
+  });
+  return map;
+}
+
 // ==== Functie-flags (werkvloer / werkdag) ====================================
 
 export function defaultFunctieFlags(code) {

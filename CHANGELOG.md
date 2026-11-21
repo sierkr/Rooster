@@ -1,3 +1,23 @@
+## v3.41.0 — Excel-export: elke functie haar eigen kleur
+
+Aanleiding: Gerwin (20 nov 2026) vond de W van de weekradioloog in de Excel
+slecht te zien, vooral in de weekenden. Gemeten in live (21 nov 2026): de W
+staat op #ff7a6e, maar de export kleurde hem #eeedfe, het bijna witte lila
+van YYW. Op de grijze weekenddagen viel dat weg. Besluit Sierk (JA BOUWEN,
+21 nov 2026): repareren; als de Excel niet precies gelijk kan zijn aan de
+app, gaat leesbaarheid voor.
+
+- **`kleurPerHoofdletter()`** (nieuw, `app/helpers.js`): de functie met
+  precies de letter-code (W) bepaalt de kleur van die letter in de Excel.
+  Alleen als die er niet is, telt een variant (3W, .WB, YYW). Tot nu toe won
+  de laatste in de lijst, ongeacht welke dat was.
+- Ook B (werd het geel van "bo"), A, O en T krijgen nu hun eigen kleur.
+- Varianten (3W, YYW enz.) krijgen in de Excel de kleur van hun letter, zoals
+  al zo was. In de app houden ze hun eigen kleur.
+- Unit-test `tests/unit/kleuren.test.mjs` met de volgorde uit live.
+- Niet veranderd: de app zelf, de kleuren in de database, de regel voor de
+  letterkleur (zwart op licht, wit op donker), de import.
+
 ## v3.40.0 — Firebase in de servercode bijgewerkt
 
 Aanleiding: het onderhoudsrapport van pc-wacht (8 november 2026) meldde
